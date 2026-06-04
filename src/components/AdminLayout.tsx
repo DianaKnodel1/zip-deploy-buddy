@@ -6,6 +6,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -19,32 +20,6 @@ import { AdminCommandPalette } from "@/components/AdminCommandPalette";
 import { useAdminBadges } from "@/hooks/use-admin-badges";
 import { useEffect } from "react";
 
-// Schlanke operative Navigation. Setup-Bereiche (Domains, KI, Teamleiter, E-Mail-Vorlagen,
-// Standard-Aufträge, Buchungslimits, Passwort) liegen unter /admin/settings.
-const navItems = [
-  { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
-  { title: "Bewerbungen", url: "/admin/applications", icon: FileText, badgeKey: "newApplications" as const },
-  { title: "Mitarbeiter", url: "/admin/employees", icon: Users },
-  { title: "KYC", url: "/admin/kyc", icon: ShieldCheck, badgeKey: "pendingKyc" as const },
-  { title: "Aufträge", url: "/admin/tasks", icon: ClipboardList },
-  { title: "Prüfungen", url: "/admin/reviews", icon: CheckSquare },
-  { title: "Nachbesserungen", url: "/admin/revisions", icon: RotateCcw },
-  { title: "Uploads", url: "/admin/uploads", icon: Upload },
-  { title: "Termine", url: "/admin/appointments", icon: CalendarDays },
-  { title: "Chat", url: "/admin/chat", icon: MessageCircle, badgeKey: "unreadChat" as const },
-  { title: "SMS", url: "/admin/sms", icon: Phone },
-  { title: "Post", url: "/admin/post", icon: Mailbox },
-  { title: "Transaktionen", url: "/admin/transactions", icon: Wallet },
-  { title: "E-Mail-Logs", url: "/admin/email-logs", icon: Mail },
-  { title: "Erinnerungen", url: "/admin/reminders", icon: Mail },
-  { title: "Verträge", url: "/admin/contracts", icon: FileText },
-  { title: "Landing Pages", url: "/admin/landing-generator", icon: Globe },
-  { title: "Domains", url: "/admin/domains", icon: Globe },
-  { title: "Recovery", url: "/admin/recovery", icon: Mail },
-  { title: "Protokoll", url: "/admin/activity", icon: History },
-  { title: "Einstellungen", url: "/admin/settings", icon: Settings },
-];
-
 type BadgeKey = "unreadChat" | "pendingKyc" | "newApplications";
 type NavItem = {
   title: string;
@@ -53,12 +28,94 @@ type NavItem = {
   end?: boolean;
   badgeKey?: BadgeKey;
 };
+type NavGroup = { label: string; items: NavItem[] };
+
+// Gruppierte Navigation – übersichtlicher als flache Liste.
+const dashboardItem: NavItem = { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true };
+
+const navGroups: NavGroup[] = [
+  {
+    label: "Personen",
+    items: [
+      { title: "Bewerbungen", url: "/admin/applications", icon: FileText, badgeKey: "newApplications" },
+      { title: "Mitarbeiter", url: "/admin/employees", icon: Users },
+      { title: "KYC", url: "/admin/kyc", icon: ShieldCheck, badgeKey: "pendingKyc" },
+      { title: "Verträge", url: "/admin/contracts", icon: FileText },
+    ],
+  },
+  {
+    label: "Aufträge",
+    items: [
+      { title: "Aufträge", url: "/admin/tasks", icon: ClipboardList },
+      { title: "Prüfungen", url: "/admin/reviews", icon: CheckSquare },
+      { title: "Nachbesserungen", url: "/admin/revisions", icon: RotateCcw },
+      { title: "Uploads", url: "/admin/uploads", icon: Upload },
+      { title: "Termine", url: "/admin/appointments", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Kommunikation",
+    items: [
+      { title: "Chat", url: "/admin/chat", icon: MessageCircle, badgeKey: "unreadChat" },
+      { title: "SMS", url: "/admin/sms", icon: Phone },
+      { title: "Post", url: "/admin/post", icon: Mailbox },
+      { title: "E-Mail-Logs", url: "/admin/email-logs", icon: Mail },
+      { title: "Erinnerungen", url: "/admin/reminders", icon: Mail },
+      { title: "Recovery", url: "/admin/recovery", icon: Mail },
+    ],
+  },
+  {
+    label: "Finanzen",
+    items: [
+      { title: "Transaktionen", url: "/admin/transactions", icon: Wallet },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { title: "Landing Pages", url: "/admin/landing-generator", icon: Globe },
+      { title: "Domains", url: "/admin/domains", icon: Globe },
+      { title: "Protokoll", url: "/admin/activity", icon: History },
+      { title: "Einstellungen", url: "/admin/settings", icon: Settings },
+    ],
+  },
+];
 
 function AdminSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
   const badges = useAdminBadges();
+
+  const renderItem = (item: NavItem) => {
+    const count = item.badgeKey ? badges[item.badgeKey] : 0;
+    return (
+      <SidebarMenuItem key={item.title}>
+        <SidebarMenuButton asChild>
+          <NavLink
+            to={item.url}
+            end={item.end}
+            className="relative flex! flex-row! flex-nowrap! items-center! gap-2.5 px-2.5 h-auto! min-h-9 rounded-lg text-[12.5px] font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors overflow-hidden whitespace-nowrap"
+            activeClassName="bg-blue-600! text-white! shadow-[0_2px_8px_-2px_rgba(37,99,235,0.45)] hover:bg-blue-600!"
+          >
+            <item.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} />
+            {!collapsed && <span className="truncate min-w-0">{item.title}</span>}
+            {count > 0 && (
+              <span
+                className={
+                  collapsed
+                    ? "absolute top-1 right-1 inline-flex h-3.5 min-w-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-medium items-center justify-center leading-none"
+                    : "ml-auto inline-flex h-[18px] min-w-[18px] w-auto px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-semibold items-center justify-center leading-none shrink-0"
+                }
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+            )}
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
@@ -73,43 +130,29 @@ function AdminSidebar() {
           )}
         </div>
 
-        {/* Flache Navigation */}
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {/* Dashboard solo */}
+        <div className="px-2">
           <SidebarGroup className="py-0">
             <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {navItems.map((item) => {
-                  const count = (item as any).badgeKey ? badges[(item as any).badgeKey as BadgeKey] : 0;
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <NavLink
-                          to={item.url}
-                          end={(item as any).end}
-                          className="relative flex! flex-row! flex-nowrap! items-center! gap-2.5 px-2.5 h-auto! min-h-9 rounded-lg text-[12.5px] font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors overflow-hidden whitespace-nowrap"
-                          activeClassName="bg-blue-600! text-white! shadow-[0_2px_8px_-2px_rgba(37,99,235,0.45)] hover:bg-blue-600!"
-                        >
-                          <item.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} />
-                          {!collapsed && <span className="truncate min-w-0">{item.title}</span>}
-                          {count > 0 && (
-                            <span
-                              className={
-                                collapsed
-                                  ? "absolute top-1 right-1 inline-flex h-3.5 min-w-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-medium items-center justify-center leading-none"
-                                  : "ml-auto inline-flex h-[18px] min-w-[18px] w-auto px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-semibold items-center justify-center leading-none shrink-0"
-                              }
-                            >
-                              {count > 99 ? "99+" : count}
-                            </span>
-                          )}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+              <SidebarMenu className="gap-0.5">{renderItem(dashboardItem)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+        </div>
+
+        {/* Gruppierte Navigation */}
+        <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {navGroups.map((grp) => (
+            <SidebarGroup key={grp.label} className="py-1">
+              {!collapsed && (
+                <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 px-2.5 mb-1">
+                  {grp.label}
+                </SidebarGroupLabel>
+              )}
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">{grp.items.map(renderItem)}</SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </div>
 
         {/* Logout */}

@@ -94,7 +94,7 @@ function AdminChatPage() {
     // 1 Query statt N*2: alle Nachrichten in/aus Admin-Postfach holen und client-seitig aggregieren.
     const [profilesRes, convsRes, msgsRes, tenantsRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, tenant_id"),
-      supabase.from("chat_conversations").select("user_id, status, escalated_at"),
+      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at"),
       supabase
         .from("chat_messages")
         .select("sender_id, receiver_id, message, read, created_at")
@@ -126,6 +126,8 @@ function AdminChatPage() {
     const list: Conversation[] = [];
     for (const [partnerId, a] of agg) {
       const conv = convMap.get(partnerId);
+      // Vom Admin versteckte Chats nicht in die Liste aufnehmen.
+      if (conv?.admin_hidden_at) continue;
       const prof = profileMap.get(partnerId);
       list.push({
         user_id: partnerId,
@@ -135,6 +137,7 @@ function AdminChatPage() {
         unread: a.unread,
         lastMessage: a.lastMessage,
         lastAt: a.lastAt,
+        tenantId: prof?.tenant_id ?? null,
         tenantName: prof?.tenant_id ? tenantMap.get(prof.tenant_id) ?? null : null,
       });
     }

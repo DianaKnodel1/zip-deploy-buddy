@@ -779,6 +779,7 @@ function renderBodyHtml(
   custom: string | null | undefined,
   fallback: string,
   vars: Vars,
+  opts?: { withDomainBanner?: boolean },
 ): string {
   let body = (custom && custom.trim()) ? custom : fallback;
 
@@ -795,8 +796,10 @@ function renderBodyHtml(
     btn(tenant.primary_color ?? "#0f172a", String(href).trim(), String(label).trim()),
   );
 
-  return shellHtml(tenant, body);
+  const banner = opts?.withDomainBanner === false ? "" : renderDomainChangeBanner(tenant);
+  return shellHtml(tenant, body, { banner });
 }
+
 
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));

@@ -54,6 +54,9 @@ const MAX_SENDS_PER_RUN_PER_TENANT = 50;
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.
 const DOMAIN_RECOVERY_AUTO_WINDOW_DAYS = 14;
+// Banner-Fenster: Wie lange nach einem Primary-Domain-Wechsel zeigen alle
+// regulären Reminder-Mails den Hinweis „Portal-Adresse hat sich geändert".
+const DOMAIN_CHANGE_BANNER_DAYS = 30;
 // Wartezeit zwischen zwei echten Sends (Basis + zufällige Streuung)
 const SEND_DELAY_MIN_MS = 2500;
 const SEND_DELAY_MAX_MS = 5500;

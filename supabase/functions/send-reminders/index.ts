@@ -160,6 +160,7 @@ serve(async (req) => {
     const ignoreQuietHours = body?.ignore_quiet_hours === true;
     const mode: string = body?.mode ?? "reminders";
     const recoveryTenantId: string | null = body?.tenant_id ?? null;
+    const retryFailedOnly: boolean = body?.retry_failed_only === true;
 
     // Quiet-Hours-Guard: keine Mails nachts. Cron-Läufe außerhalb 08–20 Uhr enden hier sofort.
     if (!dryRun && !ignoreQuietHours && isQuietHours()) {

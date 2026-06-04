@@ -23,6 +23,12 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { requestContractResign } from "@/lib/admin-contract.functions";
+import {
+  getContractOverride,
+  saveContractOverrideHtml,
+  saveContractOverridePdf,
+  deleteContractOverride,
+} from "@/lib/employee-contract-override.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -572,6 +578,7 @@ function AdminEmployeeDetailPage() {
               )}
             </CardContent>
           </Card>
+          <ContractOverrideCard userId={userId!} fullName={profile.full_name} />
         </TabsContent>
 
         {/* ───── C2) Dokumente ───── */}

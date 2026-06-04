@@ -185,7 +185,7 @@ serve(async (req) => {
 
     if (mode === "domain_recovery") {
       if (!recoveryTenantId) return json({ error: "tenant_id required for domain_recovery" }, 400);
-      await runDomainRecovery(ctx, recoveryTenantId);
+      await runDomainRecovery(ctx, recoveryTenantId, { retryFailedOnly });
     } else {
       if (!onlyType || onlyType === "invite") await runInvites(ctx);
       if (!onlyType || onlyType === "confirm_email") await runConfirmEmail(ctx);

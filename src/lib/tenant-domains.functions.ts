@@ -372,6 +372,7 @@ export const enqueueDomainRecoveryMails = createServerFn({ method: "POST" })
     z.object({
       tenant_id: z.string().uuid(),
       dry_run: z.boolean().optional(),
+      retry_failed_only: z.boolean().optional(),
     }).parse(input)
   )
   .handler(async ({ data, context }) => {
@@ -388,6 +389,7 @@ export const enqueueDomainRecoveryMails = createServerFn({ method: "POST" })
         mode: "domain_recovery",
         tenant_id: data.tenant_id,
         dry_run: data.dry_run === true,
+        retry_failed_only: data.retry_failed_only === true,
         ignore_quiet_hours: true,
       }),
     });

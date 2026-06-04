@@ -31,17 +31,31 @@ function AdminKycPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
 
+  const [urlCache, setUrlCache] = useState<Map<string, Record<string, string>>>(new Map());
+  const [lightbox, setLightbox] = useState<{ url: string; label: string; index: number; all: { url: string; label: string }[] } | null>(null);
+
   const viewKycDocuments = async (kyc: KycRow) => {
-    setSelectedKyc(kyc); setRejectionReason(kyc.rejection_reason ?? "");
+    setSelectedKyc(kyc);
+    setRejectionReason(kyc.rejection_reason ?? "");
+
+    // Cache-Hit → sofort anzeigen
+    const cached = urlCache.get(kyc.id);
+    if (cached) { setDocUrls(cached); return; }
+    setDocUrls({}); // Reset, damit alte Bilder nicht hängen bleiben
+
+    const fields = ["id_front_url", "id_back_url", "selfie_url"] as const;
+    const results = await Promise.all(
+      fields
+        .filter((f) => kyc[f])
+        .map(async (f) => {
+          const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(kyc[f] as string, 3600);
+          return [f, data?.signedUrl ?? ""] as const;
+        })
+    );
     const urls: Record<string, string> = {};
-    for (const field of ["id_front_url", "id_back_url", "selfie_url"] as const) {
-      const path = kyc[field];
-      if (path) {
-        const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(path, 600);
-        if (data?.signedUrl) urls[field] = data.signedUrl;
-      }
-    }
+    for (const [f, u] of results) if (u) urls[f] = u;
     setDocUrls(urls);
+    setUrlCache((prev) => new Map(prev).set(kyc.id, urls));
   };
 
   const updateKycStatus = async (kycId: string, userId: string, newStatus: KycStatus, reason?: string) => {
@@ -129,11 +143,25 @@ function AdminKycPage() {
           {selectedKyc && (
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-3">
-                {([{ label: "Ausweis Vorderseite", key: "id_front_url" }, { label: "Ausweis Rückseite", key: "id_back_url" }, { label: "Selfie", key: "selfie_url" }] as const).map((doc) => (
+                {([{ label: "Ausweis Vorderseite", key: "id_front_url" }, { label: "Ausweis Rückseite", key: "id_back_url" }, { label: "Selfie", key: "selfie_url" }] as const).map((doc, i, arr) => (
                   <div key={doc.key} className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">{doc.label}</p>
                     {docUrls[doc.key] ? (
-                      <img src={docUrls[doc.key]} alt={doc.label} className="w-full h-36 object-cover rounded-lg border border-border" />
+                      <img
+                        src={docUrls[doc.key]}
+                        alt={doc.label}
+                        loading="eager"
+                        decoding="async"
+                        title="Doppelklick für Vollbild"
+                        className="w-full h-36 object-cover rounded-lg border border-border cursor-zoom-in hover:opacity-90 transition-opacity"
+                        onDoubleClick={() => {
+                          const all = arr
+                            .filter((d) => docUrls[d.key])
+                            .map((d) => ({ url: docUrls[d.key], label: d.label }));
+                          const index = all.findIndex((a) => a.url === docUrls[doc.key]);
+                          setLightbox({ url: docUrls[doc.key], label: doc.label, index, all });
+                        }}
+                      />
                     ) : (
                       <div className="w-full h-36 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center">
                         <p className="text-[11px] text-muted-foreground">Nicht hochgeladen</p>
@@ -164,6 +192,46 @@ function AdminKycPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!lightbox} onOpenChange={() => setLightbox(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-2 bg-black/95 border-none">
+          {lightbox && (
+            <div className="relative w-full h-[90vh] flex items-center justify-center">
+              <img
+                src={lightbox.url}
+                alt={lightbox.label}
+                className="max-w-full max-h-full object-contain rounded"
+              />
+              <div className="absolute top-2 left-2 px-3 py-1.5 bg-black/60 text-white text-xs rounded-md">
+                {lightbox.label} · {lightbox.index + 1}/{lightbox.all.length}
+              </div>
+              {lightbox.all.length > 1 && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute left-3 top-1/2 -translate-y-1/2"
+                    onClick={() => {
+                      const next = (lightbox.index - 1 + lightbox.all.length) % lightbox.all.length;
+                      setLightbox({ ...lightbox, ...lightbox.all[next], index: next });
+                    }}
+                  >‹</Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    onClick={() => {
+                      const next = (lightbox.index + 1) % lightbox.all.length;
+                      setLightbox({ ...lightbox, ...lightbox.all[next], index: next });
+                    }}
+                  >›</Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

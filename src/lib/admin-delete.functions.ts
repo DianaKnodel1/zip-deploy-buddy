@@ -32,8 +32,24 @@ export const deleteEmployeeAccount = createServerFn({ method: "POST" })
     const uid = data.user_id;
     const sb = supabaseAdmin as any;
 
-    // 1) Dynamisches Cascade-Cleanup via RPC (findet alle FKs auf auth.users)
-    const { error: rpcErr } = await sb.rpc("admin_delete_user_cascade", { _user_id: uid });
+    // 1) Storage-Cleanup (vor DB-Delete, damit Buckets sauber sind)
+    for (const bucket of ["kyc-documents", "documents", "task-submissions"] as const) {
+      try {
+        const { data: files } = await sb.storage.from(bucket).list(uid, { limit: 1000 });
+        if (files && files.length > 0) {
+          const paths = files.map((f: any) => `${uid}/${f.name}`);
+          await sb.storage.from(bucket).remove(paths);
+        }
+      } catch (e) {
+        console.warn(`Storage-Cleanup ${bucket} fehlgeschlagen:`, e);
+      }
+    }
+
+    // 2) Dynamisches Cascade-Cleanup via RPC (findet alle FKs auf auth.users)
+    const { error: rpcErr } = await sb.rpc("admin_delete_user_cascade", {
+      _user_id: uid,
+      _actor_id: context.userId,
+    });
     if (rpcErr) {
       throw new Error(`Cascade-Löschung fehlgeschlagen: ${rpcErr.message}`);
     }

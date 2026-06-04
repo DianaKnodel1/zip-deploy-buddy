@@ -446,11 +446,14 @@ async function runCompleteRegistration(ctx: SendCtx) {
 
 // ───── 4. No-Recent-Booking-Reminder ─────
 async function runNoRecentBooking(ctx: SendCtx) {
+  // Nur formal angenommene + onboarding-abgeschlossene Mitarbeiter.
+  // 'registriert' oder andere Stati erhalten KEINE "Keine Buchung"-Mail,
+  // selbst wenn onboarding_status fälschlich auf 'abgeschlossen' steht.
   const { data: profiles, error } = await ctx.admin
     .from("profiles")
     .select("user_id,full_name,tenant_id,onboarding_status,status,created_at")
     .eq("onboarding_status", "abgeschlossen")
-    .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
+    .eq("status", "angenommen");
   if (error) { console.error("no_booking query", error); return; }
   if (!profiles || profiles.length === 0) return;
 

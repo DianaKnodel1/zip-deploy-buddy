@@ -13,10 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2 } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useSearchParams } from "@/lib/router-compat";
+import { useNavigate } from "@/lib/router-compat";
 import { EmojiPicker } from "@/components/EmojiPicker";
 import { ChatAttachmentButton, AttachmentPreview, type ChatAttachment } from "@/components/ChatAttachmentButton";
 
@@ -30,6 +31,7 @@ interface Conversation {
   lastAt?: string;
   lastSignInAt?: string | null;
   tenantName?: string | null;
+  tenantId?: string | null;
 }
 
 interface ChatMessage {
@@ -48,6 +50,7 @@ interface ChatMessage {
 function AdminChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -56,6 +59,8 @@ function AdminChatPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterTab] = useState<"all" | "escalated" | "open">("all");
+  const [tenantFilter, setTenantFilter] = useState<string>("all"); // tenant_id oder "all"
+  const [hiding, setHiding] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingChannelRef = useRef<any>(null);
   const typingTimeoutRef = useRef<number | null>(null);

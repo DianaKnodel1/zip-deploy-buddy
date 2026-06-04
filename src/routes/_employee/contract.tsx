@@ -651,7 +651,7 @@ function OverrideSigning({
 
             <div>
               <label className="text-xs font-medium text-foreground mb-2 block">Unterschrift</label>
-              <SignatureCanvas onChange={setSigDataUrl} />
+              <SignatureCanvas onSignatureChange={setSigDataUrl} />
             </div>
 
             <Button onClick={handleSubmit} disabled={!canSubmit || signing} className="w-full gap-2">

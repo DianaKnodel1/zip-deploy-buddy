@@ -83,8 +83,23 @@ function AdminSmsPage() {
   const [assignNote, setAssignNote] = useState("");
 
   const [tab, setTab] = useState("channels");
+  const pollNow = useServerFn(pollAnosimSms);
 
   useEffect(() => { loadData(); }, []);
+
+  const refreshAll = async () => {
+    try {
+      const r: any = await pollNow({ data: undefined as any });
+      if (r?.errors?.length) {
+        toast({ title: "Polling mit Warnungen", description: r.errors.slice(0, 2).join(" · "), variant: "destructive" });
+      } else {
+        toast({ title: "SMS abgerufen", description: `${r?.pulled ?? 0} SMS von ${r?.channels_polled ?? 0} Nummern` });
+      }
+    } catch (e: any) {
+      toast({ title: "Polling fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    }
+    await loadData();
+  };
 
   const loadData = async () => {
     setLoading(true);

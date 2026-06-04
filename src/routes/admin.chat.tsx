@@ -510,13 +510,24 @@ function AdminChatPage() {
           <>
             {/* Header */}
             <div className="border-b border-border bg-card px-5 py-3 flex items-center gap-3 shrink-0">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/employees/${selectedUserId}`)}
+                title="Mitarbeiter-Profil öffnen"
+                className="h-9 w-9 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors flex items-center justify-center"
+              >
                 <span className="text-xs font-bold text-primary">{selectedInitials}</span>
-              </div>
-              <div className="flex-1">
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/employees/${selectedUserId}`)}
+                className="flex-1 text-left group"
+                title="Mitarbeiter-Profil öffnen"
+              >
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{selectedName}</p>
+                  <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{selectedName}</p>
                   {selectedConv && statusBadge(selectedConv.status)}
+                  <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
                 {selectedConv?.tenantName && (
                   <p className="text-[11px] text-primary/80 flex items-center gap-1 mt-0.5">
@@ -533,7 +544,7 @@ function AdminChatPage() {
                     schreibt …
                   </p>
                 )}
-              </div>
+              </button>
               <div className="flex gap-2">
                 {selectedConv?.status === "escalated" && (
                   <Button size="sm" onClick={() => takeOver(selectedUserId!)} className="text-xs">
@@ -545,6 +556,16 @@ function AdminChatPage() {
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Gelöst
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => hideConversation(selectedUserId!)}
+                  disabled={hiding}
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  title="Chat ausblenden – kommt wieder, wenn der Mitarbeiter schreibt"
+                >
+                  <EyeOff className="h-3.5 w-3.5 mr-1" /> Ausblenden
+                </Button>
               </div>
             </div>
 

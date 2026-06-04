@@ -6,12 +6,14 @@ export const Route = createFileRoute("/admin/email-logs")({
 
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { EmptyState } from "@/components/EmptyState";
-import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Eye, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -23,12 +25,22 @@ import {
   computeEmailStats,
 } from "@/lib/email-stats";
 
+type EmailLogFull = EmailLog & {
+  rendered_html?: string | null;
+  rendered_subject?: string | null;
+  sender_email?: string | null;
+  tenant_id?: string | null;
+};
+
 function AdminEmailLogsPage() {
-  const [logs, setLogs] = useState<EmailLog[]>([]);
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<EmailLogFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [resending, setResending] = useState<string | null>(null);
+  const [previewLog, setPreviewLog] = useState<EmailLogFull | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -39,7 +51,7 @@ function AdminEmailLogsPage() {
       .neq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(500);
-    setLogs((data as EmailLog[]) ?? []);
+    setLogs((data as EmailLogFull[]) ?? []);
     setLoading(false);
   };
 
@@ -82,11 +94,41 @@ function AdminEmailLogsPage() {
     }
   };
 
+  // Testkopie an den eingeloggten Admin schicken (nur für Invitation-Mails sinnvoll,
+  // da nur dort die Edge-Function "send-invitation-email" alle Daten kennt).
+  const sendTestToMe = async (log: EmailLogFull) => {
+    if (!user?.email) {
+      toast({ title: "Keine Admin-E-Mail bekannt", variant: "destructive" });
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-invitation-email", {
+        body: {
+          to: user.email,
+          fullName: log.metadata?.full_name || "Test Empfänger",
+          firstName: log.metadata?.first_name || "Test",
+          lastName: log.metadata?.last_name || "Empfänger",
+          registrationLink: log.metadata?.registration_link || window.location.origin,
+          tenantId: log.metadata?.tenant_id || log.tenant_id,
+          isTest: true,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Test-Mail verschickt", description: `An ${user.email}` });
+    } catch (err: any) {
+      toast({ title: "Test-Versand fehlgeschlagen", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
   if (loading) return <div className="p-6 lg:p-8 space-y-5"><PageHeaderSkeleton /><TableSkeleton rows={8} cols={5} /></div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-5">
-      {/* Hero Status Banner — sehr klar sichtbar */}
+      {/* Hero Status Banner */}
       <div className={`rounded-2xl p-5 border-2 ${
         stats.actionRequired
           ? "bg-destructive/5 border-destructive/40"
@@ -184,8 +226,6 @@ function AdminEmailLogsPage() {
         </Card>
       </div>
 
-      {/* (Aktion-Erforderlich-Banner ist jetzt im Hero oben integriert) */}
-
       {/* Filters */}
       <div className="flex gap-2 items-center flex-wrap">
         <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -199,6 +239,7 @@ function AdminEmailLogsPage() {
           </SelectContent>
         </Select>
         <Input placeholder="Empfänger suchen…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-9 text-sm" />
+        <p className="text-xs text-muted-foreground ml-auto">Tipp: Klick auf eine Zeile zeigt die Vorschau der gesendeten Mail.</p>
       </div>
 
       {/* Log Table */}
@@ -215,7 +256,7 @@ function AdminEmailLogsPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">SMTP</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Zeitpunkt</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Fehler</th>
-                <th className="w-10"></th>
+                <th className="w-20"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -224,7 +265,11 @@ function AdminEmailLogsPage() {
                 const smtpHost = log.metadata?.smtp_host;
 
                 return (
-                  <tr key={log.id} className={`hover:bg-muted/20 transition-colors ${canResend ? "bg-destructive/[0.02]" : ""}`}>
+                  <tr
+                    key={log.id}
+                    className={`hover:bg-muted/30 transition-colors cursor-pointer ${canResend ? "bg-destructive/[0.02]" : ""}`}
+                    onClick={() => setPreviewLog(log)}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {log.status === "sent" ? (
@@ -243,22 +288,26 @@ function AdminEmailLogsPage() {
                         {EMAIL_TYPE_LABELS[log.template_name] ?? log.template_name}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
-                      {smtpHost || "–"}
-                    </td>
+                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{smtpHost || "–"}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {new Date(log.created_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </td>
                     <td className="px-4 py-3 text-xs text-destructive max-w-[200px] truncate">
                       {log.error_message || "–"}
                     </td>
-                    <td className="px-3 py-3">
-                      {canResend && (
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary"
-                          onClick={() => resendEmail(log)} disabled={resending === log.id} title="Erneut senden">
-                          <RotateCcw className={`h-3.5 w-3.5 ${resending === log.id ? "animate-spin" : ""}`} />
+                          onClick={() => setPreviewLog(log)} title="Vorschau">
+                          <Eye className="h-3.5 w-3.5" />
                         </Button>
-                      )}
+                        {canResend && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() => resendEmail(log)} disabled={resending === log.id} title="Erneut senden">
+                            <RotateCcw className={`h-3.5 w-3.5 ${resending === log.id ? "animate-spin" : ""}`} />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -272,6 +321,92 @@ function AdminEmailLogsPage() {
           )}
         </div>
       )}
+
+      {/* Vorschau-Modal */}
+      <Dialog open={!!previewLog} onOpenChange={(open) => !open && setPreviewLog(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4" /> Mail-Vorschau
+            </DialogTitle>
+            <DialogDescription>
+              Genau das, was der Empfänger gesehen hat (sofern die Mail seit dem Update versendet wurde).
+            </DialogDescription>
+          </DialogHeader>
+          {previewLog && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs border rounded-lg p-3 bg-muted/30">
+                <DetailRow label="Status" value={EMAIL_STATUS_LABELS[previewLog.status] ?? previewLog.status} />
+                <DetailRow label="Typ" value={EMAIL_TYPE_LABELS[previewLog.template_name] ?? previewLog.template_name} />
+                <DetailRow label="Empfänger" value={previewLog.recipient_email} />
+                <DetailRow label="Absender" value={previewLog.sender_email || previewLog.metadata?.from_email || "–"} />
+                <DetailRow label="SMTP-Host" value={previewLog.metadata?.smtp_host || "–"} />
+                <DetailRow label="Zeitpunkt" value={new Date(previewLog.created_at).toLocaleString("de-DE")} />
+                <DetailRow label="Betreff" value={previewLog.rendered_subject || previewLog.metadata?.subject || "–"} />
+                <DetailRow label="Message-ID" value={previewLog.message_id || "–"} />
+              </div>
+
+              {previewLog.error_message && (
+                <div className="border border-destructive/30 bg-destructive/5 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold uppercase text-destructive mb-1">Fehler</p>
+                  <p className="text-xs text-destructive font-mono break-all">{previewLog.error_message}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">HTML-Vorschau</p>
+                {previewLog.rendered_html ? (
+                  <iframe
+                    srcDoc={previewLog.rendered_html}
+                    sandbox=""
+                    className="w-full h-[400px] border rounded-lg bg-white"
+                    title="Email Preview"
+                  />
+                ) : (
+                  <div className="border rounded-lg p-6 bg-muted/30 text-center text-xs text-muted-foreground">
+                    Für diese Mail wurde kein gerendertes HTML gespeichert.
+                    <br />
+                    Neu versendete Mails ab dem Update sind in der Vorschau zu sehen.
+                  </div>
+                )}
+              </div>
+
+              {previewLog.metadata && Object.keys(previewLog.metadata).length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Metadaten anzeigen (JSON)</summary>
+                  <pre className="mt-2 bg-muted/30 p-3 rounded-lg overflow-x-auto text-[10px]">
+                    {JSON.stringify(previewLog.metadata, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            {previewLog?.template_name === "invitation" && user?.email && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => previewLog && sendTestToMe(previewLog)}
+                disabled={sendingTest}
+                className="gap-1.5"
+              >
+                <Send className="h-3.5 w-3.5" /> Test an mich senden ({user.email})
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => setPreviewLog(null)}>Schließen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs text-foreground break-all">{value}</p>
+    </div>
+  );
+}
+

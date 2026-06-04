@@ -145,6 +145,11 @@ function ContractPage() {
 
   const generatePdfFn = useServerFn(generateContractPdf);
   const getSigUrlsFn = useServerFn(getContractSignatureUrls);
+  const getOverrideFn = useServerFn(getMyContractOverride);
+
+  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null } | null>(null);
+  const [overrideLoading, setOverrideLoading] = useState(true);
+  const [overridePdfUrl, setOverridePdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !user) return;

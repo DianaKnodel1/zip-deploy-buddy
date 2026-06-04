@@ -11,6 +11,10 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { TenantProvider } from "@/contexts/TenantContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { Toaster } from "@/components/ui/toaster";
 
 function NotFoundComponent() {
   return (
@@ -77,14 +81,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Mitarbeiter Portal" },
+      { name: "description", content: "Mitarbeiter Portal – Onboarding, Verträge und Aufgaben." },
+      { name: "author", content: "Mitarbeiter Portal" },
+      { property: "og:title", content: "Mitarbeiter Portal" },
+      { property: "og:description", content: "Mitarbeiter Portal – Onboarding, Verträge und Aufgaben." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Mitarbeiter Portal" },
+      { name: "twitter:description", content: "Mitarbeiter Portal – Onboarding, Verträge und Aufgaben." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/93683cac-4228-4811-ae37-053923953794/id-preview-d827c772--fa88f943-4c6c-4bcd-879c-8da8715a8a38.lovable.app-1780170908926.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/93683cac-4228-4811-ae37-053923953794/id-preview-d827c772--fa88f943-4c6c-4bcd-879c-8da8715a8a38.lovable.app-1780170908926.png" },
     ],
     links: [
       {
@@ -118,8 +125,15 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <ThemeProvider>
+        <TenantProvider>
+          <AuthProvider>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+            <Toaster />
+          </AuthProvider>
+        </TenantProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

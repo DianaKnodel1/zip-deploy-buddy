@@ -375,8 +375,17 @@ function AdminChatPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
+  const tenantOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of conversations) {
+      if (c.tenantId && c.tenantName) map.set(c.tenantId, c.tenantName);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [conversations]);
+
   const filteredConversations = conversations.filter((c) => {
     if (!c.full_name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (tenantFilter !== "all" && c.tenantId !== tenantFilter) return false;
     if (filterTab === "escalated") return c.status === "escalated";
     if (filterTab === "open") return c.status !== "resolved";
     return true;
@@ -412,7 +421,46 @@ function AdminChatPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Suchen…" className="pl-9 h-9 text-sm" />
           </div>
+          {/* Tenant-Tabs */}
+          {tenantOptions.length > 1 && (
+            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
+              <button
+                onClick={() => setTenantFilter("all")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors",
+                  tenantFilter === "all" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                )}
+              >
+                Alle ({conversations.length})
+              </button>
+              {tenantOptions.map((t) => {
+                const count = conversations.filter((c) => c.tenantId === t.id).length;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTenantFilter(t.id)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors",
+                      tenantFilter === t.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {t.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+        <div className="flex-1 overflow-y-auto">
+          {filteredConversations.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">Keine Chats</p>
+          )}
+          {filteredConversations.map((conv) => {
+            const initials = conv.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+            return (
+              <button
+                key={conv.user_id}
+                onClick={() => selectConversation(conv.user_id)}
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">Keine Chats</p>

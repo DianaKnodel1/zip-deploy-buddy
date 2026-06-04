@@ -121,12 +121,19 @@ function SmsPage() {
   const refresh = async () => {
     setRefreshing(true);
     try {
+      // Erst beim Provider (Anosim) neue SMS abholen, dann neu laden
+      try {
+        await pollNow({ data: undefined as any });
+      } catch (e) {
+        console.warn("[SmsPage] Live-Poll fehlgeschlagen", e);
+      }
       await loadData();
       toast({ title: "Aktualisiert" });
     } finally {
       setRefreshing(false);
     }
   };
+
 
   if (authLoading || loading) {
     return <div className="p-6 lg:p-8 max-w-4xl mx-auto"><TableSkeleton rows={3} cols={3} /></div>;

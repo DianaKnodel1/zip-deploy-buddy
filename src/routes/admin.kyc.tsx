@@ -192,6 +192,46 @@ function AdminKycPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!lightbox} onOpenChange={() => setLightbox(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-2 bg-black/95 border-none">
+          {lightbox && (
+            <div className="relative w-full h-[90vh] flex items-center justify-center">
+              <img
+                src={lightbox.url}
+                alt={lightbox.label}
+                className="max-w-full max-h-full object-contain rounded"
+              />
+              <div className="absolute top-2 left-2 px-3 py-1.5 bg-black/60 text-white text-xs rounded-md">
+                {lightbox.label} · {lightbox.index + 1}/{lightbox.all.length}
+              </div>
+              {lightbox.all.length > 1 && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute left-3 top-1/2 -translate-y-1/2"
+                    onClick={() => {
+                      const next = (lightbox.index - 1 + lightbox.all.length) % lightbox.all.length;
+                      setLightbox({ ...lightbox, ...lightbox.all[next], index: next });
+                    }}
+                  >‹</Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    onClick={() => {
+                      const next = (lightbox.index + 1) % lightbox.all.length;
+                      setLightbox({ ...lightbox, ...lightbox.all[next], index: next });
+                    }}
+                  >›</Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

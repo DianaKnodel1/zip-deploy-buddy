@@ -17,6 +17,8 @@ import { Phone, MessageSquare, Lock, RefreshCw } from "lucide-react";
 import { hasFullAccess } from "@/lib/employee-utils";
 import type { EmployeeStatus } from "@/lib/status";
 import { useToast } from "@/hooks/use-toast";
+import { useServerFn } from "@tanstack/react-start";
+import { pollAnosimSms } from "@/lib/sms-poll.functions";
 
 interface AssignedChannel {
   assignment_id: string;
@@ -46,6 +48,8 @@ function SmsPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const pollNow = useServerFn(pollAnosimSms);
+
 
   const [accessAllowed, setAccessAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -117,12 +121,19 @@ function SmsPage() {
   const refresh = async () => {
     setRefreshing(true);
     try {
+      // Erst beim Provider (Anosim) neue SMS abholen, dann neu laden
+      try {
+        await pollNow({ data: undefined as any });
+      } catch (e) {
+        console.warn("[SmsPage] Live-Poll fehlgeschlagen", e);
+      }
       await loadData();
       toast({ title: "Aktualisiert" });
     } finally {
       setRefreshing(false);
     }
   };
+
 
   if (authLoading || loading) {
     return <div className="p-6 lg:p-8 max-w-4xl mx-auto"><TableSkeleton rows={3} cols={3} /></div>;

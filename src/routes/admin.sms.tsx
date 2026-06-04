@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
+import { useServerFn } from "@tanstack/react-start";
+import { pollAnosimSms } from "@/lib/sms-poll.functions";
 
 interface SmsChannel {
   id: string;
@@ -81,8 +83,23 @@ function AdminSmsPage() {
   const [assignNote, setAssignNote] = useState("");
 
   const [tab, setTab] = useState("channels");
+  const pollNow = useServerFn(pollAnosimSms);
 
   useEffect(() => { loadData(); }, []);
+
+  const refreshAll = async () => {
+    try {
+      const r: any = await pollNow({ data: undefined as any });
+      if (r?.errors?.length) {
+        toast({ title: "Polling mit Warnungen", description: r.errors.slice(0, 2).join(" · "), variant: "destructive" });
+      } else {
+        toast({ title: "SMS abgerufen", description: `${r?.pulled ?? 0} SMS von ${r?.channels_polled ?? 0} Nummern` });
+      }
+    } catch (e: any) {
+      toast({ title: "Polling fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    }
+    await loadData();
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -199,7 +216,7 @@ function AdminSmsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={loadData}>
+          <Button size="sm" variant="outline" onClick={refreshAll}>
             <RefreshCw className="h-3.5 w-3.5 mr-1" /> Aktualisieren
           </Button>
         </div>

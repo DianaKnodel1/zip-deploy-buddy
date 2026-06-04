@@ -198,7 +198,7 @@ serve(async (req) => {
         if (!t.primary_domain_changed_at) continue;
         const age = Date.now() - new Date(t.primary_domain_changed_at).getTime();
         if (age < 0 || age > windowMs) continue;
-        await runDomainRecovery(ctx, t.id);
+        await runDomainRecovery(ctx, t.id, { retryFailedOnly: false });
       }
     }
 

@@ -1,54 +1,94 @@
-## Anosim SMS-Polling einbauen
+# Großes Admin-Update
 
-### Was gebaut wird
+## 1. Manueller Arbeitsvertrag pro Mitarbeiter
 
-1. **DB-Migration** (`supabase/manual-migrations/20260604210000_sms_provider_dedup.sql`)
-   - `sms_messages.provider_message_id text` (für Deduplizierung)
-   - Unique-Index `(channel_id, provider_message_id)` – damit dieselbe SMS beim wiederholten Polling nicht doppelt landet
-   - Optional: ein zentraler `ANOSIM_API_KEY` ist **nicht nötig** – wir nutzen pro Channel den vorhandenen `sms_channels.api_key`
+**Wo:** `/admin/employees/{userId}` → neuer Tab/Card „Arbeitsvertrag".
 
-2. **Server-Funktion `pollAnosimSms`** (`src/lib/sms-poll.functions.ts`)
-   - Holt alle Channels mit `provider='anosim'` + gesetztem `api_key`
-   - Gruppiert nach `api_key` (damit pro Account nur 1 Request rausgeht)
-   - Ruft `GET https://anosim.net/api/v1/Sms?apikey=...`
-   - Für jede SMS: matche `simCardNumber` → `sms_channels.phone_number`, hol das aktive `sms_assignment` (user_id) und insert in `sms_messages` mit `direction='inbound'`, `provider_message_id = hash(simCardNumber + messageDate + messageSender + messageText)`
-   - Konflikte (= bereits vorhandene SMS) werden via `ON CONFLICT DO NOTHING` ignoriert
-   - Gibt `{ pulled, inserted, errors }` zurück
+**Zwei Modi (Admin wählt):**
+- **Editor-Modus:** HTML/Rich-Text-Editor vorausgefüllt mit der aktuellen Tenant-Vorlage + ersetzten Platzhaltern (Name, Adresse etc.). Admin ändert frei. Speichern → individuelle Version für diesen Mitarbeiter.
+- **PDF-Upload-Modus:** Admin lädt fertiges PDF hoch.
 
-3. **Server-Route `/api/public/sms-poll-cron`** (`src/routes/api/public/sms-poll-cron.ts`)
-   - Ruft `pollAnosimSms()` auf
-   - Header-Auth via `X-Cron-Secret` (neuer Secret `CRON_SECRET`, falls noch nicht vorhanden – sonst bereits genutzten Secret wiederverwenden)
-   - Wird vom Linux-Cron auf VPS 2 alle 30 s aufgerufen (curl)
+**Was passiert beim Speichern:**
+- Neue Tabelle `employee_contract_overrides` (user_id, tenant_id, html_body NULL, pdf_url NULL, created_by, created_at).
+- `profiles.contract_signed_at` wird auf NULL gesetzt → Mitarbeiter sieht beim nächsten Login die Vertrags-Seite (existiert schon via `requestContractResign`).
+- Vertrags-Seite (`/contract`) prüft zuerst auf Override → zeigt diesen statt der Tenant-Standardvorlage. Nach Unterschrift wandert das signierte PDF wie gewohnt in `contracts` + `documents`.
 
-4. **Mitarbeiter-/Admin-Seite: „Aktualisieren"-Knopf triggert sofortiges Polling**
-   - `src/routes/_employee/sms.tsx`: vor `loadData()` `pullNow()` aufrufen
-   - `src/routes/admin.sms.tsx`: gleicher Knopf
-   - Damit muss der Mitarbeiter nicht 30 s warten
+**Wo landet der unterschriebene Vertrag:** wie bisher – Mitarbeiter-Dokumente + Admin `/admin/contracts`. Nur der Quell-Body ist diesmal der Override.
 
-5. **Setup-Doku** in der finalen Chat-Antwort:
-   - Migration laufen lassen (`bash scripts/migrate.sh`)
-   - Cron-Eintrag auf VPS 2: `* * * * * curl -fsS -H "X-Cron-Secret: …" https://portal.../api/public/sms-poll-cron >/dev/null` (+ alle 30 s mit `sleep 30`-Trick)
-   - `CRON_SECRET` in `/etc/portal.env` ergänzen + `systemctl restart portal`
+## 2. Admin-Chat aufräumen
 
-### Was NICHT in diesem Schritt enthalten ist
+**Auf `/admin/chat`:**
+- **Tenant-Tabs oben:** „Alle | Tenant A | Tenant B | …" (aus den Tenants des Mitarbeiters). Filtert die Conversation-Liste.
+- **Soft-Delete pro Chat:** Button im Conversation-Header → `chat_conversations.admin_hidden_at = now()`. Versteckt aus der Liste.
+- **Auto-Reappear:** Wenn der Mitarbeiter danach eine neue Nachricht schickt, setzt ein Trigger `admin_hidden_at = NULL` → Chat erscheint wieder oben.
+- **Klick auf Initialen** im Chat-Header → `navigate('/admin/employees/{userId}')`.
 
-- Outbound-SMS (SMS senden) – das wäre `POST /Orders` und ist eine separate Story
-- Automatisches Bestellen neuer Nummern – Admin bestellt manuell bei Anosim und trägt Nummer + API-Key ein
+**Migration:** `chat_conversations.admin_hidden_at timestamptz` + Trigger auf `chat_messages` Insert.
 
-### Wie's danach läuft
+## 3. Mail-Vorschau + Test-Versand
+
+**Auf `/admin/email-logs`:**
+- Klick auf Zeile → Modal mit gerendertem HTML (iframe-sandbox), plus Header-Block: Absender, Tenant, Domain, Betreff, Status, Empfänger, Zeitpunkt, Fehlertext.
+- Speichern wir bereits `html_body` in `email_send_log`? Falls nicht → Spalte `rendered_html` ergänzen und beim Enqueue mitschreiben.
+
+**Test-Versand-Button („An mich senden"):**
+- Auf `/admin/email-templates` (Reminder-Templates)
+- Auf `/admin/recovery` (Domain-Recovery-Template)
+- Beim „Bewerbung annehmen"-Dialog in `/admin/applications/{appId}` (Vorschau + „Test an mich" vor „Senden")
+- Funktion `sendTestEmail({ template, tenantId, recipient })` → rendert mit Test-Daten + tatsächlichem Absender des gewählten Tenants → schickt an die E-Mail des eingeloggten Admins. Eintrag in `email_send_log` mit `metadata.test=true`.
+
+## 4. Admin-Sidebar gruppiert
+
+Umbau `src/components/AdminLayout.tsx` mit `SidebarGroup` + `SidebarGroupLabel`:
 
 ```
-Test-SMS an Nummer → Anosim Inbox
-        ↓ (alle 30 s)
-Cron → /api/public/sms-poll-cron
-        ↓
-pollAnosimSms() → GET /api/v1/Sms?apikey=…
-        ↓
-Match simCardNumber → sms_channels → assignment.user_id
-        ↓
-INSERT INTO sms_messages (… direction='inbound')
-        ↓
-Mitarbeiter sieht's auf /sms (oder nach „Aktualisieren")
+PERSONEN
+  Dashboard, Bewerbungen, Mitarbeiter, KYC, Verträge
+AUFTRÄGE
+  Aufträge, Prüfungen, Nachbesserungen, Uploads, Termine
+KOMMUNIKATION
+  Chat, SMS, Post, E-Mail-Logs, Erinnerungen, Recovery
+FINANZEN
+  Transaktionen
+SYSTEM
+  Landing Pages, Domains, Protokoll, Einstellungen
 ```
 
-OK, soll ich so bauen?
+Badges (Bewerbungen 99+, KYC 5) bleiben unverändert.
+
+## 5. Domain-Failover-Doku im Portal
+
+Kleiner Hilfe-Hinweis auf `/admin/domains` (Aufklapper „Was tun wenn Domain ausfällt?"):
+1. Alias-Domain als „Primary Domain" setzen → Speichern.
+2. System schickt automatisch Recovery-Mails über die neue Domain.
+3. Voraussetzung: Alias war vorher schon DNS-verifiziert.
+
+Keine Code-Änderung am Failover-Mechanismus selbst – nur UX-Hilfe.
+
+---
+
+## Technische Details
+
+**Migrationen (manual-migrations):**
+- `20260605000000_employee_contract_overrides.sql` – Tabelle + Grants + RLS (admin only).
+- `20260605000100_chat_admin_hidden.sql` – Spalte `admin_hidden_at` + Trigger.
+- `20260605000200_email_log_html.sql` – Spalte `rendered_html` falls fehlend.
+
+**Neue/geänderte Files:**
+- `src/lib/employee-contract-override.functions.ts` (save/load/delete Override)
+- `src/routes/admin.employees.$userId.tsx` (neuer Vertrags-Tab mit Editor + Upload)
+- `src/routes/_employee/contract.tsx` (Override-Check vor Standardvorlage)
+- `src/routes/admin.chat.tsx` (Tenant-Tabs, Hide-Button, Initialen-Link)
+- `src/lib/chat-admin.functions.ts` (hideConversation)
+- `src/routes/admin.email-logs.tsx` (Detail-Modal mit iframe)
+- `src/lib/email-test.functions.ts` (sendTestEmail)
+- `src/routes/admin.email-templates.tsx` + `admin.recovery.tsx` + `admin.applications.$appId.tsx` (Test-Buttons)
+- `src/components/AdminLayout.tsx` (Sidebar-Gruppen)
+- `src/routes/admin.domains.tsx` (Hilfe-Aufklapper)
+
+**Was NICHT geändert wird:**
+- SMS-Polling-Code (steht schon, wird beim nächsten Deploy live getestet)
+- Bestehende Vertrags-PDF-Generierung
+- Mailversand-Pipeline selbst (nur Vorschau + Test-Trigger neu)
+
+**Reihenfolge:** Migrationen → Sidebar (schnell, sichtbar) → Mail-Vorschau & Test → Chat-Aufräumen → Vertrags-Override → Domains-Hilfe.

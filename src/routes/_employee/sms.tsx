@@ -48,6 +48,8 @@ function SmsPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const pollNow = useServerFn(pollAnosimSms);
+
 
   const [accessAllowed, setAccessAllowed] = useState(false);
   const [loading, setLoading] = useState(true);

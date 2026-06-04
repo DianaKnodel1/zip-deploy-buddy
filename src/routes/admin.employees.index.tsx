@@ -1,0 +1,465 @@
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/admin/employees/")({
+  component: AdminEmployeesPage,
+});
+
+import { useState, useEffect } from "react";
+import { useNavigate } from "@/lib/router-compat";
+import { useAdminData, type EmployeeStatus } from "@/contexts/AdminDataContext";
+import { STATUS_ORDER, STATUS_CONFIG, checkRiskFlag } from "@/lib/status";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertTriangle, Download, CheckCircle2, XCircle, Power, Shield, Mail, User, MapPin, ShieldCheck, FileSignature, CalendarDays, ClipboardList, UserPlus, Trash2, Loader2 } from "lucide-react";
+import { CreateEmployeeWizard } from "@/components/admin/CreateEmployeeWizard";
+import { exportToCsv } from "@/lib/csv-export";
+import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { usePagination } from "@/hooks/use-pagination";
+import { PaginationBar } from "@/components/PaginationBar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { deleteEmployeeAccount } from "@/lib/admin-delete.functions";
+
+type OnbStep = { key: string; label: string; done: boolean; icon: React.ComponentType<{ className?: string }> };
+
+function OnboardingPill({ steps }: { steps: OnbStep[] }) {
+  const doneCount = steps.filter((s) => s.done).length;
+  const allDone = doneCount === steps.length;
+  return (
+    <TooltipProvider delayDuration={100}>
+      <div
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 border ${
+          allDone
+            ? "bg-emerald-500/10 border-emerald-500/30"
+            : "bg-muted/40 border-border"
+        }`}
+      >
+        {steps.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Tooltip key={s.key}>
+              <TooltipTrigger asChild>
+                <span
+                  className={`inline-flex items-center justify-center h-4 w-4 ${
+                    s.done ? "text-emerald-500" : "text-muted-foreground/40"
+                  }`}
+                  aria-label={`${s.label}: ${s.done ? "erledigt" : "offen"}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-[10px]">
+                <p className="font-medium">{s.label}</p>
+                <p className="text-muted-foreground">{s.done ? "Erledigt" : "Offen"}</p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function AdminEmployeesPage() {
+  const { profiles, setProfiles, assignments, adminUserIds, kycList, allBookings, emailConfirmedUserIds, loading, loadData } = useAdminData();
+  const [tenantMap, setTenantMap] = useState<Record<string, string>>({});
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ userId: string; name: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [activityTab, setActivityTab] = useState<"all" | "active" | "inactive">("all");
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteEmployeeAccount({ data: { user_id: deleteTarget.userId, confirm: "MITARBEITER LÖSCHEN" } });
+      setProfiles((prev) => prev.filter((p) => p.user_id !== deleteTarget.userId));
+      toast({ title: "Mitarbeiter gelöscht", description: `${deleteTarget.name} wurde endgültig entfernt.` });
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+    } catch (err: any) {
+      toast({ title: "Löschen fehlgeschlagen", description: err?.message ?? "Unbekannter Fehler", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  const toggleSelectAllPage = (ids: string[], allSel: boolean) => {
+    setSelected((s) => { const n = new Set(s); if (allSel) ids.forEach((id) => n.delete(id)); else ids.forEach((id) => n.add(id)); return n; });
+  };
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const ids = Array.from(selected);
+    const deletedIds: string[] = [];
+    const errors: string[] = [];
+    for (const uid of ids) {
+      try {
+        await deleteEmployeeAccount({ data: { user_id: uid, confirm: "MITARBEITER LÖSCHEN" } });
+        deletedIds.push(uid);
+      } catch (err: any) {
+        errors.push(err?.message ?? "Unbekannter Fehler");
+      }
+    }
+    const deletedSet = new Set(deletedIds);
+    setProfiles((prev) => prev.filter((p) => !deletedSet.has(p.user_id)));
+    setSelected(new Set());
+    setBulkDeleteOpen(false);
+    setBulkConfirm("");
+    setBulkDeleting(false);
+    if (errors.length === 0) {
+      toast({ title: `${deletedIds.length} gelöscht` });
+    } else {
+      toast({
+        title: `${deletedIds.length} gelöscht, ${errors.length} fehlgeschlagen`,
+        description: errors.slice(0, 3).join(" · "),
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    supabase.from("tenants").select("id, name").then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((t: any) => { map[t.id] = t.name; });
+      setTenantMap(map);
+    });
+  }, []);
+
+  const updateProfileStatus = async (e: React.MouseEvent, userId: string, newStatus: EmployeeStatus) => {
+    e.stopPropagation();
+    const { error } = await supabase.from("profiles").update({ status: newStatus }).eq("user_id", userId);
+    if (error) { toast({ title: "Fehler", description: error.message, variant: "destructive" }); return; }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("activity_log").insert({
+          action: newStatus === "deaktiviert" ? "mitarbeiter_deaktiviert" : "status_geaendert",
+          entity_type: "profile", entity_id: userId, actor_id: user.id,
+          comment: `Status → ${STATUS_CONFIG[newStatus]?.label ?? newStatus}`,
+          new_status: newStatus,
+        });
+      }
+    } catch {}
+
+    toast({ title: "Status aktualisiert" });
+    setProfiles((prev) => prev.map((p) => (p.user_id === userId ? { ...p, status: newStatus } : p)));
+  };
+
+  // Onboarding-Map pro User
+  const kycByUser = new Map(kycList.map((k: any) => [k.user_id, k]));
+  const bookingByUser = new Set(allBookings.map((b: any) => b.user_id));
+  const assignmentByUser = new Set(assignments.map((a: any) => a.user_id));
+
+  const computeSteps = (p: any): OnbStep[] => [
+    { key: "email", label: "E-Mail bestätigt", done: emailConfirmedUserIds.has(p.user_id), icon: Mail },
+    { key: "personal", label: "Persönliche Daten", done: !!(p.phone && p.address && p.birth_date), icon: User },
+    { key: "address", label: "Adresse", done: !!(p.address || (p.street && p.zip_code && p.city)), icon: MapPin },
+    { key: "kyc", label: "Identität (KYC)", done: kycByUser.get(p.user_id)?.status === "verifiziert", icon: ShieldCheck },
+    { key: "contract", label: "Arbeitsvertrag", done: !!p.contract_signed_at, icon: FileSignature },
+    { key: "appointment", label: "Termin gebucht", done: bookingByUser.has(p.user_id), icon: CalendarDays },
+    { key: "task", label: "Auftrag erhalten", done: assignmentByUser.has(p.user_id), icon: ClipboardList },
+  ];
+
+  const isFullyActive = (p: any) =>
+    p.status === "angenommen"
+    && p.onboarding_status === "abgeschlossen"
+    && !!p.contract_signed_at
+    && kycByUser.get(p.user_id)?.status === "verifiziert";
+
+  const filtered = profiles.filter((p) => {
+    if (!(p.full_name ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (activityTab === "active" && !isFullyActive(p)) return false;
+    if (activityTab === "inactive" && (isFullyActive(p) || adminUserIds.has(p.user_id))) return false;
+    if (filterStatus && filterStatus !== "all") {
+      // Stuck-Filter
+      if (filterStatus.startsWith("stuck:")) {
+        const stepKey = filterStatus.slice(6);
+        const steps = computeSteps(p);
+        const idx = steps.findIndex((s) => s.key === stepKey);
+        const firstOpen = steps.findIndex((s) => !s.done);
+        return firstOpen === idx;
+      }
+      if (p.status !== filterStatus) return false;
+    }
+    return true;
+  });
+
+  const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 25);
+
+  const activeCount = profiles.filter(isFullyActive).length;
+  const inactiveCount = profiles.filter((p) => !isFullyActive(p) && !adminUserIds.has(p.user_id)).length;
+
+
+
+  if (loading) return <div className="p-6 lg:p-8 space-y-5"><PageHeaderSkeleton /><TableSkeleton rows={5} cols={7} /></div>;
+
+  return (
+    <div className="p-6 lg:p-8 space-y-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-heading font-bold text-foreground">Mitarbeiter</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{profiles.length} Einträge</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Button size="sm" className="h-9 text-xs gap-1.5" onClick={() => setWizardOpen(true)}>
+            <UserPlus className="h-3.5 w-3.5" /> Mitarbeiter anlegen
+          </Button>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-44 h-9 text-xs"><SelectValue placeholder="Alle Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Status</SelectItem>
+              {STATUS_ORDER.map((s) => <SelectItem key={s} value={s}>{STATUS_CONFIG[s].label}</SelectItem>)}
+              <SelectItem value="stuck:email">Hängt: E-Mail</SelectItem>
+              <SelectItem value="stuck:personal">Hängt: Persönliche Daten</SelectItem>
+              <SelectItem value="stuck:kyc">Hängt: KYC</SelectItem>
+              <SelectItem value="stuck:contract">Hängt: Vertrag</SelectItem>
+              <SelectItem value="stuck:appointment">Hängt: Termin</SelectItem>
+              <SelectItem value="stuck:task">Hängt: Auftrag</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input placeholder="Suchen…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-9 text-sm" />
+          <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("mitarbeiter.csv", filtered.map((p) => ({
+            ...p, status_label: STATUS_CONFIG[p.status]?.label ?? p.status, contract: p.contract_signed_at ? "Ja" : "Nein",
+          })), [
+            { key: "full_name", label: "Name" }, { key: "address", label: "Adresse" }, { key: "status_label", label: "Status" },
+            { key: "contract", label: "Vertrag" }, { key: "created_at", label: "Registriert" },
+          ])}><Download className="h-3.5 w-3.5" /> CSV</Button>
+        </div>
+      </div>
+
+      <CreateEmployeeWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        tenants={Object.entries(tenantMap).map(([id, name]) => ({ id, name }))}
+        onCreated={() => loadData()}
+      />
+
+      <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>
+        <TabsList>
+          <TabsTrigger value="all">Alle ({profiles.length})</TabsTrigger>
+          <TabsTrigger value="active">Aktiv ({activeCount})</TabsTrigger>
+          <TabsTrigger value="inactive">Nicht aktiv ({inactiveCount})</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <p className="text-sm text-foreground"><strong>{selected.size}</strong> ausgewählt</p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => { setBulkDeleteOpen(true); setBulkConfirm(""); }}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> {selected.size} löschen
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSelected(new Set())}>Abwählen</Button>
+          </div>
+        </div>
+      )}
+
+      <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="text-left px-3 py-3 w-10">
+                <Checkbox
+                  checked={paged.length > 0 && paged.filter((p) => !adminUserIds.has(p.user_id)).every((p) => selected.has(p.user_id))}
+                  onCheckedChange={() => {
+                    const ids = paged.filter((p) => !adminUserIds.has(p.user_id)).map((p) => p.user_id);
+                    const allSel = ids.every((id) => selected.has(id));
+                    toggleSelectAllPage(ids, allSel);
+                  }}
+                />
+              </th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tenant</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Onboarding</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aufgaben</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aktion</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {paged.map((profile) => {
+              const isRisk = checkRiskFlag(profile.living_since);
+              const isAdmin = adminUserIds.has(profile.user_id);
+              const userAssignments = assignments.filter(a => a.user_id === profile.user_id);
+              const doneCount = userAssignments.filter(a => ["abgeschlossen", "genehmigt"].includes(a.status)).length;
+              const openCount = userAssignments.filter(a => !["abgeschlossen", "genehmigt", "entwurf"].includes(a.status)).length;
+              const isDeactivated = profile.status === "deaktiviert";
+
+              return (
+                <tr key={profile.id} className={`hover:bg-muted/20 transition-colors cursor-pointer group ${isDeactivated ? "opacity-50" : ""}`} onClick={() => navigate(`/admin/employees/${profile.user_id}`)}>
+                  <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    {!isAdmin && (
+                      <Checkbox
+                        checked={selected.has(profile.user_id)}
+                        onCheckedChange={() => toggleSelect(profile.user_id)}
+                      />
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium text-foreground">{profile.full_name}</p>
+                          {isAdmin && (
+                            <Badge variant="default" className="text-[9px] px-1.5 py-0 bg-primary/90 text-primary-foreground gap-0.5">
+                              <Shield className="h-2.5 w-2.5" /> Admin
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">{profile.birth_date ? new Date(profile.birth_date).toLocaleDateString("de-DE") : "–"}</p>
+                      </div>
+                      {isRisk && <AlertTriangle className="h-3.5 w-3.5 text-status-pending shrink-0" />}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground text-xs max-w-[160px] truncate">{(profile as any).tenant_id ? tenantMap[(profile as any).tenant_id] || "–" : "–"}</td>
+                  <td className="px-5 py-3.5">
+                    <OnboardingPill steps={computeSteps(profile)} />
+                  </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    <span className="text-accent font-medium">{doneCount}</span>
+                    <span className="text-muted-foreground"> / </span>
+                    <span className="text-foreground">{openCount} offen</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <Badge variant="secondary" className={`text-[10px] ${STATUS_CONFIG[profile.status]?.color ?? "bg-muted text-muted-foreground"}`}>
+                      {STATUS_CONFIG[profile.status]?.label ?? profile.status}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
+                      {profile.status === "registriert" && (
+                        <>
+                          <Button size="sm" variant="default" className="h-7 text-[10px] gap-1 px-2" onClick={(e) => updateProfileStatus(e, profile.user_id, "angenommen")}>
+                            <CheckCircle2 className="h-3 w-3" /> Annehmen
+                          </Button>
+                          <Button size="sm" variant="destructive" className="h-7 text-[10px] gap-1 px-2" onClick={(e) => updateProfileStatus(e, profile.user_id, "abgelehnt")}>
+                            <XCircle className="h-3 w-3" /> Ablehnen
+                          </Button>
+                        </>
+                      )}
+                      {profile.status === "angenommen" && !isAdmin && (
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2 text-destructive hover:text-destructive" onClick={(e) => updateProfileStatus(e, profile.user_id, "deaktiviert")}>
+                          <Power className="h-3 w-3" /> Deaktivieren
+                        </Button>
+                      )}
+                      {(profile.status === "deaktiviert" || profile.status === "abgelehnt") && !isAdmin && (
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2 text-accent hover:text-accent" onClick={(e) => updateProfileStatus(e, profile.user_id, "angenommen")}>
+                          <Power className="h-3 w-3" /> Aktivieren
+                        </Button>
+                      )}
+                      {!isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] gap-1 px-2 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget({ userId: profile.user_id, name: profile.full_name }); setDeleteConfirm(""); }}
+                          title="Endgültig löschen"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="border-t border-border bg-muted/20">
+          <PaginationBar page={page} pageCount={pageCount} setPage={setPage} rangeFrom={rangeFrom} rangeTo={rangeTo} total={total} />
+        </div>
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteConfirm(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Mitarbeiter endgültig löschen
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  <strong className="text-foreground">{deleteTarget?.name}</strong> wird vollständig aus der Datenbank entfernt
+                  – inklusive Auth-Account, Chat, Verträgen, Aufgaben, KYC und Uploads.
+                </p>
+                <p>Dieser Vorgang ist <strong>nicht umkehrbar</strong>.</p>
+                <p>Tippe zur Bestätigung <code className="bg-muted px-1.5 py-0.5 rounded text-foreground">MITARBEITER LÖSCHEN</code> ein:</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder="MITARBEITER LÖSCHEN"
+            autoFocus
+            className="font-mono"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteConfirm !== "MITARBEITER LÖSCHEN" || deleting}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Endgültig löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => { if (!o && !bulkDeleting) { setBulkDeleteOpen(false); setBulkConfirm(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> {selected.size} Mitarbeiter endgültig löschen
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p><strong className="text-foreground">{selected.size}</strong> Mitarbeiter werden vollständig entfernt – inklusive Auth-Accounts, Chats, Verträgen, Aufgaben, KYC und Uploads.</p>
+                <p>Dieser Vorgang ist <strong>nicht umkehrbar</strong>.</p>
+                <p>Tippe zur Bestätigung <code className="bg-muted px-1.5 py-0.5 rounded text-foreground">MITARBEITER LÖSCHEN</code> ein:</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input value={bulkConfirm} onChange={(e) => setBulkConfirm(e.target.value)} placeholder="MITARBEITER LÖSCHEN" autoFocus className="font-mono" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkConfirm !== "MITARBEITER LÖSCHEN" || bulkDeleting}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {selected.size} endgültig löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

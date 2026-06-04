@@ -54,6 +54,9 @@ const MAX_SENDS_PER_RUN_PER_TENANT = 50;
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.
 const DOMAIN_RECOVERY_AUTO_WINDOW_DAYS = 14;
+// Banner-Fenster: Wie lange nach einem Primary-Domain-Wechsel zeigen alle
+// regulären Reminder-Mails den Hinweis „Portal-Adresse hat sich geändert".
+const DOMAIN_CHANGE_BANNER_DAYS = 30;
 // Wartezeit zwischen zwei echten Sends (Basis + zufällige Streuung)
 const SEND_DELAY_MIN_MS = 2500;
 const SEND_DELAY_MAX_MS = 5500;
@@ -157,6 +160,7 @@ serve(async (req) => {
     const ignoreQuietHours = body?.ignore_quiet_hours === true;
     const mode: string = body?.mode ?? "reminders";
     const recoveryTenantId: string | null = body?.tenant_id ?? null;
+    const retryFailedOnly: boolean = body?.retry_failed_only === true;
 
     // Quiet-Hours-Guard: keine Mails nachts. Cron-Läufe außerhalb 08–20 Uhr enden hier sofort.
     if (!dryRun && !ignoreQuietHours && isQuietHours()) {
@@ -181,7 +185,7 @@ serve(async (req) => {
 
     if (mode === "domain_recovery") {
       if (!recoveryTenantId) return json({ error: "tenant_id required for domain_recovery" }, 400);
-      await runDomainRecovery(ctx, recoveryTenantId);
+      await runDomainRecovery(ctx, recoveryTenantId, { retryFailedOnly });
     } else {
       if (!onlyType || onlyType === "invite") await runInvites(ctx);
       if (!onlyType || onlyType === "confirm_email") await runConfirmEmail(ctx);
@@ -194,7 +198,7 @@ serve(async (req) => {
         if (!t.primary_domain_changed_at) continue;
         const age = Date.now() - new Date(t.primary_domain_changed_at).getTime();
         if (age < 0 || age > windowMs) continue;
-        await runDomainRecovery(ctx, t.id);
+        await runDomainRecovery(ctx, t.id, { retryFailedOnly: false });
       }
     }
 
@@ -511,7 +515,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
 // erfolgreiche Recovery-Mail je `tenants.primary_domain_changed_at`-Wert.
 // Cap: DOMAIN_RECOVERY_CAP_PER_RUN (20) — verteilt sich über die Cron-Läufe
 // (12/Tag) auf ~200 Mails/12h pro Tenant.
-async function runDomainRecovery(ctx: SendCtx, tenantId: string) {
+async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFailedOnly: boolean }) {
   const tenant = ctx.tenants.get(tenantId);
   if (!hasValidSmtp(tenant)) {
     ctx.results.push({ type: "domain_recovery", email: "", status: "failed", error: "no_tenant_smtp" });
@@ -521,79 +525,116 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string) {
   const stats = { total_eligible: 0, would_send_this_run: 0, already_done_since_change: 0, no_change_anchor: !tenant.primary_domain_changed_at };
   ctx.recoveryStats.set(tenantId, stats);
 
-  // Alle Mitarbeiter des Tenants (inkl. abgeschlossen) — Bewerber bewusst NICHT.
-  const { data: profiles, error } = await ctx.admin
+  // ── Empfänger sammeln ──
+  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt/gesperrt)
+  // 2) Akzeptierte Bewerber (applications.status='akzeptiert') ohne Auth-Account
+  const { data: profiles, error: pErr } = await ctx.admin
     .from("profiles")
     .select("user_id,full_name,tenant_id,status")
     .eq("tenant_id", tenantId)
     .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
-  if (error) { console.error("recovery query", error); return; }
-  if (!profiles?.length) return;
+  if (pErr) { console.error("recovery profiles query", pErr); return; }
+
+  const { data: apps, error: aErr } = await ctx.admin
+    .from("applications")
+    .select("id,email,full_name,first_name,tenant_id,status")
+    .eq("tenant_id", tenantId)
+    .eq("status", "akzeptiert");
+  if (aErr) { console.error("recovery apps query", aErr); return; }
 
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
+  const emailToUser = new Map<string, any>((usersList?.users ?? []).map(u => [(u.email ?? "").toLowerCase(), u]));
 
-  // Idempotenz-Anker: alle Recovery-Mails dieses Tenants, die seit dem letzten
-  // Primary-Domain-Wechsel erfolgreich verschickt wurden.
-  const changedAt = tenant.primary_domain_changed_at;
-  const alreadyDone = new Set<string>();
-  if (changedAt) {
-    const { data: doneLogs } = await ctx.admin
-      .from("reminder_log")
-      .select("email")
-      .eq("tenant_id", tenantId)
-      .eq("reminder_type", "domain_recovery")
-      .eq("status", "sent")
-      .gte("sent_at", changedAt);
-    for (const r of doneLogs ?? []) alreadyDone.add(String((r as any).email).toLowerCase());
-  }
+  type Recipient = { email: string; first_name: string; kind: "mitarbeiter" | "bewerber" };
+  const recipients: Recipient[] = [];
+  const seen = new Set<string>();
 
-  let sentThisRun = 0;
-  for (const p of profiles) {
+  for (const p of profiles ?? []) {
     const u = userMap.get((p as any).user_id);
     if (!u?.email) continue;
     const email = u.email.toLowerCase();
+    if (seen.has(email)) continue;
+    seen.add(email);
+    const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
+    recipients.push({ email, first_name: firstName, kind: "mitarbeiter" });
+  }
+  for (const app of apps ?? []) {
+    const email = (app.email ?? "").toLowerCase();
+    if (!email) continue;
+    // Bewerber, die schon einen Account haben, laufen über "mitarbeiter" oben.
+    if (emailToUser.has(email)) continue;
+    if (seen.has(email)) continue;
+    seen.add(email);
+    const firstName = (app as any).first_name ?? ((app as any).full_name ?? "").split(" ")[0] ?? "";
+    recipients.push({ email, first_name: firstName, kind: "bewerber" });
+  }
+
+  // ── Idempotenz-Anker ──
+  // alreadyDone: erfolgreich seit primary_domain_changed_at → überspringen
+  // retryTargets: failed seit primary_domain_changed_at → bei retryFailedOnly nur diese
+  const changedAt = tenant.primary_domain_changed_at;
+  const alreadyDone = new Set<string>();
+  const failedSinceChange = new Set<string>();
+  if (changedAt) {
+    const { data: doneLogs } = await ctx.admin
+      .from("reminder_log")
+      .select("email,status")
+      .eq("tenant_id", tenantId)
+      .eq("reminder_type", "domain_recovery")
+      .gte("sent_at", changedAt);
+    for (const r of doneLogs ?? []) {
+      const email = String((r as any).email).toLowerCase();
+      if ((r as any).status === "sent") alreadyDone.add(email);
+      else if ((r as any).status === "failed") failedSinceChange.add(email);
+    }
+  }
+
+  let sentThisRun = 0;
+  for (const rec of recipients) {
     stats.total_eligible++;
 
-    if (alreadyDone.has(email)) {
+    if (alreadyDone.has(rec.email)) {
       stats.already_done_since_change++;
       continue;
     }
+    if (opts.retryFailedOnly && !failedSinceChange.has(rec.email)) {
+      continue;
+    }
 
-    // Eigenes Cap nur für domain_recovery (kleiner als der normale 50er-Cap).
     if (sentThisRun >= DOMAIN_RECOVERY_CAP_PER_RUN) {
-      ctx.results.push({ type: "domain_recovery", email, status: "skipped", error: "recovery_run_cap_reached" });
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "skipped", error: "recovery_run_cap_reached" });
       continue;
     }
 
     stats.would_send_this_run++;
 
     if (ctx.dryRun) {
-      ctx.results.push({ type: "domain_recovery", email, status: "sent" });
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       sentThisRun++;
       continue;
     }
 
     const attempt = (ctx.sentCountByTenantType.get(`${tenant.id}:domain_recovery`) ?? 0) + 1;
-    const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
-    const portalLink = `https://${portalHost(tenant)}/login`;
-    const vars = baseVars(tenant, { first_name: firstName, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
+    const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
+    const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
     const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery.subject, vars);
-    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars);
+    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars, { withDomainBanner: false });
 
     try {
-      await sendMail(tenant, email, subject, html);
-      await logReminder(ctx.admin, email, tenant.id, "domain_recovery", attempt, "sent");
-      ctx.results.push({ type: "domain_recovery", email, status: "sent" });
+      await sendMail(tenant, rec.email, subject, html);
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "sent");
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       bumpSent(ctx, tenant.id, "domain_recovery");
       sentThisRun++;
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "domain_recovery", email, status: "failed", error: String(e?.message ?? e) });
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: String(e?.message ?? e) });
     }
   }
 }
+
 
 
 // ───── Mailversand ─────
@@ -616,19 +657,36 @@ async function sendMail(tenant: TenantRow, to: string, subject: string, html: st
 }
 
 // ───── Templates ─────
-function shellHtml(tenant: TenantRow, inner: string): string {
+function shellHtml(tenant: TenantRow, inner: string, opts?: { banner?: string }): string {
   const brand = tenant.primary_color ?? "#0f172a";
   const logo = tenant.logo_url
     ? `<img src="${tenant.logo_url}" alt="${escapeHtml(tenant.name)}" style="max-height:40px;margin-bottom:24px"/>`
     : `<div style="font-weight:700;font-size:20px;margin-bottom:24px;color:${brand}">${escapeHtml(tenant.name)}</div>`;
+  const banner = opts?.banner ?? "";
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px"><tr><td align="center">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:40px;max-width:560px">
-<tr><td>${logo}${inner}
+<tr><td>${logo}${banner}${inner}
 <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0"/>
 <p style="font-size:12px;color:#94a3b8;margin:0">Diese Erinnerung wurde automatisch versendet. Wenn du sie nicht mehr benötigst, kannst du sie ignorieren.</p>
 </td></tr></table></td></tr></table></body></html>`;
 }
+
+// Domain-Wechsel-Hinweis: wird in allen regulären Reminder-Mails (NICHT in
+// domain_recovery selbst) oberhalb des Bodys gezeigt, wenn der Primary-Domain-
+// Wechsel < DOMAIN_CHANGE_BANNER_DAYS her ist. Verhindert, dass Empfänger alte
+// Mails mit nicht mehr funktionierenden Links anklicken.
+function renderDomainChangeBanner(tenant: TenantRow): string {
+  if (!tenant.primary_domain_changed_at) return "";
+  const age = Date.now() - new Date(tenant.primary_domain_changed_at).getTime();
+  if (age < 0 || age > DOMAIN_CHANGE_BANNER_DAYS * 86400_000) return "";
+  const host = portalHost(tenant);
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:6px;padding:14px 16px">
+<div style="font-weight:600;color:#78350f;font-size:14px;margin:0 0 4px">Hinweis: Unsere Portal-Adresse hat sich geändert.</div>
+<div style="font-size:13px;color:#78350f;line-height:1.5">Bitte nutze ab sofort <a href="https://${host}/login" style="color:#78350f;font-weight:600">https://${host}/login</a> – ältere Links funktionieren möglicherweise nicht mehr.</div>
+</td></tr></table>`;
+}
+
 
 function btn(brand: string, href: string, label: string): string {
   return `<table cellpadding="0" cellspacing="0"><tr><td style="background:${brand};border-radius:8px">
@@ -721,6 +779,7 @@ function renderBodyHtml(
   custom: string | null | undefined,
   fallback: string,
   vars: Vars,
+  opts?: { withDomainBanner?: boolean },
 ): string {
   let body = (custom && custom.trim()) ? custom : fallback;
 
@@ -737,8 +796,10 @@ function renderBodyHtml(
     btn(tenant.primary_color ?? "#0f172a", String(href).trim(), String(label).trim()),
   );
 
-  return shellHtml(tenant, body);
+  const banner = opts?.withDomainBanner === false ? "" : renderDomainChangeBanner(tenant);
+  return shellHtml(tenant, body, { banner });
 }
+
 
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));

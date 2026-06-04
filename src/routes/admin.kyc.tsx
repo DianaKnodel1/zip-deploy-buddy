@@ -31,17 +31,31 @@ function AdminKycPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
 
+  const [urlCache, setUrlCache] = useState<Map<string, Record<string, string>>>(new Map());
+  const [lightbox, setLightbox] = useState<{ url: string; label: string; index: number; all: { url: string; label: string }[] } | null>(null);
+
   const viewKycDocuments = async (kyc: KycRow) => {
-    setSelectedKyc(kyc); setRejectionReason(kyc.rejection_reason ?? "");
+    setSelectedKyc(kyc);
+    setRejectionReason(kyc.rejection_reason ?? "");
+
+    // Cache-Hit → sofort anzeigen
+    const cached = urlCache.get(kyc.id);
+    if (cached) { setDocUrls(cached); return; }
+    setDocUrls({}); // Reset, damit alte Bilder nicht hängen bleiben
+
+    const fields = ["id_front_url", "id_back_url", "selfie_url"] as const;
+    const results = await Promise.all(
+      fields
+        .filter((f) => kyc[f])
+        .map(async (f) => {
+          const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(kyc[f] as string, 3600);
+          return [f, data?.signedUrl ?? ""] as const;
+        })
+    );
     const urls: Record<string, string> = {};
-    for (const field of ["id_front_url", "id_back_url", "selfie_url"] as const) {
-      const path = kyc[field];
-      if (path) {
-        const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(path, 600);
-        if (data?.signedUrl) urls[field] = data.signedUrl;
-      }
-    }
+    for (const [f, u] of results) if (u) urls[f] = u;
     setDocUrls(urls);
+    setUrlCache((prev) => new Map(prev).set(kyc.id, urls));
   };
 
   const updateKycStatus = async (kycId: string, userId: string, newStatus: KycStatus, reason?: string) => {

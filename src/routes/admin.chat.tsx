@@ -461,16 +461,6 @@ function AdminChatPage() {
               <button
                 key={conv.user_id}
                 onClick={() => selectConversation(conv.user_id)}
-        <div className="flex-1 overflow-y-auto">
-          {filteredConversations.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">Keine Chats</p>
-          )}
-          {filteredConversations.map((conv) => {
-            const initials = conv.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-            return (
-              <button
-                key={conv.user_id}
-                onClick={() => selectConversation(conv.user_id)}
                 className={cn(
                   "w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50",
                   selectedUserId === conv.user_id && "bg-primary/5 border-l-2 border-l-primary",

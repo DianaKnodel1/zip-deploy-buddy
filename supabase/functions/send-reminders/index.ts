@@ -515,7 +515,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
 // erfolgreiche Recovery-Mail je `tenants.primary_domain_changed_at`-Wert.
 // Cap: DOMAIN_RECOVERY_CAP_PER_RUN (20) — verteilt sich über die Cron-Läufe
 // (12/Tag) auf ~200 Mails/12h pro Tenant.
-async function runDomainRecovery(ctx: SendCtx, tenantId: string) {
+async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFailedOnly: boolean }) {
   const tenant = ctx.tenants.get(tenantId);
   if (!hasValidSmtp(tenant)) {
     ctx.results.push({ type: "domain_recovery", email: "", status: "failed", error: "no_tenant_smtp" });
@@ -525,79 +525,116 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string) {
   const stats = { total_eligible: 0, would_send_this_run: 0, already_done_since_change: 0, no_change_anchor: !tenant.primary_domain_changed_at };
   ctx.recoveryStats.set(tenantId, stats);
 
-  // Alle Mitarbeiter des Tenants (inkl. abgeschlossen) — Bewerber bewusst NICHT.
-  const { data: profiles, error } = await ctx.admin
+  // ── Empfänger sammeln ──
+  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt/gesperrt)
+  // 2) Akzeptierte Bewerber (applications.status='akzeptiert') ohne Auth-Account
+  const { data: profiles, error: pErr } = await ctx.admin
     .from("profiles")
     .select("user_id,full_name,tenant_id,status")
     .eq("tenant_id", tenantId)
     .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
-  if (error) { console.error("recovery query", error); return; }
-  if (!profiles?.length) return;
+  if (pErr) { console.error("recovery profiles query", pErr); return; }
+
+  const { data: apps, error: aErr } = await ctx.admin
+    .from("applications")
+    .select("id,email,full_name,first_name,tenant_id,status")
+    .eq("tenant_id", tenantId)
+    .eq("status", "akzeptiert");
+  if (aErr) { console.error("recovery apps query", aErr); return; }
 
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
+  const emailToUser = new Map<string, any>((usersList?.users ?? []).map(u => [(u.email ?? "").toLowerCase(), u]));
 
-  // Idempotenz-Anker: alle Recovery-Mails dieses Tenants, die seit dem letzten
-  // Primary-Domain-Wechsel erfolgreich verschickt wurden.
-  const changedAt = tenant.primary_domain_changed_at;
-  const alreadyDone = new Set<string>();
-  if (changedAt) {
-    const { data: doneLogs } = await ctx.admin
-      .from("reminder_log")
-      .select("email")
-      .eq("tenant_id", tenantId)
-      .eq("reminder_type", "domain_recovery")
-      .eq("status", "sent")
-      .gte("sent_at", changedAt);
-    for (const r of doneLogs ?? []) alreadyDone.add(String((r as any).email).toLowerCase());
-  }
+  type Recipient = { email: string; first_name: string; kind: "mitarbeiter" | "bewerber" };
+  const recipients: Recipient[] = [];
+  const seen = new Set<string>();
 
-  let sentThisRun = 0;
-  for (const p of profiles) {
+  for (const p of profiles ?? []) {
     const u = userMap.get((p as any).user_id);
     if (!u?.email) continue;
     const email = u.email.toLowerCase();
+    if (seen.has(email)) continue;
+    seen.add(email);
+    const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
+    recipients.push({ email, first_name: firstName, kind: "mitarbeiter" });
+  }
+  for (const app of apps ?? []) {
+    const email = (app.email ?? "").toLowerCase();
+    if (!email) continue;
+    // Bewerber, die schon einen Account haben, laufen über "mitarbeiter" oben.
+    if (emailToUser.has(email)) continue;
+    if (seen.has(email)) continue;
+    seen.add(email);
+    const firstName = (app as any).first_name ?? ((app as any).full_name ?? "").split(" ")[0] ?? "";
+    recipients.push({ email, first_name: firstName, kind: "bewerber" });
+  }
+
+  // ── Idempotenz-Anker ──
+  // alreadyDone: erfolgreich seit primary_domain_changed_at → überspringen
+  // retryTargets: failed seit primary_domain_changed_at → bei retryFailedOnly nur diese
+  const changedAt = tenant.primary_domain_changed_at;
+  const alreadyDone = new Set<string>();
+  const failedSinceChange = new Set<string>();
+  if (changedAt) {
+    const { data: doneLogs } = await ctx.admin
+      .from("reminder_log")
+      .select("email,status")
+      .eq("tenant_id", tenantId)
+      .eq("reminder_type", "domain_recovery")
+      .gte("sent_at", changedAt);
+    for (const r of doneLogs ?? []) {
+      const email = String((r as any).email).toLowerCase();
+      if ((r as any).status === "sent") alreadyDone.add(email);
+      else if ((r as any).status === "failed") failedSinceChange.add(email);
+    }
+  }
+
+  let sentThisRun = 0;
+  for (const rec of recipients) {
     stats.total_eligible++;
 
-    if (alreadyDone.has(email)) {
+    if (alreadyDone.has(rec.email)) {
       stats.already_done_since_change++;
       continue;
     }
+    if (opts.retryFailedOnly && !failedSinceChange.has(rec.email)) {
+      continue;
+    }
 
-    // Eigenes Cap nur für domain_recovery (kleiner als der normale 50er-Cap).
     if (sentThisRun >= DOMAIN_RECOVERY_CAP_PER_RUN) {
-      ctx.results.push({ type: "domain_recovery", email, status: "skipped", error: "recovery_run_cap_reached" });
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "skipped", error: "recovery_run_cap_reached" });
       continue;
     }
 
     stats.would_send_this_run++;
 
     if (ctx.dryRun) {
-      ctx.results.push({ type: "domain_recovery", email, status: "sent" });
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       sentThisRun++;
       continue;
     }
 
     const attempt = (ctx.sentCountByTenantType.get(`${tenant.id}:domain_recovery`) ?? 0) + 1;
-    const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
-    const portalLink = `https://${portalHost(tenant)}/login`;
-    const vars = baseVars(tenant, { first_name: firstName, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
+    const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
+    const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
     const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery.subject, vars);
     const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars);
 
     try {
-      await sendMail(tenant, email, subject, html);
-      await logReminder(ctx.admin, email, tenant.id, "domain_recovery", attempt, "sent");
-      ctx.results.push({ type: "domain_recovery", email, status: "sent" });
+      await sendMail(tenant, rec.email, subject, html);
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "sent");
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       bumpSent(ctx, tenant.id, "domain_recovery");
       sentThisRun++;
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "domain_recovery", email, status: "failed", error: String(e?.message ?? e) });
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: String(e?.message ?? e) });
     }
   }
 }
+
 
 
 // ───── Mailversand ─────

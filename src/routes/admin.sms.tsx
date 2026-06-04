@@ -216,7 +216,7 @@ function AdminSmsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={loadData}>
+          <Button size="sm" variant="outline" onClick={refreshAll}>
             <RefreshCw className="h-3.5 w-3.5 mr-1" /> Aktualisieren
           </Button>
         </div>

@@ -143,11 +143,25 @@ function AdminKycPage() {
           {selectedKyc && (
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-3">
-                {([{ label: "Ausweis Vorderseite", key: "id_front_url" }, { label: "Ausweis Rückseite", key: "id_back_url" }, { label: "Selfie", key: "selfie_url" }] as const).map((doc) => (
+                {([{ label: "Ausweis Vorderseite", key: "id_front_url" }, { label: "Ausweis Rückseite", key: "id_back_url" }, { label: "Selfie", key: "selfie_url" }] as const).map((doc, i, arr) => (
                   <div key={doc.key} className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">{doc.label}</p>
                     {docUrls[doc.key] ? (
-                      <img src={docUrls[doc.key]} alt={doc.label} className="w-full h-36 object-cover rounded-lg border border-border" />
+                      <img
+                        src={docUrls[doc.key]}
+                        alt={doc.label}
+                        loading="eager"
+                        decoding="async"
+                        title="Doppelklick für Vollbild"
+                        className="w-full h-36 object-cover rounded-lg border border-border cursor-zoom-in hover:opacity-90 transition-opacity"
+                        onDoubleClick={() => {
+                          const all = arr
+                            .filter((d) => docUrls[d.key])
+                            .map((d) => ({ url: docUrls[d.key], label: d.label }));
+                          const index = all.findIndex((a) => a.url === docUrls[doc.key]);
+                          setLightbox({ url: docUrls[doc.key], label: doc.label, index, all });
+                        }}
+                      />
                     ) : (
                       <div className="w-full h-36 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center">
                         <p className="text-[11px] text-muted-foreground">Nicht hochgeladen</p>

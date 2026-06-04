@@ -210,6 +210,25 @@ function AdminChatPage() {
     toast({ title: "Chat als gelöst markiert" });
   };
 
+  const hideConversation = async (userId: string) => {
+    setHiding(true);
+    // Upsert: falls noch keine chat_conversations-Zeile existiert (direct-Chats), eine anlegen.
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_hidden_at: new Date().toISOString(), updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+    setHiding(false);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.filter((c) => c.user_id !== userId));
+    if (selectedUserId === userId) setSelectedUserId(null);
+    toast({
+      title: "Chat ausgeblendet",
+      description: "Sobald der Mitarbeiter wieder schreibt, erscheint der Chat oben.",
+    });
+  };
+
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
 
   const sendMessage = async () => {

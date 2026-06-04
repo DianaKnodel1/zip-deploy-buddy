@@ -619,7 +619,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
     const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
     const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery.subject, vars);
-    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars);
+    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars, { withDomainBanner: false });
 
     try {
       await sendMail(tenant, rec.email, subject, html);

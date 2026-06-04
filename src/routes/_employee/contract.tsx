@@ -154,9 +154,10 @@ function ContractPage() {
   useEffect(() => {
     if (authLoading || !user) return;
     const loadData = async () => {
-      const [{ data: contracts }, { data: profileData }] = await Promise.all([
+      const [{ data: contracts }, { data: profileData }, ovRes] = await Promise.all([
         supabase.from("contracts").select("*").eq("user_id", user.id).order("signed_at", { ascending: false }).limit(1),
         supabase.from("profiles").select("full_name, street, zip_code, city, address, employment_type, employment_start_date, contract_signed_at, tenant_id").eq("user_id", user.id).maybeSingle(),
+        getOverrideFn().catch(() => ({ override: null })),
       ]);
       if (contracts && contracts.length > 0) setContract(contracts[0] as unknown as Contract);
       setProfile(profileData);
@@ -169,6 +170,13 @@ function ContractPage() {
           .maybeSingle();
         setTenant(t);
       }
+      const ov = (ovRes as any)?.override ?? null;
+      setOverride(ov);
+      if (ov?.pdf_url) {
+        const { data: signed } = await supabase.storage.from("documents").createSignedUrl(ov.pdf_url, 3600);
+        setOverridePdfUrl(signed?.signedUrl ?? null);
+      }
+      setOverrideLoading(false);
       setLoading(false);
     };
     loadData();

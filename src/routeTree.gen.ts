@@ -56,6 +56,7 @@ import { Route as EmployeeAppointmentsRouteImport } from './routes/_employee/app
 import { Route as AdminTasksIndexRouteImport } from './routes/admin.tasks.index'
 import { Route as AdminEmployeesIndexRouteImport } from './routes/admin.employees.index'
 import { Route as AdminApplicationsIndexRouteImport } from './routes/admin.applications.index'
+import { Route as ApiPublicSmsPollCronRouteImport } from './routes/api/public/sms-poll-cron'
 import { Route as ApiPublicDomainHealthCronRouteImport } from './routes/api/public/domain-health-cron'
 import { Route as ApiPublicApplicationsRouteImport } from './routes/api/public/applications'
 import { Route as AdminEmployeesUserIdRouteImport } from './routes/admin.employees.$userId'
@@ -298,6 +299,11 @@ const AdminApplicationsIndexRoute = AdminApplicationsIndexRouteImport.update({
   path: '/applications/',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicSmsPollCronRoute = ApiPublicSmsPollCronRouteImport.update({
+  id: '/api/public/sms-poll-cron',
+  path: '/api/public/sms-poll-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicDomainHealthCronRoute =
   ApiPublicDomainHealthCronRouteImport.update({
     id: '/api/public/domain-health-cron',
@@ -388,6 +394,7 @@ export interface FileRoutesByFullPath {
   '/admin/employees/$userId': typeof AdminEmployeesUserIdRoute
   '/api/public/applications': typeof ApiPublicApplicationsRoute
   '/api/public/domain-health-cron': typeof ApiPublicDomainHealthCronRoute
+  '/api/public/sms-poll-cron': typeof ApiPublicSmsPollCronRoute
   '/admin/applications/': typeof AdminApplicationsIndexRoute
   '/admin/employees/': typeof AdminEmployeesIndexRoute
   '/admin/tasks/': typeof AdminTasksIndexRoute
@@ -442,6 +449,7 @@ export interface FileRoutesByTo {
   '/admin/employees/$userId': typeof AdminEmployeesUserIdRoute
   '/api/public/applications': typeof ApiPublicApplicationsRoute
   '/api/public/domain-health-cron': typeof ApiPublicDomainHealthCronRoute
+  '/api/public/sms-poll-cron': typeof ApiPublicSmsPollCronRoute
   '/admin/applications': typeof AdminApplicationsIndexRoute
   '/admin/employees': typeof AdminEmployeesIndexRoute
   '/admin/tasks': typeof AdminTasksIndexRoute
@@ -499,6 +507,7 @@ export interface FileRoutesById {
   '/admin/employees/$userId': typeof AdminEmployeesUserIdRoute
   '/api/public/applications': typeof ApiPublicApplicationsRoute
   '/api/public/domain-health-cron': typeof ApiPublicDomainHealthCronRoute
+  '/api/public/sms-poll-cron': typeof ApiPublicSmsPollCronRoute
   '/admin/applications/': typeof AdminApplicationsIndexRoute
   '/admin/employees/': typeof AdminEmployeesIndexRoute
   '/admin/tasks/': typeof AdminTasksIndexRoute
@@ -556,6 +565,7 @@ export interface FileRouteTypes {
     | '/admin/employees/$userId'
     | '/api/public/applications'
     | '/api/public/domain-health-cron'
+    | '/api/public/sms-poll-cron'
     | '/admin/applications/'
     | '/admin/employees/'
     | '/admin/tasks/'
@@ -610,6 +620,7 @@ export interface FileRouteTypes {
     | '/admin/employees/$userId'
     | '/api/public/applications'
     | '/api/public/domain-health-cron'
+    | '/api/public/sms-poll-cron'
     | '/admin/applications'
     | '/admin/employees'
     | '/admin/tasks'
@@ -666,6 +677,7 @@ export interface FileRouteTypes {
     | '/admin/employees/$userId'
     | '/api/public/applications'
     | '/api/public/domain-health-cron'
+    | '/api/public/sms-poll-cron'
     | '/admin/applications/'
     | '/admin/employees/'
     | '/admin/tasks/'
@@ -684,6 +696,7 @@ export interface RootRouteChildren {
   AuthConfirmedRoute: typeof AuthConfirmedRoute
   ApiPublicApplicationsRoute: typeof ApiPublicApplicationsRoute
   ApiPublicDomainHealthCronRoute: typeof ApiPublicDomainHealthCronRoute
+  ApiPublicSmsPollCronRoute: typeof ApiPublicSmsPollCronRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1017,6 +1030,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApplicationsIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/public/sms-poll-cron': {
+      id: '/api/public/sms-poll-cron'
+      path: '/api/public/sms-poll-cron'
+      fullPath: '/api/public/sms-poll-cron'
+      preLoaderRoute: typeof ApiPublicSmsPollCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/domain-health-cron': {
       id: '/api/public/domain-health-cron'
       path: '/api/public/domain-health-cron'
@@ -1195,6 +1215,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthConfirmedRoute: AuthConfirmedRoute,
   ApiPublicApplicationsRoute: ApiPublicApplicationsRoute,
   ApiPublicDomainHealthCronRoute: ApiPublicDomainHealthCronRoute,
+  ApiPublicSmsPollCronRoute: ApiPublicSmsPollCronRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

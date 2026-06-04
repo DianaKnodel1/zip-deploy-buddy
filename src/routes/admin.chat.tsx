@@ -13,10 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2 } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useSearchParams } from "@/lib/router-compat";
+import { useNavigate } from "@/lib/router-compat";
 import { EmojiPicker } from "@/components/EmojiPicker";
 import { ChatAttachmentButton, AttachmentPreview, type ChatAttachment } from "@/components/ChatAttachmentButton";
 
@@ -30,6 +31,7 @@ interface Conversation {
   lastAt?: string;
   lastSignInAt?: string | null;
   tenantName?: string | null;
+  tenantId?: string | null;
 }
 
 interface ChatMessage {
@@ -48,6 +50,7 @@ interface ChatMessage {
 function AdminChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -56,6 +59,8 @@ function AdminChatPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterTab] = useState<"all" | "escalated" | "open">("all");
+  const [tenantFilter, setTenantFilter] = useState<string>("all"); // tenant_id oder "all"
+  const [hiding, setHiding] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingChannelRef = useRef<any>(null);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -89,7 +94,7 @@ function AdminChatPage() {
     // 1 Query statt N*2: alle Nachrichten in/aus Admin-Postfach holen und client-seitig aggregieren.
     const [profilesRes, convsRes, msgsRes, tenantsRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, tenant_id"),
-      supabase.from("chat_conversations").select("user_id, status, escalated_at"),
+      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at"),
       supabase
         .from("chat_messages")
         .select("sender_id, receiver_id, message, read, created_at")
@@ -121,6 +126,8 @@ function AdminChatPage() {
     const list: Conversation[] = [];
     for (const [partnerId, a] of agg) {
       const conv = convMap.get(partnerId);
+      // Vom Admin versteckte Chats nicht in die Liste aufnehmen.
+      if (conv?.admin_hidden_at) continue;
       const prof = profileMap.get(partnerId);
       list.push({
         user_id: partnerId,
@@ -130,6 +137,7 @@ function AdminChatPage() {
         unread: a.unread,
         lastMessage: a.lastMessage,
         lastAt: a.lastAt,
+        tenantId: prof?.tenant_id ?? null,
         tenantName: prof?.tenant_id ? tenantMap.get(prof.tenant_id) ?? null : null,
       });
     }
@@ -200,6 +208,25 @@ function AdminChatPage() {
       .eq("user_id", userId);
     setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, status: "resolved" } : c));
     toast({ title: "Chat als gelöst markiert" });
+  };
+
+  const hideConversation = async (userId: string) => {
+    setHiding(true);
+    // Upsert: falls noch keine chat_conversations-Zeile existiert (direct-Chats), eine anlegen.
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_hidden_at: new Date().toISOString(), updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+    setHiding(false);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.filter((c) => c.user_id !== userId));
+    if (selectedUserId === userId) setSelectedUserId(null);
+    toast({
+      title: "Chat ausgeblendet",
+      description: "Sobald der Mitarbeiter wieder schreibt, erscheint der Chat oben.",
+    });
   };
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
@@ -348,8 +375,17 @@ function AdminChatPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
+  const tenantOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of conversations) {
+      if (c.tenantId && c.tenantName) map.set(c.tenantId, c.tenantName);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [conversations]);
+
   const filteredConversations = conversations.filter((c) => {
     if (!c.full_name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (tenantFilter !== "all" && c.tenantId !== tenantFilter) return false;
     if (filterTab === "escalated") return c.status === "escalated";
     if (filterTab === "open") return c.status !== "resolved";
     return true;
@@ -385,6 +421,35 @@ function AdminChatPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Suchen…" className="pl-9 h-9 text-sm" />
           </div>
+          {/* Tenant-Tabs */}
+          {tenantOptions.length > 1 && (
+            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
+              <button
+                onClick={() => setTenantFilter("all")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors",
+                  tenantFilter === "all" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                )}
+              >
+                Alle ({conversations.length})
+              </button>
+              {tenantOptions.map((t) => {
+                const count = conversations.filter((c) => c.tenantId === t.id).length;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTenantFilter(t.id)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors",
+                      tenantFilter === t.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {t.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 && (
@@ -445,13 +510,24 @@ function AdminChatPage() {
           <>
             {/* Header */}
             <div className="border-b border-border bg-card px-5 py-3 flex items-center gap-3 shrink-0">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/employees/${selectedUserId}`)}
+                title="Mitarbeiter-Profil öffnen"
+                className="h-9 w-9 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors flex items-center justify-center"
+              >
                 <span className="text-xs font-bold text-primary">{selectedInitials}</span>
-              </div>
-              <div className="flex-1">
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/employees/${selectedUserId}`)}
+                className="flex-1 text-left group"
+                title="Mitarbeiter-Profil öffnen"
+              >
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{selectedName}</p>
+                  <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{selectedName}</p>
                   {selectedConv && statusBadge(selectedConv.status)}
+                  <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
                 {selectedConv?.tenantName && (
                   <p className="text-[11px] text-primary/80 flex items-center gap-1 mt-0.5">
@@ -468,7 +544,7 @@ function AdminChatPage() {
                     schreibt …
                   </p>
                 )}
-              </div>
+              </button>
               <div className="flex gap-2">
                 {selectedConv?.status === "escalated" && (
                   <Button size="sm" onClick={() => takeOver(selectedUserId!)} className="text-xs">
@@ -480,6 +556,16 @@ function AdminChatPage() {
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Gelöst
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => hideConversation(selectedUserId!)}
+                  disabled={hiding}
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  title="Chat ausblenden – kommt wieder, wenn der Mitarbeiter schreibt"
+                >
+                  <EyeOff className="h-3.5 w-3.5 mr-1" /> Ausblenden
+                </Button>
               </div>
             </div>
 

@@ -17,6 +17,7 @@ import StepContract from "@/components/register/StepContract";
 import { translateDbError } from "@/lib/db-errors";
 import { useServerFn } from "@tanstack/react-start";
 import { generateContractPdf, getContractSignatureUrls } from "@/lib/contract-pdf.functions";
+import { getMyContractOverride } from "@/lib/employee-contract-override.functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarDays } from "lucide-react";
@@ -24,6 +25,8 @@ import { format, addDays, startOfDay, isBefore } from "date-fns";
 import { de } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { applyEmploymentStartDate, formatGermanDate, resolveContractPlaceholders } from "@/lib/contract-utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SignatureCanvas } from "@/components/SignatureCanvas";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
@@ -142,13 +145,19 @@ function ContractPage() {
 
   const generatePdfFn = useServerFn(generateContractPdf);
   const getSigUrlsFn = useServerFn(getContractSignatureUrls);
+  const getOverrideFn = useServerFn(getMyContractOverride);
+
+  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null } | null>(null);
+  const [overrideLoading, setOverrideLoading] = useState(true);
+  const [overridePdfUrl, setOverridePdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !user) return;
     const loadData = async () => {
-      const [{ data: contracts }, { data: profileData }] = await Promise.all([
+      const [{ data: contracts }, { data: profileData }, ovRes] = await Promise.all([
         supabase.from("contracts").select("*").eq("user_id", user.id).order("signed_at", { ascending: false }).limit(1),
         supabase.from("profiles").select("full_name, street, zip_code, city, address, employment_type, employment_start_date, contract_signed_at, tenant_id").eq("user_id", user.id).maybeSingle(),
+        getOverrideFn().catch(() => ({ override: null })),
       ]);
       if (contracts && contracts.length > 0) setContract(contracts[0] as unknown as Contract);
       setProfile(profileData);
@@ -161,6 +170,13 @@ function ContractPage() {
           .maybeSingle();
         setTenant(t);
       }
+      const ov = (ovRes as any)?.override ?? null;
+      setOverride(ov);
+      if (ov?.pdf_url) {
+        const { data: signed } = await supabase.storage.from("documents").createSignedUrl(ov.pdf_url, 3600);
+        setOverridePdfUrl(signed?.signedUrl ?? null);
+      }
+      setOverrideLoading(false);
       setLoading(false);
     };
     loadData();
@@ -390,6 +406,27 @@ function ContractPage() {
     const [first, ...rest] = fullName.split(" ");
     const lastName = rest.join(" ");
 
+    // ───── Individueller Vertrag vom Admin? ─────
+    // Sowohl HTML-Override als auch PDF-Override umgehen die Beschäftigungs-/
+    // Startdatum-Wahl und werden direkt zur Unterschrift gezeigt.
+    if (override && (override.html_body || override.pdf_url)) {
+      return (
+        <OverrideSigning
+          override={override}
+          overridePdfUrl={overridePdfUrl}
+          profile={profile}
+          signing={signing}
+          agreed={agreed}
+          setAgreed={setAgreed}
+          signatureName={signatureName}
+          setSignatureName={setSignatureName}
+          onSign={(content, sig) => handleSignContract(content, sig)}
+          onBack={() => navigate("/dashboard")}
+        />
+      );
+    }
+
+
     // Inline-Auswahl der Beschäftigungsart, wenn noch nicht gesetzt
     if (!profile?.employment_type) {
       const setEmployment = async (type: "minijob" | "teilzeit" | "vollzeit") => {
@@ -494,6 +531,134 @@ function ContractPage() {
           <h3 className="text-lg font-heading font-bold">Vertrag unterschrieben</h3>
           <p className="text-sm text-muted-foreground">Unterschrieben am {new Date(profile.contract_signed_at).toLocaleDateString("de-DE")}</p>
           <Button variant="outline" onClick={() => navigate("/dashboard")}>Zum Dashboard</Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Individueller, vom Admin hinterlegter Vertrag (Text oder PDF) — Signing-UI
+// ──────────────────────────────────────────────────────────────────────────────
+
+function OverrideSigning({
+  override,
+  overridePdfUrl,
+  profile,
+  signing,
+  agreed,
+  setAgreed,
+  signatureName,
+  setSignatureName,
+  onSign,
+  onBack,
+}: {
+  override: { html_body: string | null; pdf_url: string | null };
+  overridePdfUrl: string | null;
+  profile: any;
+  signing: boolean;
+  agreed: boolean;
+  setAgreed: (v: boolean) => void;
+  signatureName: string;
+  setSignatureName: (v: string) => void;
+  onSign: (content?: string, signatureDataUrl?: string | null) => void;
+  onBack: () => void;
+}) {
+  const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
+
+  const resolved = override.html_body
+    ? resolveContractPlaceholders(override.html_body, {
+        firstName: (profile?.full_name ?? "").split(" ")[0] ?? "",
+        lastName: (profile?.full_name ?? "").split(" ").slice(1).join(" "),
+        address: [profile?.street, profile?.zip_code && profile?.city ? `${profile.zip_code} ${profile.city}` : profile?.city].filter(Boolean).join(", "),
+        city: profile?.city ?? "",
+        employmentType: profile?.employment_type ?? "",
+        companyName: "",
+        companyCeoName: "",
+        companyAddress: "",
+        startDate: formatGermanDate(profile?.employment_start_date),
+      })
+    : "";
+
+  const canSubmit = agreed && signatureName.trim().length > 1 && !!sigDataUrl;
+
+  const handleSubmit = () => {
+    const content = override.html_body
+      ? resolved
+      : `[PDF-Vertrag]\nDieser Arbeitsvertrag wurde dir individuell vom Admin als PDF zur Verfügung gestellt.\nReferenz: ${override.pdf_url}`;
+    onSign(content, sigDataUrl);
+  };
+
+  return (
+    <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-xl font-heading font-bold">Individueller Arbeitsvertrag</h1>
+      </div>
+
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs text-foreground">
+            Dein Admin hat dir einen individuellen Arbeitsvertrag bereitgestellt. Bitte lies ihn aufmerksam durch und unterschreibe unten.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          {override.pdf_url && overridePdfUrl && (
+            <div className="border rounded-lg overflow-hidden bg-muted/20">
+              <iframe src={overridePdfUrl} className="w-full h-[500px]" title="Arbeitsvertrag PDF" />
+              <div className="px-3 py-2 border-t bg-card flex justify-end">
+                <a
+                  href={overridePdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" /> PDF herunterladen
+                </a>
+              </div>
+            </div>
+          )}
+
+          {override.html_body && (
+            <div className="max-h-[500px] overflow-y-auto border rounded-lg p-5 bg-muted/20 text-sm leading-relaxed whitespace-pre-wrap font-mono">
+              {resolved}
+            </div>
+          )}
+
+          <div className="space-y-3 pt-2 border-t border-border">
+            <div className="flex items-start gap-2">
+              <Checkbox id="ov-agree" checked={agreed} onCheckedChange={(v) => setAgreed(!!v)} />
+              <label htmlFor="ov-agree" className="text-xs leading-relaxed text-foreground cursor-pointer">
+                Ich habe den Vertrag gelesen, verstanden und stimme den Bedingungen zu.
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Voller Name (für die digitale Unterschrift)</label>
+              <input
+                type="text"
+                value={signatureName}
+                onChange={(e) => setSignatureName(e.target.value)}
+                className="w-full h-10 px-3 border rounded-md text-sm"
+                placeholder="Max Mustermann"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-foreground mb-2 block">Unterschrift</label>
+              <SignatureCanvas onSignatureChange={setSigDataUrl} />
+            </div>
+
+            <Button onClick={handleSubmit} disabled={!canSubmit || signing} className="w-full gap-2">
+              {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {signing ? "Wird gespeichert…" : "Vertrag unterschreiben"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

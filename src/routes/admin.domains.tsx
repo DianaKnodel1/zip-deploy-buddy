@@ -145,6 +145,32 @@ function AdminDomainsPage() {
         </Button>
       </div>
 
+      {/* Hilfe-Aufklapper: Was tun bei Domain-Ausfall? */}
+      <details className="border rounded-lg bg-muted/30 group">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium flex items-center gap-2 hover:bg-muted/50 transition-colors">
+          <AlertCircle className="h-4 w-4 text-amber-500" />
+          Was tun, wenn eine Domain ausfällt?
+          <span className="ml-auto text-[10px] text-muted-foreground group-open:hidden">Klicken zum Aufklappen</span>
+        </summary>
+        <div className="px-4 pb-4 pt-1 text-xs text-foreground space-y-2 border-t">
+          <p>
+            <strong>Beispiel:</strong> <code className="bg-background px-1 rounded">digital-dgigmbh.de</code> ist down,
+            <code className="bg-background px-1 rounded">digital-dgigmbh.com</code> soll übernehmen:
+          </p>
+          <ol className="list-decimal pl-5 space-y-1.5">
+            <li>In der Tabelle unten beim Tenant die <strong>.com</strong>-Zeile suchen.</li>
+            <li>Auf <strong>„Aktiv setzen"</strong> klicken (Stern wechselt zur neuen Domain).</li>
+            <li>Ab sofort gehen alle neuen Mails von <code className="bg-background px-1 rounded">noreply@digital-dgigmbh.com</code> raus.</li>
+            <li>Der Recovery-Cron schickt automatisch an alle Mitarbeiter eine Mail mit dem neuen Login-Link.</li>
+          </ol>
+          <p className="pt-2 text-muted-foreground">
+            <strong>Voraussetzung:</strong> Die Alias-Domain muss vorher schon hinzugefügt + DNS-verifiziert sein.
+            Sonst kannst du im Notfall nicht umstellen. Lege deshalb für jeden Tenant <strong>vorab</strong> mindestens
+            eine Backup-Domain an.
+          </p>
+        </div>
+      </details>
+
       {loading && rows.length === 0 && (
         <div className="text-center text-muted-foreground py-10 text-sm">Prüfe Domains…</div>
       )}

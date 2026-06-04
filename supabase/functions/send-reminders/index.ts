@@ -657,19 +657,36 @@ async function sendMail(tenant: TenantRow, to: string, subject: string, html: st
 }
 
 // ───── Templates ─────
-function shellHtml(tenant: TenantRow, inner: string): string {
+function shellHtml(tenant: TenantRow, inner: string, opts?: { banner?: string }): string {
   const brand = tenant.primary_color ?? "#0f172a";
   const logo = tenant.logo_url
     ? `<img src="${tenant.logo_url}" alt="${escapeHtml(tenant.name)}" style="max-height:40px;margin-bottom:24px"/>`
     : `<div style="font-weight:700;font-size:20px;margin-bottom:24px;color:${brand}">${escapeHtml(tenant.name)}</div>`;
+  const banner = opts?.banner ?? "";
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px"><tr><td align="center">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:40px;max-width:560px">
-<tr><td>${logo}${inner}
+<tr><td>${logo}${banner}${inner}
 <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0"/>
 <p style="font-size:12px;color:#94a3b8;margin:0">Diese Erinnerung wurde automatisch versendet. Wenn du sie nicht mehr benötigst, kannst du sie ignorieren.</p>
 </td></tr></table></td></tr></table></body></html>`;
 }
+
+// Domain-Wechsel-Hinweis: wird in allen regulären Reminder-Mails (NICHT in
+// domain_recovery selbst) oberhalb des Bodys gezeigt, wenn der Primary-Domain-
+// Wechsel < DOMAIN_CHANGE_BANNER_DAYS her ist. Verhindert, dass Empfänger alte
+// Mails mit nicht mehr funktionierenden Links anklicken.
+function renderDomainChangeBanner(tenant: TenantRow): string {
+  if (!tenant.primary_domain_changed_at) return "";
+  const age = Date.now() - new Date(tenant.primary_domain_changed_at).getTime();
+  if (age < 0 || age > DOMAIN_CHANGE_BANNER_DAYS * 86400_000) return "";
+  const host = portalHost(tenant);
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:6px;padding:14px 16px">
+<div style="font-weight:600;color:#78350f;font-size:14px;margin:0 0 4px">Hinweis: Unsere Portal-Adresse hat sich geändert.</div>
+<div style="font-size:13px;color:#78350f;line-height:1.5">Bitte nutze ab sofort <a href="https://${host}/login" style="color:#78350f;font-weight:600">https://${host}/login</a> – ältere Links funktionieren möglicherweise nicht mehr.</div>
+</td></tr></table>`;
+}
+
 
 function btn(brand: string, href: string, label: string): string {
   return `<table cellpadding="0" cellspacing="0"><tr><td style="background:${brand};border-radius:8px">

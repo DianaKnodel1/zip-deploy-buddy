@@ -17,6 +17,7 @@ import StepContract from "@/components/register/StepContract";
 import { translateDbError } from "@/lib/db-errors";
 import { useServerFn } from "@tanstack/react-start";
 import { generateContractPdf, getContractSignatureUrls } from "@/lib/contract-pdf.functions";
+import { getMyContractOverride } from "@/lib/employee-contract-override.functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarDays } from "lucide-react";
@@ -24,6 +25,8 @@ import { format, addDays, startOfDay, isBefore } from "date-fns";
 import { de } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { applyEmploymentStartDate, formatGermanDate, resolveContractPlaceholders } from "@/lib/contract-utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SignatureCanvas } from "@/components/SignatureCanvas";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",

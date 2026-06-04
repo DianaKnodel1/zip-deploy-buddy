@@ -377,15 +377,8 @@ function AdminEmployeeDetailPage() {
                   <span className="text-[11px] font-medium">Wohnhaft seit weniger als 3 Jahren — erhöhte Prüfung</span>
                 </div>
               )}
-              {/* Teamleiter */}
-              <div className="mt-5 pt-4 border-t border-border">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Teamleiter</p>
-                <TeamLeaderSelect
-                  currentLeaderId={(profile as any).team_leader_id}
-                  userId={userId!}
-                  onUpdate={(newId) => setProfiles((prev) => prev.map((p) => (p.user_id === userId ? { ...p, team_leader_id: newId } as any : p)))}
-                />
-              </div>
+              {/* Teamleiter wird pro Tenant/Domain festgelegt – nicht hier. */}
+
             </CardContent>
           </Card>
         </TabsContent>

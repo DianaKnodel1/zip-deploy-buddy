@@ -406,6 +406,27 @@ function ContractPage() {
     const [first, ...rest] = fullName.split(" ");
     const lastName = rest.join(" ");
 
+    // ───── Individueller Vertrag vom Admin? ─────
+    // Sowohl HTML-Override als auch PDF-Override umgehen die Beschäftigungs-/
+    // Startdatum-Wahl und werden direkt zur Unterschrift gezeigt.
+    if (override && (override.html_body || override.pdf_url)) {
+      return (
+        <OverrideSigning
+          override={override}
+          overridePdfUrl={overridePdfUrl}
+          profile={profile}
+          signing={signing}
+          agreed={agreed}
+          setAgreed={setAgreed}
+          signatureName={signatureName}
+          setSignatureName={setSignatureName}
+          onSign={(content, sig) => handleSignContract(content, sig)}
+          onBack={() => navigate("/dashboard")}
+        />
+      );
+    }
+
+
     // Inline-Auswahl der Beschäftigungsart, wenn noch nicht gesetzt
     if (!profile?.employment_type) {
       const setEmployment = async (type: "minijob" | "teilzeit" | "vollzeit") => {

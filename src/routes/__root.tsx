@@ -129,6 +129,7 @@ function RootComponent() {
       <ThemeProvider>
         <TenantProvider>
           <AuthProvider>
+            <PresenceMount />
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
             <Toaster />
@@ -137,4 +138,9 @@ function RootComponent() {
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+function PresenceMount() {
+  usePresenceBroadcast();
+  return null;
 }

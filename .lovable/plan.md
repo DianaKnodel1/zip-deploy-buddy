@@ -1,94 +1,72 @@
-# Großes Admin-Update
+# Großes Update – Plan
 
-## 1. Manueller Arbeitsvertrag pro Mitarbeiter
+## 1. Test-Versand für Reminder + Recovery
 
-**Wo:** `/admin/employees/{userId}` → neuer Tab/Card „Arbeitsvertrag".
+**Was:** Analog zum Einladungs-Test einen „Test-Versand"-Button in:
+- `admin.reminders.tsx` (pro Reminder-Template)
+- `admin.recovery.tsx` (Recovery-Template)
 
-**Zwei Modi (Admin wählt):**
-- **Editor-Modus:** HTML/Rich-Text-Editor vorausgefüllt mit der aktuellen Tenant-Vorlage + ersetzten Platzhaltern (Name, Adresse etc.). Admin ändert frei. Speichern → individuelle Version für diesen Mitarbeiter.
-- **PDF-Upload-Modus:** Admin lädt fertiges PDF hoch.
+**Wie:**
+- Neue Server-Funktion `sendTestEmail` in `src/lib/admin-email-test.functions.ts` (generisch: nimmt `template_name`, `recipient_email`, optional `tenant_id` + Mock-Variablen).
+- Rendert Template wie der echte Versand (gleiche Pipeline wie Einladung), Empfänger = aktuelle Admin-Mail, Subject mit `[TEST]` Prefix.
+- Button mit Dialog: „An welche Adresse senden? (Standard: deine)" + Tenant-Auswahl.
 
-**Was passiert beim Speichern:**
-- Neue Tabelle `employee_contract_overrides` (user_id, tenant_id, html_body NULL, pdf_url NULL, created_by, created_at).
-- `profiles.contract_signed_at` wird auf NULL gesetzt → Mitarbeiter sieht beim nächsten Login die Vertrags-Seite (existiert schon via `requestContractResign`).
-- Vertrags-Seite (`/contract`) prüft zuerst auf Override → zeigt diesen statt der Tenant-Standardvorlage. Nach Unterschrift wandert das signierte PDF wie gewohnt in `contracts` + `documents`.
+## 2. HTML-Vorschau für alte E-Mail-Logs (Re-Render)
 
-**Wo landet der unterschriebene Vertrag:** wie bisher – Mitarbeiter-Dokumente + Admin `/admin/contracts`. Nur der Quell-Body ist diesmal der Override.
+**Problem:** Alte Logs haben `rendered_html = NULL`.
 
-## 2. Admin-Chat aufräumen
+**Lösung:** Im Vorschau-Modal Fallback:
+1. Wenn `rendered_html` vorhanden → direkt anzeigen.
+2. Sonst: Server-Funktion `rerenderEmailLog(log_id)` → liest `template_name` + `metadata` (enthält Variablen) + Tenant aus Log, rendert Template **on-the-fly** und zeigt es an (nicht speichern, nur Vorschau).
+3. Wenn `metadata` zu dünn ist → Hinweis „Rohdaten nicht verfügbar, Vorschau eingeschränkt" + zeigt Subject + Plain-Text-Body soweit vorhanden.
 
-**Auf `/admin/chat`:**
-- **Tenant-Tabs oben:** „Alle | Tenant A | Tenant B | …" (aus den Tenants des Mitarbeiters). Filtert die Conversation-Liste.
-- **Soft-Delete pro Chat:** Button im Conversation-Header → `chat_conversations.admin_hidden_at = now()`. Versteckt aus der Liste.
-- **Auto-Reappear:** Wenn der Mitarbeiter danach eine neue Nachricht schickt, setzt ein Trigger `admin_hidden_at = NULL` → Chat erscheint wieder oben.
-- **Klick auf Initialen** im Chat-Header → `navigate('/admin/employees/{userId}')`.
+## 3. `team_leader_id` aus `profiles` entfernen
 
-**Migration:** `chat_conversations.admin_hidden_at timestamptz` + Trigger auf `chat_messages` Insert.
-
-## 3. Mail-Vorschau + Test-Versand
-
-**Auf `/admin/email-logs`:**
-- Klick auf Zeile → Modal mit gerendertem HTML (iframe-sandbox), plus Header-Block: Absender, Tenant, Domain, Betreff, Status, Empfänger, Zeitpunkt, Fehlertext.
-- Speichern wir bereits `html_body` in `email_send_log`? Falls nicht → Spalte `rendered_html` ergänzen und beim Enqueue mitschreiben.
-
-**Test-Versand-Button („An mich senden"):**
-- Auf `/admin/email-templates` (Reminder-Templates)
-- Auf `/admin/recovery` (Domain-Recovery-Template)
-- Beim „Bewerbung annehmen"-Dialog in `/admin/applications/{appId}` (Vorschau + „Test an mich" vor „Senden")
-- Funktion `sendTestEmail({ template, tenantId, recipient })` → rendert mit Test-Daten + tatsächlichem Absender des gewählten Tenants → schickt an die E-Mail des eingeloggten Admins. Eintrag in `email_send_log` mit `metadata.test=true`.
-
-## 4. Admin-Sidebar gruppiert
-
-Umbau `src/components/AdminLayout.tsx` mit `SidebarGroup` + `SidebarGroupLabel`:
-
-```
-PERSONEN
-  Dashboard, Bewerbungen, Mitarbeiter, KYC, Verträge
-AUFTRÄGE
-  Aufträge, Prüfungen, Nachbesserungen, Uploads, Termine
-KOMMUNIKATION
-  Chat, SMS, Post, E-Mail-Logs, Erinnerungen, Recovery
-FINANZEN
-  Transaktionen
-SYSTEM
-  Landing Pages, Domains, Protokoll, Einstellungen
+**Migration `20260605000300_drop_profile_team_leader.sql`:**
+```sql
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS team_leader_id;
 ```
 
-Badges (Bewerbungen 99+, KYC 5) bleiben unverändert.
+**Code-Refactor:**
+- `src/hooks/use-team-leader.ts` → liest Leader ausschließlich aus `tenants.team_leader_id` (über User → primary tenant).
+- `src/routes/_employee/chat.tsx` → ersetzt `profile.team_leader_id` Query durch `useTeamLeader()`-Hook.
+- Suche nach weiteren Referenzen: `rg "team_leader_id" src/` & alle anpassen.
 
-## 5. Domain-Failover-Doku im Portal
+## 4. SMS-Channel: Verbindung testen + Restlaufzeit
 
-Kleiner Hilfe-Hinweis auf `/admin/domains` (Aufklapper „Was tun wenn Domain ausfällt?"):
-1. Alias-Domain als „Primary Domain" setzen → Speichern.
-2. System schickt automatisch Recovery-Mails über die neue Domain.
-3. Voraussetzung: Alias war vorher schon DNS-verifiziert.
+**Anosim API checken (Doku):**
+- Test-Endpoint: `GET /api/v1/balance` (oder ähnlich) mit API-Key → 200 = OK.
+- Nummern-Mietdauer: Anosim liefert beim `rentNumber` Call ein `expires_at`/`endDate` zurück → in `sms_channels.expires_at` speichern.
 
-Keine Code-Änderung am Failover-Mechanismus selbst – nur UX-Hilfe.
+**UI:**
+- In `admin.sms.tsx` Channel-Dialog: Button „Verbindung testen" → ruft `testAnosimConnection({ api_key })` → grünes/rotes Badge + ggf. Account-Balance.
+- In Channel-Liste: Badge „Aktiv noch X Tage" (aus `expires_at` berechnet), rot wenn < 3 Tage.
+
+**Migration:** `sms_channels.expires_at timestamptz` hinzufügen (falls noch nicht da).
+
+## 5. Sidebar-Redesign (separater Vorschlag → eigene Runde)
+
+Nach Abschluss von 1–4: ich schicke einen Gruppierungs-Vorschlag mit „was wandert nach `/admin/settings`" zur Freigabe — dann erst umbauen.
+
+## 6. System-Audit (Verbesserungsvorschläge)
+
+Liste schicke ich am Ende dieses Turns im Chat — nach Impact sortiert (Security / UX / Performance / Tech-Debt).
 
 ---
 
 ## Technische Details
 
-**Migrationen (manual-migrations):**
-- `20260605000000_employee_contract_overrides.sql` – Tabelle + Grants + RLS (admin only).
-- `20260605000100_chat_admin_hidden.sql` – Spalte `admin_hidden_at` + Trigger.
-- `20260605000200_email_log_html.sql` – Spalte `rendered_html` falls fehlend.
+- Alle neuen Migrationen liegen unter `supabase/manual-migrations/` mit Datum `20260605000300+` → User führt am Ende `bash scripts/migrate.sh` auf VPS 1 aus.
+- Server-Funktionen liegen in `src/lib/*.functions.ts`, importieren `requireSupabaseAuth` + `supabaseAdmin` nur im Handler.
+- Re-Render nutzt vorhandenen Template-Renderer (zu prüfen wo er liegt — vermutlich in der bestehenden Send-Pipeline).
+- Anosim-API-Key liegt bereits pro Channel in `sms_channels.api_key` verschlüsselt / plain → klären beim Implementieren.
 
-**Neue/geänderte Files:**
-- `src/lib/employee-contract-override.functions.ts` (save/load/delete Override)
-- `src/routes/admin.employees.$userId.tsx` (neuer Vertrags-Tab mit Editor + Upload)
-- `src/routes/_employee/contract.tsx` (Override-Check vor Standardvorlage)
-- `src/routes/admin.chat.tsx` (Tenant-Tabs, Hide-Button, Initialen-Link)
-- `src/lib/chat-admin.functions.ts` (hideConversation)
-- `src/routes/admin.email-logs.tsx` (Detail-Modal mit iframe)
-- `src/lib/email-test.functions.ts` (sendTestEmail)
-- `src/routes/admin.email-templates.tsx` + `admin.recovery.tsx` + `admin.applications.$appId.tsx` (Test-Buttons)
-- `src/components/AdminLayout.tsx` (Sidebar-Gruppen)
-- `src/routes/admin.domains.tsx` (Hilfe-Aufklapper)
+## Reihenfolge der Umsetzung
 
-**Was NICHT geändert wird:**
-- SMS-Polling-Code (steht schon, wird beim nächsten Deploy live getestet)
-- Bestehende Vertrags-PDF-Generierung
-- Mailversand-Pipeline selbst (nur Vorschau + Test-Trigger neu)
-
-**Reihenfolge:** Migrationen → Sidebar (schnell, sichtbar) → Mail-Vorschau & Test → Chat-Aufräumen → Vertrags-Override → Domains-Hilfe.
+1. Migrations-Dateien (3+4)
+2. team_leader_id Refactor (3) — am riskantesten, zuerst durch
+3. Test-Versand (1)
+4. Log Re-Render (2)
+5. SMS Test + Restlaufzeit (4)
+6. Audit-Liste in Chat
+7. Sidebar-Vorschlag in eigener Runde

@@ -16,6 +16,7 @@ import { useChatNotifications } from "@/hooks/use-chat-notifications";
 import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
+import { useOnlineUsers } from "@/hooks/use-presence";
 import { useSearchParams } from "@/lib/router-compat";
 import { useNavigate } from "@/lib/router-compat";
 import { EmojiPicker } from "@/components/EmojiPicker";

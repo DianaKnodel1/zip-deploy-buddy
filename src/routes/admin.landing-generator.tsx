@@ -122,15 +122,19 @@ function LandingGeneratorPage() {
     let html = replace(theme.html);
     const css = replace(theme.css);
     // <link rel="stylesheet" href="style.css"> durch inline <style> ersetzen
+    // + Override für Scroll-Animationen (data-animate ist im Theme initial opacity:0,
+    //   wird normal per IntersectionObserver in script.js eingeblendet – im Preview
+    //   ohne JS bleibt sonst alles unsichtbar).
     html = html.replace(
       /<link[^>]+href=["']style\.css["'][^>]*>/i,
-      `<style>${css}</style>`,
+      `<style>${css}\n[data-animate]{opacity:1!important;transform:none!important}</style>`,
     );
     // Logo durch data-URL ersetzen, sonst Platzhalter-Pixel
     const logoSrc = logoDataUrl ?? "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='40'><rect width='100%' height='100%' fill='%23e2e8f0'/><text x='50%' y='55%' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%2364748b'>Logo</text></svg>";
     html = html.replace(/assets\/logo\.[a-z]+/gi, logoSrc);
     // script.js entfernen (Preview ohne Submit)
     html = html.replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i, "");
+
     return html;
   })();
 
@@ -200,28 +204,31 @@ function LandingGeneratorPage() {
               <CardDescription>Weitere Themes (02–06) folgen, sobald du sie lieferst.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2">
                 {THEME_LIST.map((t) => (
                   <button
                     key={t.id}
                     type="button"
                     onClick={() => setThemeId(t.id)}
                     className={cn(
-                      "text-left rounded-lg border-2 p-4 transition-all",
+                      "text-left rounded-lg border-2 p-3 transition-all",
                       themeId === t.id
                         ? "border-primary bg-primary/5 shadow-sm"
                         : "border-border hover:border-primary/40",
                     )}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-sm">{t.name}</span>
-                      {themeId === t.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="font-semibold text-sm truncate">{t.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-muted-foreground/70 font-mono">{t.id}</span>
+                        {themeId === t.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{t.description}</p>
-                    <p className="text-[10px] text-muted-foreground/70 mt-2 font-mono">{t.id}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{t.description}</p>
                   </button>
                 ))}
               </div>
+
             </CardContent>
           </Card>
 

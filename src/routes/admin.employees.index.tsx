@@ -68,7 +68,7 @@ function OnboardingPill({ steps }: { steps: OnbStep[] }) {
 }
 
 function AdminEmployeesPage() {
-  const { profiles, setProfiles, assignments, adminUserIds, kycList, allBookings, emailConfirmedUserIds, loading, loadData } = useAdminData();
+  const { profiles, setProfiles, assignments, adminUserIds, kycList, allBookings, emailConfirmedUserIds, applications, loading, loadData } = useAdminData();
   const [tenantMap, setTenantMap] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();

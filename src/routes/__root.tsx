@@ -15,6 +15,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Toaster } from "@/components/ui/toaster";
+import { usePresenceBroadcast } from "@/hooks/use-presence";
 
 function NotFoundComponent() {
   return (

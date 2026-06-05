@@ -159,7 +159,11 @@ function AdminChatPage() {
     if (list.length > 0) {
       try {
         const map = await getLastSignIns({ data: { user_ids: list.map((c) => c.user_id) } });
-        setConversations((prev) => prev.map((c) => ({ ...c, lastSignInAt: map[c.user_id] ?? null })));
+        setConversations((prev) => prev.map((c) => ({
+          ...c,
+          lastSignInAt: map[c.user_id]?.last_sign_in_at ?? null,
+          lastSeenAt: map[c.user_id]?.last_seen_at ?? null,
+        })));
       } catch (e) {
         console.warn("Last sign-ins konnten nicht geladen werden:", e);
       }

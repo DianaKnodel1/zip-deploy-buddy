@@ -491,6 +491,11 @@ function ContractPage() {
       />;
     }
 
+    const overrideSalaryStr = override?.monthly_salary_cents != null
+      ? `${(override.monthly_salary_cents / 100).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+      : undefined;
+    const overrideHoursStr = override?.weekly_hours != null ? String(override.weekly_hours) : undefined;
+
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-4">
         <div className="flex items-center gap-3">
@@ -516,6 +521,8 @@ function ContractPage() {
               loading={signing}
               userId={user?.id ?? null}
               tenantId={profile?.tenant_id ?? null}
+              monthlySalary={overrideSalaryStr}
+              weeklyHours={overrideHoursStr}
             />
           </CardContent>
         </Card>

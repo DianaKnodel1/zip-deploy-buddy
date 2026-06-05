@@ -132,8 +132,27 @@ function LandingGeneratorPage() {
     // Logo durch data-URL ersetzen, sonst Platzhalter-Pixel
     const logoSrc = logoDataUrl ?? "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='40'><rect width='100%' height='100%' fill='%23e2e8f0'/><text x='50%' y='55%' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%2364748b'>Logo</text></svg>";
     html = html.replace(/assets\/logo\.[a-z]+/gi, logoSrc);
-    // script.js entfernen (Preview ohne Submit)
+    // script.js entfernen (Preview ohne Submit) + Mini-Smooth-Scroll injizieren,
+    // damit Hash-Links (#angebot etc.) im srcdoc-iframe nicht das Doc neuladen
+    // → andernfalls bleibt der iframe in "Laden..." hängen.
     html = html.replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i, "");
+    const previewScript = `<script>
+document.addEventListener('click', function(e){
+  var a = e.target.closest && e.target.closest('a[href^="#"]');
+  if(a){
+    e.preventDefault();
+    var id = a.getAttribute('href');
+    if(id && id.length > 1){
+      var el = document.querySelector(id);
+      if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    return;
+  }
+  var b = e.target.closest && e.target.closest('.faq-q');
+  if(b){ var item = b.closest('.faq-item'); if(item) item.classList.toggle('open'); }
+}, true);
+<\/script>`;
+    html = html.replace(/<\/body>/i, previewScript + "</body>");
 
     return html;
   })();

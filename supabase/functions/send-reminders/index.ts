@@ -328,7 +328,7 @@ async function runInvites(ctx: SendCtx) {
 // ───── 2. Confirm-Email-Reminder ─────
 async function runConfirmEmail(ctx: SendCtx) {
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
-  const BLOCKED = new Set(["deaktiviert", "abgelehnt", "gesperrt"]);
+  const BLOCKED = new Set(["deaktiviert", "abgelehnt"]);
   const unconfirmed = (usersList?.users ?? []).filter(u => {
     if (!u.email || u.email_confirmed_at) return false;
     // Skip gebannte Auth-User

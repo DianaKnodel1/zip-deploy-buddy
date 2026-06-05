@@ -222,7 +222,7 @@ export const deleteContractOverride = createServerFn({ method: "POST" })
 export const getMyContractOverride = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { data, error } = await (context.supabase as any)
       .from("employee_contract_overrides")
       .select("html_body, pdf_url, monthly_salary_cents, weekly_hours, updated_at")
       .eq("user_id", context.userId)

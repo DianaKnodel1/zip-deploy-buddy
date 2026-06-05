@@ -560,7 +560,7 @@ function OverrideSigning({
   onSign,
   onBack,
 }: {
-  override: { html_body: string | null; pdf_url: string | null };
+  override: { html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null };
   overridePdfUrl: string | null;
   profile: any;
   signing: boolean;
@@ -573,6 +573,11 @@ function OverrideSigning({
 }) {
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
 
+  const monthlySalary = override.monthly_salary_cents != null
+    ? `${(override.monthly_salary_cents / 100).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : undefined;
+  const weeklyHours = override.weekly_hours != null ? String(override.weekly_hours) : undefined;
+
   const resolved = override.html_body
     ? resolveContractPlaceholders(override.html_body, {
         firstName: (profile?.full_name ?? "").split(" ")[0] ?? "",
@@ -584,6 +589,8 @@ function OverrideSigning({
         companyCeoName: "",
         companyAddress: "",
         startDate: formatGermanDate(profile?.employment_start_date),
+        monthlySalary,
+        weeklyHours,
       })
     : "";
 

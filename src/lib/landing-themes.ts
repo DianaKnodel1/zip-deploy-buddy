@@ -41,6 +41,11 @@ import t09Css from "../landing-themes/theme-09/style.css?raw";
 import t09Js from "../landing-themes/theme-09/script.js?raw";
 import t09Meta from "../landing-themes/theme-09/meta.json";
 
+import t10Html from "../landing-themes/theme-10/template.html?raw";
+import t10Css from "../landing-themes/theme-10/style.css?raw";
+import t10Js from "../landing-themes/theme-10/script.js?raw";
+import t10Meta from "../landing-themes/theme-10/meta.json";
+
 export type ThemeFiles = {
   id: string;
   name: string;
@@ -59,6 +64,7 @@ export const THEMES: ThemeFiles[] = [
   { id: t07Meta.id, name: t07Meta.name, description: t07Meta.description, html: t07Html, css: t07Css, js: t07Js },
   { id: t08Meta.id, name: t08Meta.name, description: t08Meta.description, html: t08Html, css: t08Css, js: t08Js },
   { id: t09Meta.id, name: t09Meta.name, description: t09Meta.description, html: t09Html, css: t09Css, js: t09Js },
+  { id: t10Meta.id, name: t10Meta.name, description: t10Meta.description, html: t10Html, css: t10Css, js: t10Js },
 ];
 
 export function getTheme(id: string): ThemeFiles | undefined {

@@ -147,7 +147,7 @@ function ContractPage() {
   const getSigUrlsFn = useServerFn(getContractSignatureUrls);
   const getOverrideFn = useServerFn(getMyContractOverride);
 
-  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null } | null>(null);
+  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null } | null>(null);
   const [overrideLoading, setOverrideLoading] = useState(true);
   const [overridePdfUrl, setOverridePdfUrl] = useState<string | null>(null);
 

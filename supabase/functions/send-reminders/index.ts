@@ -529,13 +529,13 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
   ctx.recoveryStats.set(tenantId, stats);
 
   // ── Empfänger sammeln ──
-  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt/gesperrt)
+  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt)
   // 2) Akzeptierte Bewerber (applications.status='akzeptiert') ohne Auth-Account
   const { data: profiles, error: pErr } = await ctx.admin
     .from("profiles")
     .select("user_id,full_name,tenant_id,status")
     .eq("tenant_id", tenantId)
-    .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
+    .not("status", "in", '("deaktiviert","abgelehnt")');
   if (pErr) { console.error("recovery profiles query", pErr); return; }
 
   const { data: apps, error: aErr } = await ctx.admin

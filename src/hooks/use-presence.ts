@@ -26,34 +26,54 @@ export function usePresenceBroadcast() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase.channel("online-users", {
-      config: { presence: { key: user.id } },
-    });
 
-    const sync = () => {
-      const state = channel.presenceState() as Record<string, Array<{ user_id?: string }>>;
-      const ids = new Set<string>();
-      for (const key of Object.keys(state)) {
-        if (key.startsWith("viewer-")) continue;
-        ids.add(key);
-        for (const meta of state[key] ?? []) {
-          if (meta?.user_id) ids.add(meta.user_id);
-        }
-      }
-      setOnlineGlobal(ids);
-    };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
 
-    channel
-      .on("presence", { event: "sync" }, sync)
-      .on("presence", { event: "join" }, sync)
-      .on("presence", { event: "leave" }, sync)
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          try {
-            await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
-          } catch {}
-        }
+    try {
+      // Eindeutiger Topic pro Mount, damit StrictMode / re-mount nicht
+      // dieselbe (bereits subscribte) Channel-Instanz zurückbekommt
+      // ("cannot add 'presence' callbacks after 'subscribe()'").
+      const topic = `online-users:${user.id}:${Math.random().toString(36).slice(2, 8)}`;
+      channel = supabase.channel(topic, {
+        config: { presence: { key: user.id } },
       });
+
+      const sync = () => {
+        if (!channel) return;
+        try {
+          const state = channel.presenceState() as Record<string, Array<{ user_id?: string }>>;
+          const ids = new Set<string>();
+          for (const key of Object.keys(state)) {
+            if (key.startsWith("viewer-")) continue;
+            ids.add(key);
+            for (const meta of state[key] ?? []) {
+              if (meta?.user_id) ids.add(meta.user_id);
+            }
+          }
+          setOnlineGlobal(ids);
+        } catch {
+          /* noop */
+        }
+      };
+
+      channel
+        .on("presence", { event: "sync" }, sync)
+        .on("presence", { event: "join" }, sync)
+        .on("presence", { event: "leave" }, sync)
+        .subscribe(async (status) => {
+          if (cancelled || !channel) return;
+          if (status === "SUBSCRIBED") {
+            try {
+              await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
+            } catch {}
+          }
+        });
+    } catch (err) {
+      // Realtime nicht verfügbar (z. B. self-hosted ohne Realtime / 400) —
+      // App darf deswegen nicht crashen.
+      console.warn("[presence] realtime channel setup failed", err);
+    }
 
     // DB-Heartbeat (last_seen_at) alle 60s
     const beat = async () => {
@@ -70,10 +90,13 @@ export function usePresenceBroadcast() {
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      cancelled = true;
       window.clearInterval(iv);
       document.removeEventListener("visibilitychange", onVisibility);
-      try { channel.untrack(); } catch {}
-      supabase.removeChannel(channel);
+      if (channel) {
+        try { channel.untrack(); } catch {}
+        try { supabase.removeChannel(channel); } catch {}
+      }
       setOnlineGlobal(new Set());
     };
   }, [user?.id]);

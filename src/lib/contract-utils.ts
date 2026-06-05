@@ -4,6 +4,20 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
   vollzeit: "Vollzeit",
 };
 
+// Default-Wochenstunden und Default-Monatsgehalt je Beschäftigungsart.
+// Diese Werte greifen, wenn pro Mitarbeiter nichts anderes hinterlegt ist,
+// damit Platzhalter wie {{weekly_hours}} / {{monthly_salary}} nicht leer bleiben.
+const DEFAULT_WEEKLY_HOURS: Record<string, string> = {
+  minijob: "10",
+  teilzeit: "20",
+  vollzeit: "40",
+};
+const DEFAULT_MONTHLY_SALARY: Record<string, string> = {
+  minijob: "556,00 €",
+  teilzeit: "1.200,00 €",
+  vollzeit: "2.400,00 €",
+};
+
 interface ContractData {
   firstName: string;
   lastName: string;
@@ -14,6 +28,8 @@ interface ContractData {
   companyCeoName: string;
   companyAddress?: string;
   startDate?: string; // already formatted DE
+  weeklyHours?: string;
+  monthlySalary?: string;
 }
 
 export function formatGermanDate(d: Date | string | null | undefined): string {

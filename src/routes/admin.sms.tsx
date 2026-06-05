@@ -23,6 +23,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import { useServerFn } from "@tanstack/react-start";
 import { pollAnosimSms } from "@/lib/sms-poll.functions";
+import { testAnosimConnection } from "@/lib/sms-test.functions";
 
 interface SmsChannel {
   id: string;
@@ -84,6 +85,33 @@ function AdminSmsPage() {
 
   const [tab, setTab] = useState("channels");
   const pollNow = useServerFn(pollAnosimSms);
+  const testConn = useServerFn(testAnosimConnection);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const runTest = async (apiKey: string) => {
+    const key = apiKey.trim();
+    if (!key) {
+      toast({ title: "Kein API-Key", description: "Bitte API-Key eingeben.", variant: "destructive" });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r: any = await testConn({ data: { api_key: key } });
+      setTestResult({ ok: !!r?.ok, message: r?.message ?? "" });
+      toast({
+        title: r?.ok ? "Verbindung OK" : "Verbindung fehlgeschlagen",
+        description: r?.message ?? "",
+        variant: r?.ok ? "default" : "destructive",
+      });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: String(e?.message ?? e) });
+      toast({ title: "Test fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => { loadData(); }, []);
 
@@ -280,6 +308,11 @@ function AdminSmsPage() {
                         <td className="px-4 py-3 text-muted-foreground">{assignCount}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
+                            {ch.api_key && (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={testing} onClick={() => runTest(ch.api_key!)}>
+                                {testing ? "…" : "Test"}
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleActive(ch)}>
                               {ch.is_active ? "Deaktivieren" : "Aktivieren"}
                             </Button>
@@ -428,7 +461,17 @@ function AdminSmsPage() {
               </Select>
             </Field>
             <Field label="API Key">
-              <Input value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} placeholder="API Key eingeben…" type="password" />
+              <div className="flex gap-2">
+                <Input value={newApiKey} onChange={(e) => { setNewApiKey(e.target.value); setTestResult(null); }} placeholder="API Key eingeben…" type="password" className="flex-1" />
+                <Button type="button" size="sm" variant="outline" disabled={testing || !newApiKey.trim()} onClick={() => runTest(newApiKey)}>
+                  {testing ? "Teste…" : "Verbindung testen"}
+                </Button>
+              </div>
+              {testResult && (
+                <p className={cn("text-[11px] mt-1", testResult.ok ? "text-green-600" : "text-destructive")}>
+                  {testResult.ok ? "✓" : "✗"} {testResult.message}
+                </p>
+              )}
             </Field>
             <Field label="API Secret (optional)">
               <Input value={newApiSecret} onChange={(e) => setNewApiSecret(e.target.value)} placeholder="API Secret…" type="password" />

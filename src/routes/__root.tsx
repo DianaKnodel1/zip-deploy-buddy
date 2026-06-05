@@ -15,6 +15,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Toaster } from "@/components/ui/toaster";
+import { usePresenceBroadcast } from "@/hooks/use-presence";
 
 function NotFoundComponent() {
   return (
@@ -128,6 +129,7 @@ function RootComponent() {
       <ThemeProvider>
         <TenantProvider>
           <AuthProvider>
+            <PresenceMount />
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
             <Toaster />
@@ -136,4 +138,9 @@ function RootComponent() {
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+function PresenceMount() {
+  usePresenceBroadcast();
+  return null;
 }

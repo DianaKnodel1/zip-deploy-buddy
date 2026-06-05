@@ -16,6 +16,7 @@ import { useChatNotifications } from "@/hooks/use-chat-notifications";
 import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
+import { useOnlineUsers } from "@/hooks/use-presence";
 import { useSearchParams } from "@/lib/router-compat";
 import { useNavigate } from "@/lib/router-compat";
 import { EmojiPicker } from "@/components/EmojiPicker";
@@ -30,6 +31,7 @@ interface Conversation {
   lastMessage?: string;
   lastAt?: string;
   lastSignInAt?: string | null;
+  lastSeenAt?: string | null;
   tenantName?: string | null;
   tenantId?: string | null;
 }
@@ -49,6 +51,7 @@ interface ChatMessage {
 
 function AdminChatPage() {
   const { user } = useAuth();
+  const onlineUsers = useOnlineUsers();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -157,7 +160,11 @@ function AdminChatPage() {
     if (list.length > 0) {
       try {
         const map = await getLastSignIns({ data: { user_ids: list.map((c) => c.user_id) } });
-        setConversations((prev) => prev.map((c) => ({ ...c, lastSignInAt: map[c.user_id] ?? null })));
+        setConversations((prev) => prev.map((c) => ({
+          ...c,
+          lastSignInAt: map[c.user_id]?.last_sign_in_at ?? null,
+          lastSeenAt: map[c.user_id]?.last_seen_at ?? null,
+        })));
       } catch (e) {
         console.warn("Last sign-ins konnten nicht geladen werden:", e);
       }
@@ -468,10 +475,16 @@ function AdminChatPage() {
                 )}
               >
                 <div className={cn(
-                  "h-9 w-9 rounded-full flex items-center justify-center shrink-0",
+                  "h-9 w-9 rounded-full flex items-center justify-center shrink-0 relative",
                   conv.status === "escalated" ? "bg-destructive/10" : "bg-primary/10"
                 )}>
                   <span className={cn("text-xs font-bold", conv.status === "escalated" ? "text-destructive" : "text-primary")}>{initials}</span>
+                  {onlineUsers.has(conv.user_id) && (
+                    <span
+                      title="Aktuell online"
+                      className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-background"
+                    />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -483,7 +496,11 @@ function AdminChatPage() {
                       <Building2 className="h-2.5 w-2.5 shrink-0" /> {conv.tenantName}
                     </p>
                   )}
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{formatLastActive(conv.lastSignInAt)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {onlineUsers.has(conv.user_id)
+                      ? <span className="text-green-600 font-medium">● Online</span>
+                      : formatLastActive(conv.lastSeenAt ?? conv.lastSignInAt)}
+                  </p>
                   {conv.lastMessage && (
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMessage}</p>
                   )}

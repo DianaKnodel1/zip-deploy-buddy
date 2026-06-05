@@ -85,6 +85,33 @@ function AdminSmsPage() {
 
   const [tab, setTab] = useState("channels");
   const pollNow = useServerFn(pollAnosimSms);
+  const testConn = useServerFn(testAnosimConnection);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const runTest = async (apiKey: string) => {
+    const key = apiKey.trim();
+    if (!key) {
+      toast({ title: "Kein API-Key", description: "Bitte API-Key eingeben.", variant: "destructive" });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r: any = await testConn({ data: { api_key: key } });
+      setTestResult({ ok: !!r?.ok, message: r?.message ?? "" });
+      toast({
+        title: r?.ok ? "Verbindung OK" : "Verbindung fehlgeschlagen",
+        description: r?.message ?? "",
+        variant: r?.ok ? "default" : "destructive",
+      });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: String(e?.message ?? e) });
+      toast({ title: "Test fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => { loadData(); }, []);
 

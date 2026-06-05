@@ -23,6 +23,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import { useServerFn } from "@tanstack/react-start";
 import { pollAnosimSms } from "@/lib/sms-poll.functions";
+import { testAnosimConnection } from "@/lib/sms-test.functions";
 
 interface SmsChannel {
   id: string;

@@ -31,6 +31,7 @@ interface Conversation {
   lastMessage?: string;
   lastAt?: string;
   lastSignInAt?: string | null;
+  lastSeenAt?: string | null;
   tenantName?: string | null;
   tenantId?: string | null;
 }

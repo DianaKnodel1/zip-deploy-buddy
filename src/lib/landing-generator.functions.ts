@@ -36,7 +36,7 @@ const InputSchema = z.object({
   themeId: z.string().min(1).max(40),
   branding: BrandingSchema,
   // Logo als data-URL: "data:image/png;base64,...."
-  logoDataUrl: z.string().max(5_000_000).optional().nullable(),
+  logoDataUrl: z.string().max(15_000_000).optional().nullable(),
   faviconDataUrl: z.string().max(1_000_000).optional().nullable(),
 });
 

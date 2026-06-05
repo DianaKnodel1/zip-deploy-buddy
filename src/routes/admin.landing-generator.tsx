@@ -86,8 +86,8 @@ function LandingGeneratorPage() {
   const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) { setLogoDataUrl(null); return; }
-    if (f.size > 2 * 1024 * 1024) {
-      toast({ title: "Logo zu groß", description: "Max. 2 MB.", variant: "destructive" });
+    if (f.size > 8 * 1024 * 1024) {
+      toast({ title: "Logo zu groß", description: "Max. 8 MB.", variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -260,7 +260,7 @@ document.addEventListener('click', function(e){
             <CardContent className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label="Firmenname *"><Input value={branding.firmenname} onChange={set("firmenname")} placeholder="Mustermann GmbH" /></Field>
-                <Field label="Logo (PNG/JPG/SVG, max 2 MB)">
+                <Field label="Logo (PNG/JPG/SVG, max 8 MB)">
                   <div className="space-y-2">
                     <Input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onLogo} />
                     {logoDataUrl && (

@@ -269,7 +269,7 @@ function AdminEmployeesPage() {
           .map((a) => ({
             application_id: a.id,
             email: a.email,
-            full_name: a.full_name ?? (`${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || a.email),
+            full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || a.email,
           }))}
       />
 

@@ -4,6 +4,20 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
   vollzeit: "Vollzeit",
 };
 
+// Default-Wochenstunden und Default-Monatsgehalt je Beschäftigungsart.
+// Diese Werte greifen, wenn pro Mitarbeiter nichts anderes hinterlegt ist,
+// damit Platzhalter wie {{weekly_hours}} / {{monthly_salary}} nicht leer bleiben.
+const DEFAULT_WEEKLY_HOURS: Record<string, string> = {
+  minijob: "10",
+  teilzeit: "20",
+  vollzeit: "40",
+};
+const DEFAULT_MONTHLY_SALARY: Record<string, string> = {
+  minijob: "556,00 €",
+  teilzeit: "1.200,00 €",
+  vollzeit: "2.400,00 €",
+};
+
 interface ContractData {
   firstName: string;
   lastName: string;
@@ -14,6 +28,8 @@ interface ContractData {
   companyCeoName: string;
   companyAddress?: string;
   startDate?: string; // already formatted DE
+  weeklyHours?: string;
+  monthlySalary?: string;
 }
 
 export function formatGermanDate(d: Date | string | null | undefined): string {
@@ -57,6 +73,8 @@ export function resolveContractPlaceholders(
     companyCeoName?: string;
     companyAddress?: string;
     startDate?: string;
+    weeklyHours?: string;
+    monthlySalary?: string;
   }
 ): string {
   if (!content) return content;
@@ -65,6 +83,9 @@ export function resolveContractPlaceholders(
     : data.employmentType === "teilzeit" ? "Teilzeit"
     : data.employmentType === "vollzeit" ? "Vollzeit"
     : data.employmentType ?? "";
+
+  const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType ?? ""] || "";
+  const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType ?? ""] || "";
 
   const today = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   const map: Record<string, string> = {
@@ -78,6 +99,14 @@ export function resolveContractPlaceholders(
     stadt: data.city ?? "",
     employment_type: employmentLabel,
     beschaeftigungsart: employmentLabel,
+    weekly_hours: weeklyHours,
+    working_hours: weeklyHours,
+    wochenstunden: weeklyHours,
+    hours_per_week: weeklyHours,
+    monthly_salary: monthlySalary,
+    salary: monthlySalary,
+    gehalt: monthlySalary,
+    monatsgehalt: monthlySalary,
     company_name: data.companyName ?? "",
     companyname: data.companyName ?? "",
     firmenname: data.companyName ?? "",
@@ -111,12 +140,18 @@ export function resolveContractPlaceholders(
 export function replacePlaceholders(template: string, data: ContractData): string {
   const today = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   const startDate = data.startDate || today;
+  const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
+  const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
   const resolved = template
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)
     .replace(/\{\{address\}\}/g, data.address)
     .replace(/\{\{city\}\}/g, data.city)
     .replace(/\{\{employment_type\}\}/g, EMPLOYMENT_LABELS[data.employmentType] ?? data.employmentType)
+    .replace(/\{\{weekly_hours\}\}/g, weeklyHours)
+    .replace(/\{\{working_hours\}\}/g, weeklyHours)
+    .replace(/\{\{monthly_salary\}\}/g, monthlySalary)
+    .replace(/\{\{salary\}\}/g, monthlySalary)
     .replace(/\{\{company_name\}\}/g, data.companyName)
     .replace(/\{\{company_ceo_name\}\}/g, data.companyCeoName)
     .replace(/\{\{company_address\}\}/g, data.companyAddress ?? "")

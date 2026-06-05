@@ -409,7 +409,7 @@ document.addEventListener('click', function(e){
               <iframe
                 title="Landing Preview"
                 srcDoc={previewSrcDoc}
-                sandbox="allow-same-origin"
+                sandbox="allow-same-origin allow-scripts"
                 className="w-full h-[calc(100vh-180px)] min-h-[600px] border-0 bg-white"
               />
             </div>

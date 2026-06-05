@@ -264,6 +264,13 @@ function AdminEmployeesPage() {
         employees={profiles
           .filter((p) => !adminUserIds.has(p.user_id))
           .map((p) => ({ user_id: p.user_id, full_name: p.full_name ?? "" }))}
+        applicants={applications
+          .filter((a) => a.status !== "abgelehnt" && !!a.email)
+          .map((a) => ({
+            application_id: a.id,
+            email: a.email,
+            full_name: a.full_name ?? `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || a.email,
+          }))}
       />
 
       <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>

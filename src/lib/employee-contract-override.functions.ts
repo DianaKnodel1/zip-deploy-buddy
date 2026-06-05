@@ -25,8 +25,7 @@ export const getContractOverride = createServerFn({ method: "GET" })
   .inputValidator((i: unknown) => UserIdSchema.parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await (supabaseAdmin as any)
+    const { data: row, error } = await context.supabase
       .from("employee_contract_overrides")
       .select("*")
       .eq("user_id", data.user_id)

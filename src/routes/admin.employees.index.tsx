@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangle, Download, CheckCircle2, XCircle, Power, Shield, Mail, User, MapPin, ShieldCheck, FileSignature, CalendarDays, ClipboardList, UserPlus, Trash2, Loader2 } from "lucide-react";
+import { AlertTriangle, Download, CheckCircle2, XCircle, Power, Shield, Mail, User, MapPin, ShieldCheck, FileSignature, CalendarDays, ClipboardList, UserPlus, Trash2, Loader2, FileEdit } from "lucide-react";
 import { CreateEmployeeWizard } from "@/components/admin/CreateEmployeeWizard";
+import { IndividualContractDialog } from "@/components/admin/IndividualContractDialog";
 import { exportToCsv } from "@/lib/csv-export";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { useToast } from "@/hooks/use-toast";
@@ -74,6 +75,7 @@ function AdminEmployeesPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ userId: string; name: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -223,6 +225,9 @@ function AdminEmployeesPage() {
           <Button size="sm" className="h-9 text-xs gap-1.5" onClick={() => setWizardOpen(true)}>
             <UserPlus className="h-3.5 w-3.5" /> Mitarbeiter anlegen
           </Button>
+          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setContractDialogOpen(true)}>
+            <FileEdit className="h-3.5 w-3.5" /> Individueller Arbeitsvertrag
+          </Button>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-44 h-9 text-xs"><SelectValue placeholder="Alle Status" /></SelectTrigger>
             <SelectContent>
@@ -251,6 +256,14 @@ function AdminEmployeesPage() {
         onOpenChange={setWizardOpen}
         tenants={Object.entries(tenantMap).map(([id, name]) => ({ id, name }))}
         onCreated={() => loadData()}
+      />
+
+      <IndividualContractDialog
+        open={contractDialogOpen}
+        onOpenChange={setContractDialogOpen}
+        employees={profiles
+          .filter((p) => !adminUserIds.has(p.user_id))
+          .map((p) => ({ user_id: p.user_id, full_name: p.full_name ?? "" }))}
       />
 
       <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>

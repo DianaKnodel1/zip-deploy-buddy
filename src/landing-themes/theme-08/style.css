@@ -74,6 +74,15 @@ img{max-width:100%;display:block}
 .hero-meta{position:absolute;right:-20px;top:32px;background:#fff;padding:14px 18px;border-radius:14px;box-shadow:var(--shadow);border:1px solid var(--line);font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
 .hero-meta strong{display:block;color:var(--ink);font-size:1.4rem;letter-spacing:-.02em;text-transform:none;margin-top:2px}
 
+/* ===== Marquee strip ===== */
+.marquee-strip{background:var(--ink);color:#cdd3e0;padding:22px 0;overflow:hidden;border-top:1px solid rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.05)}
+.marquee-track{display:flex;width:max-content;animation:marquee 32s linear infinite}
+.marquee-row{display:flex;align-items:center;gap:48px;padding-right:48px;white-space:nowrap;font-size:.95rem;letter-spacing:.04em}
+.marquee-row strong{color:var(--accent);font-weight:800;font-size:1.4rem;margin-right:10px;letter-spacing:-.01em}
+.marquee-row .sep{color:var(--accent);opacity:.5;font-size:.6rem}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.marquee-strip:hover .marquee-track{animation-play-state:paused}
+
 /* ===== Sections ===== */
 section.block{padding:110px 0}
 .section-head{max-width:760px;margin:0 0 70px}

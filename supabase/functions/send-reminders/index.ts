@@ -328,7 +328,7 @@ async function runInvites(ctx: SendCtx) {
 // ───── 2. Confirm-Email-Reminder ─────
 async function runConfirmEmail(ctx: SendCtx) {
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
-  const BLOCKED = new Set(["deaktiviert", "abgelehnt", "gesperrt"]);
+  const BLOCKED = new Set(["deaktiviert", "abgelehnt"]);
   const unconfirmed = (usersList?.users ?? []).filter(u => {
     if (!u.email || u.email_confirmed_at) return false;
     // Skip gebannte Auth-User
@@ -403,7 +403,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     .from("profiles")
     .select("user_id,full_name,tenant_id,onboarding_status,status,updated_at,created_at")
     .neq("onboarding_status", "abgeschlossen")
-    .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")')
+    .not("status", "in", '("deaktiviert","abgelehnt")')
     .lte("created_at", cutoff);
   if (error) { console.error("complete query", error); return; }
 
@@ -529,13 +529,13 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
   ctx.recoveryStats.set(tenantId, stats);
 
   // ── Empfänger sammeln ──
-  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt/gesperrt)
+  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt)
   // 2) Akzeptierte Bewerber (applications.status='akzeptiert') ohne Auth-Account
   const { data: profiles, error: pErr } = await ctx.admin
     .from("profiles")
     .select("user_id,full_name,tenant_id,status")
     .eq("tenant_id", tenantId)
-    .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
+    .not("status", "in", '("deaktiviert","abgelehnt")');
   if (pErr) { console.error("recovery profiles query", pErr); return; }
 
   const { data: apps, error: aErr } = await ctx.admin

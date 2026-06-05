@@ -163,13 +163,13 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
     await assertAdmin(context);
     const sb = supabaseAdmin as any;
 
-    // Mitarbeiter: ALLE inkl. abgeschlossen (außer deaktiviert/abgelehnt/gesperrt) —
+    // Mitarbeiter: ALLE inkl. abgeschlossen (außer deaktiviert/abgelehnt) —
     // matched die Filterung in der Edge-Function, damit „X Empfänger" stimmt.
     const { data: profiles, error: pErr } = await sb
       .from("profiles")
       .select("id,user_id,full_name,phone,status,onboarding_status,last_reminder_sent_at,created_at")
       .eq("tenant_id", data.tenant_id)
-      .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")');
+      .not("status", "in", '("deaktiviert","abgelehnt")');
     if (pErr) throw new Error(pErr.message);
 
     // Akzeptierte Bewerber ohne Auth-Account — siehe Edge-Function-Logik.

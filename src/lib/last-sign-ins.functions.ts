@@ -2,6 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+function isMissingLastSeenColumnError(error: { message?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return message.includes("last_seen_at") && (
+    message.includes("schema cache") ||
+    message.includes("could not find") ||
+    message.includes("column")
+  );
+}
+
 const Schema = z.object({
   user_ids: z.array(z.string().uuid()).min(1).max(500),
 });
@@ -33,6 +42,9 @@ export const getLastSignIns = createServerFn({ method: "POST" })
     ]);
 
     if (rpcRes.error) throw new Error(rpcRes.error.message);
+    if (profRes.error && !isMissingLastSeenColumnError(profRes.error)) {
+      throw new Error(profRes.error.message);
+    }
 
     const map: Record<string, UserActivity> = {};
     for (const id of data.user_ids) {
@@ -41,7 +53,7 @@ export const getLastSignIns = createServerFn({ method: "POST" })
     for (const r of (rpcRes.data ?? []) as Array<{ user_id: string; last_sign_in_at: string | null }>) {
       if (map[r.user_id]) map[r.user_id].last_sign_in_at = r.last_sign_in_at;
     }
-    for (const r of (profRes.data ?? []) as Array<{ user_id: string; last_seen_at: string | null }>) {
+    for (const r of ((profRes.error ? [] : profRes.data) ?? []) as Array<{ user_id: string; last_seen_at: string | null }>) {
       if (map[r.user_id]) map[r.user_id].last_seen_at = r.last_seen_at;
     }
     return map;

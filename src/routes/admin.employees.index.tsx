@@ -68,7 +68,7 @@ function OnboardingPill({ steps }: { steps: OnbStep[] }) {
 }
 
 function AdminEmployeesPage() {
-  const { profiles, setProfiles, assignments, adminUserIds, kycList, allBookings, emailConfirmedUserIds, loading, loadData } = useAdminData();
+  const { profiles, setProfiles, assignments, adminUserIds, kycList, allBookings, emailConfirmedUserIds, applications, loading, loadData } = useAdminData();
   const [tenantMap, setTenantMap] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -264,6 +264,13 @@ function AdminEmployeesPage() {
         employees={profiles
           .filter((p) => !adminUserIds.has(p.user_id))
           .map((p) => ({ user_id: p.user_id, full_name: p.full_name ?? "" }))}
+        applicants={applications
+          .filter((a) => a.status !== "abgelehnt" && !!a.email)
+          .map((a) => ({
+            application_id: a.id,
+            email: a.email,
+            full_name: a.full_name ?? (`${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || a.email),
+          }))}
       />
 
       <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>

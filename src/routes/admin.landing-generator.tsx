@@ -204,28 +204,31 @@ function LandingGeneratorPage() {
               <CardDescription>Weitere Themes (02–06) folgen, sobald du sie lieferst.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2">
                 {THEME_LIST.map((t) => (
                   <button
                     key={t.id}
                     type="button"
                     onClick={() => setThemeId(t.id)}
                     className={cn(
-                      "text-left rounded-lg border-2 p-4 transition-all",
+                      "text-left rounded-lg border-2 p-3 transition-all",
                       themeId === t.id
                         ? "border-primary bg-primary/5 shadow-sm"
                         : "border-border hover:border-primary/40",
                     )}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-sm">{t.name}</span>
-                      {themeId === t.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="font-semibold text-sm truncate">{t.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-muted-foreground/70 font-mono">{t.id}</span>
+                        {themeId === t.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{t.description}</p>
-                    <p className="text-[10px] text-muted-foreground/70 mt-2 font-mono">{t.id}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{t.description}</p>
                   </button>
                 ))}
               </div>
+
             </CardContent>
           </Card>
 

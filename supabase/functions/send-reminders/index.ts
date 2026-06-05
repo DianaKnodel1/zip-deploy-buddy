@@ -403,7 +403,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     .from("profiles")
     .select("user_id,full_name,tenant_id,onboarding_status,status,updated_at,created_at")
     .neq("onboarding_status", "abgeschlossen")
-    .not("status", "in", '("deaktiviert","abgelehnt","gesperrt")')
+    .not("status", "in", '("deaktiviert","abgelehnt")')
     .lte("created_at", cutoff);
   if (error) { console.error("complete query", error); return; }
 

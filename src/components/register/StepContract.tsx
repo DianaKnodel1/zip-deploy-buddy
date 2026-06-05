@@ -24,6 +24,9 @@ interface Props {
   loading: boolean;
   userId: string | null;
   tenantId: string | null;
+  /** Optional individual salary/hours override */
+  monthlySalary?: string;
+  weeklyHours?: string;
   /** Called with the generated contract content and signature data URL */
   onContractReady?: (content: string, signatureDataUrl: string | null) => void;
 }
@@ -31,7 +34,8 @@ interface Props {
 export default function StepContract({
   firstName, lastName, street, zipCode, city, employmentType, startDate,
   agreed, setAgreed, signatureName, setSignatureName,
-  onNext, onBack, loading, userId, tenantId, onContractReady
+  onNext, onBack, loading, userId, tenantId, onContractReady,
+  monthlySalary, weeklyHours,
 }: Props) {
   const [contractContent, setContractContent] = useState<string>("");
   const [loadingTemplate, setLoadingTemplate] = useState(true);
@@ -91,6 +95,8 @@ export default function StepContract({
         companyCeoName,
         companyAddress,
         startDate: formattedStart,
+        weeklyHours,
+        monthlySalary,
       };
 
       // Try to load tenant-specific template
@@ -122,7 +128,7 @@ export default function StepContract({
     };
 
     loadContract();
-  }, [tenantId, employmentType, firstName, lastName, street, zipCode, city, startDate]);
+  }, [tenantId, employmentType, firstName, lastName, street, zipCode, city, startDate, weeklyHours, monthlySalary]);
 
   const handleSign = () => {
     if (onContractReady) {

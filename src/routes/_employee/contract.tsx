@@ -147,7 +147,7 @@ function ContractPage() {
   const getSigUrlsFn = useServerFn(getContractSignatureUrls);
   const getOverrideFn = useServerFn(getMyContractOverride);
 
-  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null } | null>(null);
+  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null } | null>(null);
   const [overrideLoading, setOverrideLoading] = useState(true);
   const [overridePdfUrl, setOverridePdfUrl] = useState<string | null>(null);
 
@@ -491,6 +491,11 @@ function ContractPage() {
       />;
     }
 
+    const overrideSalaryStr = override?.monthly_salary_cents != null
+      ? `${(override.monthly_salary_cents / 100).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+      : undefined;
+    const overrideHoursStr = override?.weekly_hours != null ? String(override.weekly_hours) : undefined;
+
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-4">
         <div className="flex items-center gap-3">
@@ -516,6 +521,8 @@ function ContractPage() {
               loading={signing}
               userId={user?.id ?? null}
               tenantId={profile?.tenant_id ?? null}
+              monthlySalary={overrideSalaryStr}
+              weeklyHours={overrideHoursStr}
             />
           </CardContent>
         </Card>
@@ -553,7 +560,7 @@ function OverrideSigning({
   onSign,
   onBack,
 }: {
-  override: { html_body: string | null; pdf_url: string | null };
+  override: { html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null };
   overridePdfUrl: string | null;
   profile: any;
   signing: boolean;
@@ -566,6 +573,11 @@ function OverrideSigning({
 }) {
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
 
+  const monthlySalary = override.monthly_salary_cents != null
+    ? `${(override.monthly_salary_cents / 100).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : undefined;
+  const weeklyHours = override.weekly_hours != null ? String(override.weekly_hours) : undefined;
+
   const resolved = override.html_body
     ? resolveContractPlaceholders(override.html_body, {
         firstName: (profile?.full_name ?? "").split(" ")[0] ?? "",
@@ -577,6 +589,8 @@ function OverrideSigning({
         companyCeoName: "",
         companyAddress: "",
         startDate: formatGermanDate(profile?.employment_start_date),
+        monthlySalary,
+        weeklyHours,
       })
     : "";
 

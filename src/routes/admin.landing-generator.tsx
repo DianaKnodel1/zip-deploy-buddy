@@ -86,8 +86,8 @@ function LandingGeneratorPage() {
   const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) { setLogoDataUrl(null); return; }
-    if (f.size > 2 * 1024 * 1024) {
-      toast({ title: "Logo zu groß", description: "Max. 2 MB.", variant: "destructive" });
+    if (f.size > 8 * 1024 * 1024) {
+      toast({ title: "Logo zu groß", description: "Max. 8 MB.", variant: "destructive" });
       return;
     }
     const reader = new FileReader();

@@ -51,6 +51,7 @@ interface ChatMessage {
 
 function AdminChatPage() {
   const { user } = useAuth();
+  const onlineUsers = useOnlineUsers();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);

@@ -308,6 +308,11 @@ function AdminSmsPage() {
                         <td className="px-4 py-3 text-muted-foreground">{assignCount}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
+                            {ch.api_key && (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={testing} onClick={() => runTest(ch.api_key!)}>
+                                {testing ? "…" : "Test"}
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleActive(ch)}>
                               {ch.is_active ? "Deaktivieren" : "Aktivieren"}
                             </Button>

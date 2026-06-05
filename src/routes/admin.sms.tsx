@@ -456,7 +456,17 @@ function AdminSmsPage() {
               </Select>
             </Field>
             <Field label="API Key">
-              <Input value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} placeholder="API Key eingeben…" type="password" />
+              <div className="flex gap-2">
+                <Input value={newApiKey} onChange={(e) => { setNewApiKey(e.target.value); setTestResult(null); }} placeholder="API Key eingeben…" type="password" className="flex-1" />
+                <Button type="button" size="sm" variant="outline" disabled={testing || !newApiKey.trim()} onClick={() => runTest(newApiKey)}>
+                  {testing ? "Teste…" : "Verbindung testen"}
+                </Button>
+              </div>
+              {testResult && (
+                <p className={cn("text-[11px] mt-1", testResult.ok ? "text-green-600" : "text-destructive")}>
+                  {testResult.ok ? "✓" : "✗"} {testResult.message}
+                </p>
+              )}
             </Field>
             <Field label="API Secret (optional)">
               <Input value={newApiSecret} onChange={(e) => setNewApiSecret(e.target.value)} placeholder="API Secret…" type="password" />

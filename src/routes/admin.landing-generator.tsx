@@ -122,15 +122,19 @@ function LandingGeneratorPage() {
     let html = replace(theme.html);
     const css = replace(theme.css);
     // <link rel="stylesheet" href="style.css"> durch inline <style> ersetzen
+    // + Override für Scroll-Animationen (data-animate ist im Theme initial opacity:0,
+    //   wird normal per IntersectionObserver in script.js eingeblendet – im Preview
+    //   ohne JS bleibt sonst alles unsichtbar).
     html = html.replace(
       /<link[^>]+href=["']style\.css["'][^>]*>/i,
-      `<style>${css}</style>`,
+      `<style>${css}\n[data-animate]{opacity:1!important;transform:none!important}</style>`,
     );
     // Logo durch data-URL ersetzen, sonst Platzhalter-Pixel
     const logoSrc = logoDataUrl ?? "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='40'><rect width='100%' height='100%' fill='%23e2e8f0'/><text x='50%' y='55%' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%2364748b'>Logo</text></svg>";
     html = html.replace(/assets\/logo\.[a-z]+/gi, logoSrc);
     // script.js entfernen (Preview ohne Submit)
     html = html.replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i, "");
+
     return html;
   })();
 

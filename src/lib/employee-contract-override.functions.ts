@@ -4,8 +4,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 // Pro-Mitarbeiter Override des Arbeitsvertrags – entweder als HTML-Body
 // (Admin editiert die Tenant-Vorlage frei) oder als hochgeladenes PDF.
-// Wenn ein Override existiert, sieht der Mitarbeiter auf /contract diesen
-// statt der Standard-Tenant-Vorlage.
+// Zusätzlich kann ein individuelles Monatsgehalt + Wochenstunden hinterlegt
+// werden. Wenn ein Override existiert, sieht der Mitarbeiter auf /contract
+// diese Werte statt der Standard-Tenant-Vorlage.
 
 async function assertAdmin(ctx: { supabase: any; userId: string }) {
   const { data, error } = await ctx.supabase
@@ -34,6 +35,35 @@ export const getContractOverride = createServerFn({ method: "GET" })
     return { override: row ?? null };
   });
 
+async function loadProfile(sb: any, userId: string) {
+  const { data } = await sb
+    .from("profiles")
+    .select("tenant_id, contract_signed_at, full_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data ?? null;
+}
+
+async function logOverride(sb: any, params: {
+  action: string;
+  userId: string;
+  actorId: string;
+  prof: any;
+  comment: string;
+}) {
+  try {
+    await sb.from("activity_log").insert({
+      action: params.action,
+      entity_type: "profile",
+      entity_id: params.userId,
+      actor_id: params.actorId,
+      comment: params.comment,
+      old_status: params.prof?.contract_signed_at ? "unterschrieben" : "offen",
+      new_status: "offen",
+    });
+  } catch {}
+}
+
 export const saveContractOverrideHtml = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) =>
@@ -46,11 +76,7 @@ export const saveContractOverrideHtml = createServerFn({ method: "POST" })
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;
-    const { data: prof } = await sb
-      .from("profiles")
-      .select("tenant_id, contract_signed_at, full_name")
-      .eq("user_id", data.user_id)
-      .maybeSingle();
+    const prof = await loadProfile(sb, data.user_id);
 
     const { error } = await sb
       .from("employee_contract_overrides")
@@ -67,20 +93,14 @@ export const saveContractOverrideHtml = createServerFn({ method: "POST" })
       );
     if (error) throw new Error(error.message);
 
-    // Vertragsstatus zurücksetzen, damit Mitarbeiter neu unterschreibt.
     await sb.from("profiles").update({ contract_signed_at: null }).eq("user_id", data.user_id);
-
-    try {
-      await sb.from("activity_log").insert({
-        action: "vertrag_override_html",
-        entity_type: "profile",
-        entity_id: data.user_id,
-        actor_id: context.userId,
-        comment: `Individueller Arbeitsvertrag (Text) hinterlegt für ${prof?.full_name ?? "Mitarbeiter"}.`,
-        old_status: prof?.contract_signed_at ? "unterschrieben" : "offen",
-        new_status: "offen",
-      });
-    } catch {}
+    await logOverride(sb, {
+      action: "vertrag_override_html",
+      userId: data.user_id,
+      actorId: context.userId,
+      prof,
+      comment: `Individueller Arbeitsvertrag (Text) hinterlegt für ${prof?.full_name ?? "Mitarbeiter"}.`,
+    });
 
     return { ok: true };
   });
@@ -97,11 +117,7 @@ export const saveContractOverridePdf = createServerFn({ method: "POST" })
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;
-    const { data: prof } = await sb
-      .from("profiles")
-      .select("tenant_id, contract_signed_at, full_name")
-      .eq("user_id", data.user_id)
-      .maybeSingle();
+    const prof = await loadProfile(sb, data.user_id);
 
     const { error } = await sb
       .from("employee_contract_overrides")
@@ -119,18 +135,71 @@ export const saveContractOverridePdf = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     await sb.from("profiles").update({ contract_signed_at: null }).eq("user_id", data.user_id);
+    await logOverride(sb, {
+      action: "vertrag_override_pdf",
+      userId: data.user_id,
+      actorId: context.userId,
+      prof,
+      comment: `Individueller Arbeitsvertrag (PDF) hochgeladen für ${prof?.full_name ?? "Mitarbeiter"}.`,
+    });
 
-    try {
-      await sb.from("activity_log").insert({
-        action: "vertrag_override_pdf",
-        entity_type: "profile",
-        entity_id: data.user_id,
-        actor_id: context.userId,
-        comment: `Individueller Arbeitsvertrag (PDF) hochgeladen für ${prof?.full_name ?? "Mitarbeiter"}.`,
-        old_status: prof?.contract_signed_at ? "unterschrieben" : "offen",
-        new_status: "offen",
-      });
-    } catch {}
+    return { ok: true };
+  });
+
+// Neu: Gehalt + Wochenstunden separat (oder zusammen mit html/pdf) updaten.
+// Wenn nur diese Felder gesetzt werden, behalten wir html_body/pdf_url bei.
+export const saveContractOverrideSalary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) =>
+    z.object({
+      user_id: z.string().uuid(),
+      monthly_salary_cents: z.number().int().min(0).max(100_000_00).nullable(),
+      weekly_hours: z.number().min(0).max(80).nullable(),
+    }).parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+    const prof = await loadProfile(sb, data.user_id);
+
+    // Falls noch kein Override existiert: anlegen, ohne html/pdf zu erzwingen.
+    const { data: existing } = await sb
+      .from("employee_contract_overrides")
+      .select("id")
+      .eq("user_id", data.user_id)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await sb
+        .from("employee_contract_overrides")
+        .update({
+          monthly_salary_cents: data.monthly_salary_cents,
+          weekly_hours: data.weekly_hours,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", data.user_id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await sb
+        .from("employee_contract_overrides")
+        .insert({
+          user_id: data.user_id,
+          tenant_id: prof?.tenant_id ?? null,
+          monthly_salary_cents: data.monthly_salary_cents,
+          weekly_hours: data.weekly_hours,
+          created_by: context.userId,
+        });
+      if (error) throw new Error(error.message);
+    }
+
+    await logOverride(sb, {
+      action: "vertrag_override_salary",
+      userId: data.user_id,
+      actorId: context.userId,
+      prof,
+      comment: `Individuelles Gehalt / Wochenstunden aktualisiert für ${prof?.full_name ?? "Mitarbeiter"}.`,
+    });
 
     return { ok: true };
   });
@@ -155,7 +224,7 @@ export const getMyContractOverride = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("employee_contract_overrides")
-      .select("html_body, pdf_url, updated_at")
+      .select("html_body, pdf_url, monthly_salary_cents, weekly_hours, updated_at")
       .eq("user_id", context.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);

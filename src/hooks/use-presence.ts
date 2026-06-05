@@ -54,8 +54,12 @@ export function useOnlineUsers(): Set<string> {
   const [online, setOnline] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const channel = supabase.channel("online-users", {
-      config: { presence: { key: "viewer-" + Math.random().toString(36).slice(2) } },
+    const viewerKey = "viewer-" + Math.random().toString(36).slice(2);
+    // Eigener Channel-Name pro Viewer-Instanz, damit wir nicht den bereits
+    // subscribten Broadcast-Channel "online-users" wiederverwenden
+    // (Supabase verbietet .on() nach subscribe() auf derselben Instanz).
+    const channel = supabase.channel(`online-users-watch-${viewerKey}`, {
+      config: { presence: { key: viewerKey } },
     });
 
     const sync = () => {

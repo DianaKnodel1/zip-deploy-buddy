@@ -24,7 +24,7 @@ a{color:inherit;text-decoration:none}
 /* HEADER */
 .site-header{position:absolute;top:0;left:0;right:0;z-index:50;padding:24px 0}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
-.logo{font-size:1.55rem;font-weight:800;color:var(--gold);letter-spacing:-.02em;display:inline-flex;align-items:center;gap:10px;text-decoration:none}
+.logo{font-size:1.85rem;font-weight:800;color:var(--gold);letter-spacing:-.02em;display:inline-flex;align-items:center;gap:10px;text-decoration:none}
 .logo .dot{color:var(--gold)}
 .logo-img{max-height:48px;width:auto;display:block}
 .logo:has(.logo-img) .logo-text{display:none}

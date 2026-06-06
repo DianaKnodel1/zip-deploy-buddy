@@ -102,6 +102,8 @@ interface TenantRow {
   reminder_no_booking_body: string | null;
   reminder_recovery_subject: string | null;
   reminder_recovery_body: string | null;
+  reminder_recovery_bewerber_subject: string | null;
+  reminder_recovery_bewerber_body: string | null;
 }
 
 type ReminderType = "invite" | "confirm_email" | "complete_registration" | "no_recent_booking" | "domain_recovery";
@@ -175,7 +177,7 @@ serve(async (req) => {
     // Tenants vorladen
     const { data: tList, error: tErr } = await admin
       .from("tenants")
-      .select("id,name,domain,primary_domain,primary_domain_changed_at,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body");
+      .select("id,name,domain,primary_domain,primary_domain_changed_at,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body,reminder_recovery_bewerber_subject,reminder_recovery_bewerber_body");
     if (tErr) return json({ error: tErr.message }, 500);
 
     const tenants = new Map<string, TenantRow>();
@@ -621,8 +623,12 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     const attempt = (ctx.sentCountByTenantType.get(`${tenant.id}:domain_recovery`) ?? 0) + 1;
     const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
     const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
-    const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery.subject, vars);
-    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery.body, vars, { withDomainBanner: false });
+    const isBewerber = rec.kind === "bewerber";
+    const subjectTpl = isBewerber ? tenant.reminder_recovery_bewerber_subject : tenant.reminder_recovery_subject;
+    const bodyTpl    = isBewerber ? tenant.reminder_recovery_bewerber_body    : tenant.reminder_recovery_body;
+    const defaultTpl = isBewerber ? DEFAULT_TEMPLATES.domain_recovery_bewerber : DEFAULT_TEMPLATES.domain_recovery_mitarbeiter;
+    const subject = renderSubject(subjectTpl, defaultTpl.subject, vars);
+    const html = renderBodyHtml(tenant, bodyTpl, defaultTpl.body, vars, { withDomainBanner: false });
 
     try {
       await sendMail(tenant, rec.email, subject, html);
@@ -733,12 +739,20 @@ const DEFAULT_TEMPLATES = {
 {{cta:Aufträge ansehen|{{booking_link}}}}
 <p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{booking_link}}</p>`,
   },
-  domain_recovery: {
-    subject: "Wichtig: Neuer Portal-Link für {{tenant_name}}",
-    body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Dein neuer Portal-Link</h1>
+  domain_recovery_mitarbeiter: {
+    subject: "Wir sind umgezogen – dein neuer Portal-Link für {{tenant_name}}",
+    body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Wir sind umgezogen</h1>
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">unsere bisherige Portal-Adresse ist nicht mehr erreichbar. Bitte nutze ab sofort den folgenden Link, um dich bei <strong>{{tenant_name}}</strong> einzuloggen:</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">unser Mitarbeiter-Portal von <strong>{{tenant_name}}</strong> hat eine neue Adresse. Deine Zugangsdaten bleiben gleich — einfach mit der neuen URL einloggen und weitermachen.</p>
 {{cta:Zum neuen Portal|{{portal_link}}}}
+<p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
+  },
+  domain_recovery_bewerber: {
+    subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
+    body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Wir sind umgezogen</h1>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">schön, dass du dabei bist! Unser Portal hat eine neue Adresse — bitte schließe deine Registrierung bei <strong>{{tenant_name}}</strong> ab sofort hier ab:</p>
+{{cta:Jetzt registrieren|{{portal_link}}}}
 <p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
   },
 };

@@ -27,9 +27,34 @@ interface ContractData {
   companyName: string;
   companyCeoName: string;
   companyAddress?: string;
+  companyCity?: string;
   startDate?: string; // already formatted DE
   weeklyHours?: string;
   monthlySalary?: string;
+}
+
+/**
+ * Viele Vorlagen verwenden im Firmenblock die generischen Platzhalter
+ * {{address}} / {{city}} – diese würden sonst mit den Daten des Arbeitnehmers
+ * gefüllt. Dieser Pre-Processor erkennt den Firmenblock (alles direkt nach
+ * {{company_name}} bis zum nächsten alleinstehenden "und") und ersetzt das
+ * erste Vorkommen von {{address}}/{{city}} dort mit firmenspezifischen
+ * Platzhaltern.
+ */
+function disambiguateCompanyPlaceholders(template: string): string {
+  if (!template) return template;
+  const companyIdx = template.search(/\{\{\s*company_name\s*\}\}/i);
+  if (companyIdx < 0) return template;
+  // Ende des Firmenblocks: erstes alleinstehendes "und" auf eigener Zeile
+  const after = template.slice(companyIdx);
+  const undMatch = after.match(/\n\s*und\s*\n/i);
+  const blockEnd = undMatch ? companyIdx + (undMatch.index ?? 0) : template.length;
+  const before = template.slice(0, companyIdx);
+  let block = template.slice(companyIdx, blockEnd);
+  const rest = template.slice(blockEnd);
+  block = block.replace(/\{\{\s*address\s*\}\}/i, "{{company_address}}");
+  block = block.replace(/\{\{\s*city\s*\}\}/i, "{{company_city}}");
+  return before + block + rest;
 }
 
 export function formatGermanDate(d: Date | string | null | undefined): string {

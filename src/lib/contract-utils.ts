@@ -97,6 +97,7 @@ export function resolveContractPlaceholders(
     companyName?: string;
     companyCeoName?: string;
     companyAddress?: string;
+    companyCity?: string;
     startDate?: string;
     weeklyHours?: string;
     monthlySalary?: string;

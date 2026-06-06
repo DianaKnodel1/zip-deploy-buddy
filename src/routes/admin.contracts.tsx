@@ -24,11 +24,37 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
 };
 
-const PLACEHOLDERS = [
-  "{{first_name}}", "{{last_name}}", "{{address}}", "{{city}}",
-  "{{employment_type}}", "{{company_name}}", "{{company_ceo_name}}",
-  "{{start_date}}", "{{employment_start_date}}", "{{date}}",
+const PLACEHOLDER_GROUPS: { label: string; items: { ph: string; desc: string }[] }[] = [
+  {
+    label: "Arbeitnehmer",
+    items: [
+      { ph: "{{first_name}}", desc: "Vorname" },
+      { ph: "{{last_name}}", desc: "Nachname" },
+      { ph: "{{address}}", desc: "Adresse (Straße, PLZ Ort)" },
+      { ph: "{{city}}", desc: "Wohnort" },
+    ],
+  },
+  {
+    label: "Firma",
+    items: [
+      { ph: "{{company_name}}", desc: "Firmenname" },
+      { ph: "{{company_ceo_name}}", desc: "Geschäftsführer" },
+      { ph: "{{company_address}}", desc: "Firmenadresse" },
+      { ph: "{{company_city}}", desc: "Firmen-Stadt" },
+    ],
+  },
+  {
+    label: "Vertrag",
+    items: [
+      { ph: "{{employment_type}}", desc: "Minijob / Teilzeit / Vollzeit" },
+      { ph: "{{weekly_hours}}", desc: "Wochenstunden" },
+      { ph: "{{monthly_salary}}", desc: "Monatsgehalt" },
+      { ph: "{{start_date}}", desc: "Vertragsbeginn" },
+      { ph: "{{date}}", desc: "Heutiges Datum" },
+    ],
+  },
 ];
+const PLACEHOLDERS = PLACEHOLDER_GROUPS.flatMap((g) => g.items.map((i) => i.ph));
 
 interface Template {
   id: string;

@@ -43,7 +43,11 @@ function AdminRecoveryPage() {
   const [history, setHistory] = useState<Array<{ id: string; created_at: string; comment: string | null }>>([]);
   const [statusEntries, setStatusEntries] = useState<RecoveryStatusEntry[]>([]);
   const [changedAt, setChangedAt] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ subject: string; html: string; portal_link: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    subject: string; html: string; portal_link: string;
+    mitarbeiter?: { subject: string; html: string; portal_link: string };
+    bewerber?:    { subject: string; html: string; portal_link: string };
+  } | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingMailPreview, setLoadingMailPreview] = useState(false);
 
@@ -267,17 +271,30 @@ function AdminRecoveryPage() {
                 ) : (
                   <>
                     <div className="text-xs text-muted-foreground">
-                      So sieht die Recovery-Mail für deine Empfänger aus. Den Inhalt kannst du pro Tenant unter
-                      <code className="mx-1">tenants.reminder_recovery_subject/body</code> anpassen
-                      (Platzhalter: <code>{"{{first_name}}"}</code>, <code>{"{{portal_link}}"}</code>, <code>{"{{tenant_name}}"}</code>).
+                      So sieht die Recovery-Mail für deine Empfänger aus. Texte bearbeitbar unter
+                      <a href="/admin/email-templates" className="underline mx-1">/admin/email-templates → Erinnerungen → Domain-Wechsel</a>
+                      (getrennte Tabs für Mitarbeiter und Bewerber).
                     </div>
-                    <div className="text-sm"><span className="font-medium">Betreff:</span> {preview.subject}</div>
-                    <div className="text-xs text-muted-foreground">Portal-Link: <code>{preview.portal_link}</code></div>
-                    <iframe
-                      title="Recovery-Mail-Vorschau"
-                      srcDoc={preview.html}
-                      className="w-full h-[600px] rounded-md border bg-white"
-                    />
+                    <Tabs defaultValue="mitarbeiter">
+                      <TabsList>
+                        <TabsTrigger value="mitarbeiter" className="text-xs">Mitarbeiter</TabsTrigger>
+                        <TabsTrigger value="bewerber" className="text-xs">Akzeptierte Bewerber</TabsTrigger>
+                      </TabsList>
+                      {(["mitarbeiter", "bewerber"] as const).map((k) => {
+                        const p = preview[k] ?? preview;
+                        return (
+                          <TabsContent key={k} value={k} className="space-y-2">
+                            <div className="text-sm"><span className="font-medium">Betreff:</span> {p.subject}</div>
+                            <div className="text-xs text-muted-foreground">Portal-Link: <code>{p.portal_link}</code></div>
+                            <iframe
+                              title={`Recovery-Mail-Vorschau ${k}`}
+                              srcDoc={p.html}
+                              className="w-full h-[600px] rounded-md border bg-white"
+                            />
+                          </TabsContent>
+                        );
+                      })}
+                    </Tabs>
                   </>
                 )}
               </CardContent>

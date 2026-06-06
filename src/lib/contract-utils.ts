@@ -171,7 +171,8 @@ export function replacePlaceholders(template: string, data: ContractData): strin
   const startDate = data.startDate || today;
   const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
   const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
-  const resolved = template
+  const companyCity = data.companyCity || data.companyAddress || "";
+  const resolved = disambiguateCompanyPlaceholders(template)
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)
     .replace(/\{\{address\}\}/g, data.address)
@@ -184,6 +185,7 @@ export function replacePlaceholders(template: string, data: ContractData): strin
     .replace(/\{\{company_name\}\}/g, data.companyName)
     .replace(/\{\{company_ceo_name\}\}/g, data.companyCeoName)
     .replace(/\{\{company_address\}\}/g, data.companyAddress ?? "")
+    .replace(/\{\{company_city\}\}/g, companyCity)
     .replace(/\{\{start_date\}\}/g, startDate)
     .replace(/\{\{employment_start_date\}\}/g, startDate)
     .replace(/\{\{date\}\}/g, today);

@@ -175,7 +175,7 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
     // Akzeptierte Bewerber ohne Auth-Account — siehe Edge-Function-Logik.
     const { data: apps, error: aErr } = await sb
       .from("applications")
-      .select("id,email,full_name,first_name,phone,status,created_at,updated_at")
+      .select("id,email,full_name,first_name,phone,status,created_at")
       .eq("tenant_id", data.tenant_id)
       .eq("status", "akzeptiert");
     if (aErr) throw new Error(aErr.message);
@@ -219,7 +219,7 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
         email,
         phone: app.phone ?? null,
         status: "akzeptiert (Bewerber)",
-        last_contact: app.updated_at ?? app.created_at ?? null,
+        last_contact: app.created_at ?? null,
       });
     }
 

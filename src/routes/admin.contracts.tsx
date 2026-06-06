@@ -24,11 +24,37 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
 };
 
-const PLACEHOLDERS = [
-  "{{first_name}}", "{{last_name}}", "{{address}}", "{{city}}",
-  "{{employment_type}}", "{{company_name}}", "{{company_ceo_name}}",
-  "{{start_date}}", "{{employment_start_date}}", "{{date}}",
+const PLACEHOLDER_GROUPS: { label: string; items: { ph: string; desc: string }[] }[] = [
+  {
+    label: "Arbeitnehmer",
+    items: [
+      { ph: "{{first_name}}", desc: "Vorname" },
+      { ph: "{{last_name}}", desc: "Nachname" },
+      { ph: "{{address}}", desc: "Adresse (Straße, PLZ Ort)" },
+      { ph: "{{city}}", desc: "Wohnort" },
+    ],
+  },
+  {
+    label: "Firma",
+    items: [
+      { ph: "{{company_name}}", desc: "Firmenname" },
+      { ph: "{{company_ceo_name}}", desc: "Geschäftsführer" },
+      { ph: "{{company_address}}", desc: "Firmenadresse" },
+      { ph: "{{company_city}}", desc: "Firmen-Stadt" },
+    ],
+  },
+  {
+    label: "Vertrag",
+    items: [
+      { ph: "{{employment_type}}", desc: "Minijob / Teilzeit / Vollzeit" },
+      { ph: "{{weekly_hours}}", desc: "Wochenstunden" },
+      { ph: "{{monthly_salary}}", desc: "Monatsgehalt" },
+      { ph: "{{start_date}}", desc: "Vertragsbeginn" },
+      { ph: "{{date}}", desc: "Heutiges Datum" },
+    ],
+  },
 ];
+const PLACEHOLDERS = PLACEHOLDER_GROUPS.flatMap((g) => g.items.map((i) => i.ph));
 
 interface Template {
   id: string;
@@ -184,9 +210,26 @@ function AdminContractsPage() {
       <Card className="border-dashed">
         <CardContent className="py-3 px-4 flex items-start gap-2">
           <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Verfügbare Platzhalter: {PLACEHOLDERS.map((p) => <code key={p} className="bg-muted px-1 py-0.5 rounded text-[10px] mx-0.5">{p}</code>)}
-          </p>
+          <div className="text-xs text-muted-foreground space-y-2 flex-1">
+            <p className="font-medium text-foreground">Verfügbare Platzhalter</p>
+            <p className="text-[11px]">
+              Wichtig: <code className="bg-muted px-1 rounded">{`{{address}}`}</code> und <code className="bg-muted px-1 rounded">{`{{city}}`}</code> beziehen sich auf den <b>Arbeitnehmer</b>.
+              Für die Firmenadresse <b>immer</b> <code className="bg-muted px-1 rounded">{`{{company_address}}`}</code> / <code className="bg-muted px-1 rounded">{`{{company_city}}`}</code> verwenden.
+            </p>
+            {PLACEHOLDER_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="font-medium text-foreground mt-1">{group.label}</p>
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 mt-0.5">
+                  {group.items.map((it) => (
+                    <li key={it.ph} className="flex items-baseline gap-2">
+                      <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{it.ph}</code>
+                      <span className="text-[11px]">{it.desc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

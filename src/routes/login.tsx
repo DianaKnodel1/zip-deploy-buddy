@@ -64,11 +64,22 @@ function LoginPage() {
 
 
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("tenant_id, status")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
+      const [profileRes, roleRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("tenant_id, status")
+          .eq("user_id", data.user.id)
+          .maybeSingle(),
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id)
+          .eq("role", "admin")
+          .maybeSingle(),
+      ]);
+
+      const profile = profileRes.data;
+      const isAdminUser = !!roleRes.data;
 
       if (profile?.status === "deaktiviert") {
         await supabase.auth.signOut();
@@ -76,19 +87,13 @@ function LoginPage() {
         return;
       }
 
-      if (tenant && profile && profile.tenant_id && profile.tenant_id !== tenant.id) {
+      if (!isAdminUser && tenant && profile && profile.tenant_id && profile.tenant_id !== tenant.id) {
         await supabase.auth.signOut();
         toast({ title: "Fehler", description: "Bitte melde dich über deine Unternehmensseite an.", variant: "destructive" });
         return;
       }
 
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-      if (roleData) {
+      if (isAdminUser) {
         navigate("/admin");
         return;
       }

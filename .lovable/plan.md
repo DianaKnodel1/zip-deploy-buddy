@@ -1,72 +1,86 @@
-# Großes Update – Plan
+## Ziel
 
-## 1. Test-Versand für Reminder + Recovery
-
-**Was:** Analog zum Einladungs-Test einen „Test-Versand"-Button in:
-- `admin.reminders.tsx` (pro Reminder-Template)
-- `admin.recovery.tsx` (Recovery-Template)
-
-**Wie:**
-- Neue Server-Funktion `sendTestEmail` in `src/lib/admin-email-test.functions.ts` (generisch: nimmt `template_name`, `recipient_email`, optional `tenant_id` + Mock-Variablen).
-- Rendert Template wie der echte Versand (gleiche Pipeline wie Einladung), Empfänger = aktuelle Admin-Mail, Subject mit `[TEST]` Prefix.
-- Button mit Dialog: „An welche Adresse senden? (Standard: deine)" + Tenant-Auswahl.
-
-## 2. HTML-Vorschau für alte E-Mail-Logs (Re-Render)
-
-**Problem:** Alte Logs haben `rendered_html = NULL`.
-
-**Lösung:** Im Vorschau-Modal Fallback:
-1. Wenn `rendered_html` vorhanden → direkt anzeigen.
-2. Sonst: Server-Funktion `rerenderEmailLog(log_id)` → liest `template_name` + `metadata` (enthält Variablen) + Tenant aus Log, rendert Template **on-the-fly** und zeigt es an (nicht speichern, nur Vorschau).
-3. Wenn `metadata` zu dünn ist → Hinweis „Rohdaten nicht verfügbar, Vorschau eingeschränkt" + zeigt Subject + Plain-Text-Body soweit vorhanden.
-
-## 3. `team_leader_id` aus `profiles` entfernen
-
-**Migration `20260605000300_drop_profile_team_leader.sql`:**
-```sql
-ALTER TABLE public.profiles DROP COLUMN IF EXISTS team_leader_id;
-```
-
-**Code-Refactor:**
-- `src/hooks/use-team-leader.ts` → liest Leader ausschließlich aus `tenants.team_leader_id` (über User → primary tenant).
-- `src/routes/_employee/chat.tsx` → ersetzt `profile.team_leader_id` Query durch `useTeamLeader()`-Hook.
-- Suche nach weiteren Referenzen: `rg "team_leader_id" src/` & alle anpassen.
-
-## 4. SMS-Channel: Verbindung testen + Restlaufzeit
-
-**Anosim API checken (Doku):**
-- Test-Endpoint: `GET /api/v1/balance` (oder ähnlich) mit API-Key → 200 = OK.
-- Nummern-Mietdauer: Anosim liefert beim `rentNumber` Call ein `expires_at`/`endDate` zurück → in `sms_channels.expires_at` speichern.
-
-**UI:**
-- In `admin.sms.tsx` Channel-Dialog: Button „Verbindung testen" → ruft `testAnosimConnection({ api_key })` → grünes/rotes Badge + ggf. Account-Balance.
-- In Channel-Liste: Badge „Aktiv noch X Tage" (aus `expires_at` berechnet), rot wenn < 3 Tage.
-
-**Migration:** `sms_channels.expires_at timestamptz` hinzufügen (falls noch nicht da).
-
-## 5. Sidebar-Redesign (separater Vorschlag → eigene Runde)
-
-Nach Abschluss von 1–4: ich schicke einen Gruppierungs-Vorschlag mit „was wandert nach `/admin/settings`" zur Freigabe — dann erst umbauen.
-
-## 6. System-Audit (Verbesserungsvorschläge)
-
-Liste schicke ich am Ende dieses Turns im Chat — nach Impact sortiert (Security / UX / Performance / Tech-Debt).
+1. **Neue Landing-Page / Domain anbinden = nur noch DNS + ein Eintrag im Admin-Portal.** Kein SSH, kein Caddy-Config-Edit mehr.
+2. **Recovery-Versand bug-fix** (`updated_at`-Crash → 0 Empfänger).
+3. **Recovery-Mail-Editor** in `/admin/email-templates` (zwei separate Templates: Mitarbeiter / Bewerber, Ton "Wir sind umgezogen", ohne Platzhalter-Hinweise).
 
 ---
 
-## Technische Details
+## 1. Domain-Onboarding 1-Klick (das Hauptproblem)
 
-- Alle neuen Migrationen liegen unter `supabase/manual-migrations/` mit Datum `20260605000300+` → User führt am Ende `bash scripts/migrate.sh` auf VPS 1 aus.
-- Server-Funktionen liegen in `src/lib/*.functions.ts`, importieren `requireSupabaseAuth` + `supabaseAdmin` nur im Handler.
-- Re-Render nutzt vorhandenen Template-Renderer (zu prüfen wo er liegt — vermutlich in der bestehenden Send-Pipeline).
-- Anosim-API-Key liegt bereits pro Channel in `sms_channels.api_key` verschlüsselt / plain → klären beim Implementieren.
+**Heute musst du:**
+- DNS `portal.NEUE-DOMAIN.com` → VPS-IP setzen
+- Auf VPS: Caddyfile/nginx editieren (`server_name portal.neue-domain.com`)
+- Service reloaden
+- Tenant in DB anlegen / Domain-Alias eintragen
 
-## Reihenfolge der Umsetzung
+**Nach diesem Plan musst du nur noch:**
+- DNS setzen (einmalig pro Domain, das geht nicht weg)
+- Im Admin-Portal: `/admin/tenants` → Domain eintragen → fertig
 
-1. Migrations-Dateien (3+4)
-2. team_leader_id Refactor (3) — am riskantesten, zuerst durch
-3. Test-Versand (1)
-4. Log Re-Render (2)
-5. SMS Test + Restlaufzeit (4)
-6. Audit-Liste in Chat
-7. Sidebar-Vorschlag in eigener Runde
+**Wie:** Caddy/Nginx auf **Wildcard + Catch-All** umstellen statt pro Domain. Der TanStack-Server liest schon `req.headers.host`, der Tenant-Lookup in `TenantContext` matcht per `domain` + `domain_aliases`. Wir brauchen also nur **eine** Caddy-Regel:
+
+```text
+portal.*, *.lovable.app {
+  reverse_proxy 127.0.0.1:3000
+}
+```
+
+Caddy macht TLS automatisch via ACME (Let's Encrypt on-demand). Voraussetzung: `on_demand_tls` mit Ask-Endpoint, der gegen unsere Tenant-DB prüft, ob die Domain bekannt ist (sonst stellt Caddy für jede Random-Subdomain Zertifikate aus).
+
+**Konkrete Schritte:**
+- Neue Server-Route `/api/public/caddy-ask?domain=...` → `200` wenn Domain in `tenants.domain` oder `domain_aliases` (sonst `404`).
+- Caddyfile-Snippet im `/admin/settings` als Copy-Paste anzeigen + Doku-Block "So bindest du eine neue Domain an" (DNS-Record, dann Tenant anlegen).
+- `scripts/setup-server2.sh` updaten: einmaliger Caddy-Setup mit Wildcard + on-demand-TLS.
+
+**Ergebnis:** Neue Domain anbinden dauert ~2 Minuten (DNS + 1 Formular), kein SSH mehr.
+
+---
+
+## 2. Recovery-Versand Bug-Fix
+
+**Bug:** `src/lib/tenant-domains.functions.ts` Zeile 178 selektiert `applications.updated_at` — Spalte existiert nicht. Folge: `getAffectedRecipients` crashed silent → 0 Empfänger.
+
+**Fix:** `updated_at` aus dem SELECT entfernen, `last_contact` auf `app.created_at` fallback (Zeile 222).
+
+2-Zeilen-Änderung, dann läuft Recovery wieder.
+
+---
+
+## 3. Recovery-Mail-Editor in `/admin/email-templates`
+
+**Heute:** Felder `tenants.reminder_recovery_subject/body` existieren, aber **kein UI** — nur SQL. Vorschau läuft auf `/admin/recovery`, aber nicht editierbar.
+
+**Plan:**
+- In `/admin/email-templates` zwei neue Einträge anlegen:
+  - **„Domain-Wechsel – Mitarbeiter"** (CTA: „Zum neuen Portal & Onboarding fortsetzen")
+  - **„Domain-Wechsel – akzeptierte Bewerber"** (CTA: „Jetzt registrieren auf der neuen Domain")
+- Migration: zwei zusätzliche Spalten
+  ```sql
+  ALTER TABLE tenants
+    ADD COLUMN reminder_recovery_bewerber_subject text,
+    ADD COLUMN reminder_recovery_bewerber_body    text;
+  -- die bestehenden reminder_recovery_subject/body werden zu "Mitarbeiter"
+  ```
+- Editor-UI: gleicher Komponenten-Stil wie bestehende Email-Templates-Seite (Subject-Input, HTML-Body, Live-Vorschau rechts daneben).
+- **Ton "Wir sind umgezogen":** ich schreibe euch 2 Default-Texte mit freundlichem Umzugs-Wording statt Notfall (Beispiel-Tonalität: „Wir haben eine neue Adresse für dich! Ab sofort findest du dein Portal unter …").
+- **Keine Platzhalter-Hinweise mehr** in der UI (du sagtest du brauchst sie nicht) — Platzhalter werden trotzdem ersetzt (`{{first_name}}`, `{{portal_link}}`, `{{tenant_name}}`), nur kein „Verfügbare Platzhalter:"-Hilfetext.
+- `send-reminders`-Edge-Function: wählt Template anhand `recipient.kind` (`mitarbeiter` vs `bewerber_akzeptiert`).
+- Vorschau auf `/admin/recovery` zeigt beide Templates als Tabs.
+
+---
+
+## 4. Reihenfolge der Umsetzung
+
+1. **Bug-Fix Recovery** (2 Zeilen, sofort, damit Recovery überhaupt sendet)
+2. **Migration + Template-Editor** (Mitarbeiter + Bewerber getrennt)
+3. **Send-Reminders Edge-Function** an neue Spalten anpassen
+4. **Caddy on-demand-TLS + Ask-Endpoint** (das wirft den größten Zeit-Gewinn ab)
+5. **Doku-Block** in `/admin/settings` mit Caddyfile-Snippet & Onboarding-Anleitung
+
+---
+
+## Offene Frage vor dem Bauen
+
+Caddy on-demand-TLS heißt: jede Domain, die du in `/admin/tenants` einträgst und deren DNS auf den VPS zeigt, bekommt automatisch ein TLS-Cert. **Cloudflare-User:** wenn du Cloudflare-Proxy (orange Wolke) nutzt, klappt das nicht direkt — dann müsstest du Cloudflare-Origin-Certs nutzen ODER Proxy auf grau stellen.
+→ Sag mir bevor ich baue: **läuft `digital-dgigmbh.com` über Cloudflare-Proxy oder direkt auf den VPS?** (Das entscheidet die Caddy-Config.)

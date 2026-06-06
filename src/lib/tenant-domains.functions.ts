@@ -175,7 +175,7 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
     // Akzeptierte Bewerber ohne Auth-Account — siehe Edge-Function-Logik.
     const { data: apps, error: aErr } = await sb
       .from("applications")
-      .select("id,email,full_name,first_name,phone,status,created_at,updated_at")
+      .select("id,email,full_name,first_name,phone,status,created_at")
       .eq("tenant_id", data.tenant_id)
       .eq("status", "akzeptiert");
     if (aErr) throw new Error(aErr.message);
@@ -219,7 +219,7 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
         email,
         phone: app.phone ?? null,
         status: "akzeptiert (Bewerber)",
-        last_contact: app.updated_at ?? app.created_at ?? null,
+        last_contact: app.created_at ?? null,
       });
     }
 
@@ -297,68 +297,96 @@ export const getRecoveryPreview = createServerFn({ method: "POST" })
     const sb = supabaseAdmin as any;
     const { data: t, error } = await sb
       .from("tenants")
-      .select("id,name,domain,primary_domain,logo_url,primary_color,reminder_recovery_subject,reminder_recovery_body")
+      .select("id,name,domain,primary_domain,logo_url,primary_color,reminder_recovery_subject,reminder_recovery_body,reminder_recovery_bewerber_subject,reminder_recovery_bewerber_body")
       .eq("id", data.tenant_id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!t) throw new Error("Tenant nicht gefunden");
 
     const portalHost = `portal.${t.primary_domain ?? t.domain}`;
-    const portalLink = `https://${portalHost}/login`;
-    const sampleVars: Record<string, string> = {
-      first_name: "Max",
-      tenant_name: t.name,
-      company_name: t.name,
-      portal_link: portalLink,
-      login_link: portalLink,
-      confirmation_link: portalLink,
-      booking_link: portalLink,
-      email: "max@example.com",
-      sender_name: t.name,
-      support_email: "",
-    };
 
-    const DEFAULT_SUBJECT = "Wichtig: Neuer Portal-Link für {{tenant_name}}";
-    const DEFAULT_BODY = `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Dein neuer Portal-Link</h1>
+    const DEFAULTS = {
+      mitarbeiter: {
+        subject: "Wir sind umgezogen – dein neuer Portal-Link für {{tenant_name}}",
+        body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Wir sind umgezogen</h1>
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">unsere bisherige Portal-Adresse ist nicht mehr erreichbar. Bitte nutze ab sofort den folgenden Link, um dich bei <strong>{{tenant_name}}</strong> einzuloggen:</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">unser Mitarbeiter-Portal von <strong>{{tenant_name}}</strong> hat eine neue Adresse. Deine Zugangsdaten bleiben gleich — einfach mit der neuen URL einloggen und weitermachen.</p>
 {{cta:Zum neuen Portal|{{portal_link}}}}
-<p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`;
+<p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
+      },
+      bewerber: {
+        subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
+        body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Wir sind umgezogen</h1>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">schön, dass du dabei bist! Unser Portal hat eine neue Adresse — bitte schließe deine Registrierung bei <strong>{{tenant_name}}</strong> ab sofort hier ab:</p>
+{{cta:Jetzt registrieren|{{portal_link}}}}
+<p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
+      },
+    } as const;
 
-    const replaceVars = (s: string) => {
-      let out = s;
-      for (let i = 0; i < 3; i++) {
-        out = out.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, k) =>
-          Object.prototype.hasOwnProperty.call(sampleVars, k) ? sampleVars[k] : m,
-        );
-      }
-      return out;
-    };
     const escapeHtml = (s: string) =>
       s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-
-    const subjectTpl = (t.reminder_recovery_subject && t.reminder_recovery_subject.trim()) ? t.reminder_recovery_subject : DEFAULT_SUBJECT;
-    let body = (t.reminder_recovery_body && t.reminder_recovery_body.trim()) ? t.reminder_recovery_body : DEFAULT_BODY;
-    const looksLikeHtml = /<\/?(p|h1|h2|h3|div|br|table|a)\b/i.test(body);
-    if (!looksLikeHtml) body = escapeHtml(body).replace(/\n/g, "<br>");
-    body = replaceVars(body);
     const brand = t.primary_color ?? "#0f172a";
-    body = body.replace(/\{\{cta:([^|}]+)\|([^}]+)\}\}/g, (_m, label, href) =>
-      `<table cellpadding="0" cellspacing="0"><tr><td style="background:${brand};border-radius:8px"><a href="${String(href).trim()}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">${String(label).trim()}</a></td></tr></table>`,
-    );
-
     const logo = t.logo_url
       ? `<img src="${t.logo_url}" alt="${escapeHtml(t.name)}" style="max-height:40px;margin-bottom:24px"/>`
       : `<div style="font-weight:700;font-size:20px;margin-bottom:24px;color:${brand}">${escapeHtml(t.name)}</div>`;
-    const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+
+    const render = (kind: "mitarbeiter" | "bewerber") => {
+      const portalLink = `https://${portalHost}/${kind === "bewerber" ? "register" : "login"}`;
+      const vars: Record<string, string> = {
+        first_name: "Max",
+        tenant_name: t.name,
+        company_name: t.name,
+        portal_link: portalLink,
+        login_link: portalLink,
+        confirmation_link: portalLink,
+        booking_link: portalLink,
+        email: "max@example.com",
+        sender_name: t.name,
+        support_email: "",
+      };
+      const replaceVars = (s: string) => {
+        let out = s;
+        for (let i = 0; i < 3; i++) {
+          out = out.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, k) =>
+            Object.prototype.hasOwnProperty.call(vars, k) ? vars[k] : m,
+          );
+        }
+        return out;
+      };
+
+      const subjectTpl = kind === "bewerber"
+        ? (t.reminder_recovery_bewerber_subject?.trim() || DEFAULTS.bewerber.subject)
+        : (t.reminder_recovery_subject?.trim() || DEFAULTS.mitarbeiter.subject);
+      let body = kind === "bewerber"
+        ? (t.reminder_recovery_bewerber_body?.trim() || DEFAULTS.bewerber.body)
+        : (t.reminder_recovery_body?.trim() || DEFAULTS.mitarbeiter.body);
+      const looksLikeHtml = /<\/?(p|h1|h2|h3|div|br|table|a)\b/i.test(body);
+      if (!looksLikeHtml) body = escapeHtml(body).replace(/\n/g, "<br>");
+      body = replaceVars(body);
+      body = body.replace(/\{\{cta:([^|}]+)\|([^}]+)\}\}/g, (_m, label, href) =>
+        `<table cellpadding="0" cellspacing="0"><tr><td style="background:${brand};border-radius:8px"><a href="${String(href).trim()}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">${String(label).trim()}</a></td></tr></table>`,
+      );
+      const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px"><tr><td align="center">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:40px;max-width:560px">
 <tr><td>${logo}${body}
 <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0"/>
 <p style="font-size:12px;color:#94a3b8;margin:0">Vorschau · so sieht die Mail für deine Empfänger aus.</p>
 </td></tr></table></td></tr></table></body></html>`;
+      return { subject: replaceVars(subjectTpl), html, portal_link: portalLink };
+    };
 
-    return { subject: replaceVars(subjectTpl), html, portal_link: portalLink };
+    const mitarbeiter = render("mitarbeiter");
+    const bewerber = render("bewerber");
+    return {
+      // Legacy-Felder (Mitarbeiter) für Abwärtskompatibilität:
+      subject: mitarbeiter.subject,
+      html: mitarbeiter.html,
+      portal_link: mitarbeiter.portal_link,
+      mitarbeiter,
+      bewerber,
+    };
   });
 
 

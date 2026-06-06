@@ -36,10 +36,15 @@ const REMINDER_DEFAULTS = {
     subject: "Neue Aufträge warten auf dich – {{tenant_name}}",
     body: `Hallo {{first_name}},\n\ndu hast seit über 7 Tagen keine Aufträge mehr bei {{tenant_name}} gebucht. Im Portal warten freie Termine — sichere dir jetzt deinen nächsten Einsatz.\n\n{{cta:Aufträge ansehen|{{booking_link}}}}\n\nOder kopiere diesen Link: {{booking_link}}`,
   },
-  recovery: {
-    subject: "Wichtig: Neue Portal-Adresse für {{tenant_name}}",
-    body: `Hallo {{first_name}},\n\nunser Mitarbeiter-Portal hat eine neue Adresse. Bitte nutze ab sofort den folgenden Link für Login und Aufträge:\n\n{{cta:Zum neuen Portal|{{portal_link}}}}\n\nFalls der Button nicht funktioniert: {{portal_link}}\n\nDeine Zugangsdaten bleiben unverändert.`,
+  recovery_mitarbeiter: {
+    subject: "Wir sind umgezogen – dein neuer Portal-Link für {{tenant_name}}",
+    body: `Hallo {{first_name}},\n\nwir haben eine neue Online-Adresse! Dein Mitarbeiter-Portal von {{tenant_name}} findest du ab sofort unter einer neuen URL.\n\nDeine Zugangsdaten bleiben unverändert – einfach mit der neuen Adresse einloggen, weitermachen mit Aufträgen, Onboarding-Schritten und Vertragsunterlagen wie gewohnt.\n\n{{cta:Zum neuen Portal|{{portal_link}}}}\n\nFalls der Button nicht funktioniert, kopiere diesen Link:\n{{portal_link}}\n\nViele Grüße\nDein {{tenant_name}}-Team`,
   },
+  recovery_bewerber: {
+    subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
+    body: `Hallo {{first_name}},\n\nschön, dass du dabei bist! Unser Portal hat eine neue Adresse – bitte schließe deine Registrierung bei {{tenant_name}} ab sofort über den folgenden Link ab:\n\n{{cta:Jetzt registrieren|{{portal_link}}}}\n\nFalls der Button nicht funktioniert, kopiere diesen Link:\n{{portal_link}}\n\nWir freuen uns auf dich!\nDein {{tenant_name}}-Team`,
+  },
+
 };
 
 interface TenantEmail {
@@ -72,6 +77,8 @@ interface TenantEmail {
   reminder_no_booking_body: string | null;
   reminder_recovery_subject: string | null;
   reminder_recovery_body: string | null;
+  reminder_recovery_bewerber_subject: string | null;
+  reminder_recovery_bewerber_body: string | null;
 }
 
 const PLACEHOLDERS = [
@@ -299,14 +306,16 @@ function AdminEmailTemplatesPage() {
   const [rCompletionBody, setRCompletionBody] = useState("");
   const [rNoBookingSubject, setRNoBookingSubject] = useState("");
   const [rNoBookingBody, setRNoBookingBody] = useState("");
-  const [rRecoverySubject, setRRecoverySubject] = useState("");
-  const [rRecoveryBody, setRRecoveryBody] = useState("");
+  const [rRecoveryMaSubject, setRRecoveryMaSubject] = useState("");
+  const [rRecoveryMaBody, setRRecoveryMaBody] = useState("");
+  const [rRecoveryBewSubject, setRRecoveryBewSubject] = useState("");
+  const [rRecoveryBewBody, setRRecoveryBewBody] = useState("");
 
   const loadTenants = async () => {
     setLoading(true);
     const { data } = await (supabase as any)
       .from("tenants")
-      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body")
+      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body")
       .order("name");
     const rows = (data as TenantEmail[] | null) ?? [];
     setTenants(rows);
@@ -339,8 +348,10 @@ function AdminEmailTemplatesPage() {
     setRCompletionBody(t.reminder_completion_body || REMINDER_DEFAULTS.completion.body);
     setRNoBookingSubject(t.reminder_no_booking_subject || REMINDER_DEFAULTS.no_booking.subject);
     setRNoBookingBody(t.reminder_no_booking_body || REMINDER_DEFAULTS.no_booking.body);
-    setRRecoverySubject(t.reminder_recovery_subject || REMINDER_DEFAULTS.recovery.subject);
-    setRRecoveryBody(t.reminder_recovery_body || REMINDER_DEFAULTS.recovery.body);
+    setRRecoveryMaSubject(t.reminder_recovery_subject || REMINDER_DEFAULTS.recovery_mitarbeiter.subject);
+    setRRecoveryMaBody(t.reminder_recovery_body || REMINDER_DEFAULTS.recovery_mitarbeiter.body);
+    setRRecoveryBewSubject(t.reminder_recovery_bewerber_subject || REMINDER_DEFAULTS.recovery_bewerber.subject);
+    setRRecoveryBewBody(t.reminder_recovery_bewerber_body || REMINDER_DEFAULTS.recovery_bewerber.body);
   };
 
   useEffect(() => {
@@ -381,8 +392,10 @@ function AdminEmailTemplatesPage() {
         reminder_completion_body: rCompletionBody,
         reminder_no_booking_subject: rNoBookingSubject,
         reminder_no_booking_body: rNoBookingBody,
-        reminder_recovery_subject: rRecoverySubject,
-        reminder_recovery_body: rRecoveryBody,
+        reminder_recovery_subject: rRecoveryMaSubject,
+        reminder_recovery_body: rRecoveryMaBody,
+        reminder_recovery_bewerber_subject: rRecoveryBewSubject,
+        reminder_recovery_bewerber_body: rRecoveryBewBody,
       } as any)
       .eq("id", selectedTenantId);
     setSaving(false);
@@ -605,16 +618,33 @@ function AdminEmailTemplatesPage() {
                 />
               </TabsContent>
               <TabsContent value="recovery">
-                <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 mb-2 text-[11px] text-amber-900 dark:text-amber-200">
-                  Einmaliger Versand pro Mitarbeiter, wenn du im Admin die <strong>primäre Portal-Domain</strong> wechselst. Verwende <code>{`{{portal_link}}`}</code> für die neue Adresse.
+                <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 mb-3 text-[11px] text-amber-900 dark:text-amber-200">
+                  Einmaliger Versand pro Empfänger, wenn du im Admin die <strong>primäre Portal-Domain</strong> wechselst — getrennte Texte für Mitarbeiter (Login zum Portal) und akzeptierte Bewerber (Registrierung).
                 </div>
-                <TemplateEditor
-                  label="Domain-Wechsel-Mail"
-                  subject={rRecoverySubject} onSubjectChange={setRRecoverySubject}
-                  body={rRecoveryBody} onBodyChange={setRRecoveryBody}
-                  signature={signature} onSignatureChange={setSignature}
-                  tenant={selectedTenant}
-                />
+                <Tabs defaultValue="recovery_mitarbeiter" className="space-y-3">
+                  <TabsList>
+                    <TabsTrigger value="recovery_mitarbeiter" className="text-xs">Mitarbeiter</TabsTrigger>
+                    <TabsTrigger value="recovery_bewerber" className="text-xs">Akzeptierte Bewerber</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="recovery_mitarbeiter">
+                    <TemplateEditor
+                      label="Domain-Wechsel – Mitarbeiter"
+                      subject={rRecoveryMaSubject} onSubjectChange={setRRecoveryMaSubject}
+                      body={rRecoveryMaBody} onBodyChange={setRRecoveryMaBody}
+                      signature={signature} onSignatureChange={setSignature}
+                      tenant={selectedTenant}
+                    />
+                  </TabsContent>
+                  <TabsContent value="recovery_bewerber">
+                    <TemplateEditor
+                      label="Domain-Wechsel – akzeptierte Bewerber"
+                      subject={rRecoveryBewSubject} onSubjectChange={setRRecoveryBewSubject}
+                      body={rRecoveryBewBody} onBodyChange={setRRecoveryBewBody}
+                      signature={signature} onSignatureChange={setSignature}
+                      tenant={selectedTenant}
+                    />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
             </Tabs>
           </TabsContent>

@@ -160,7 +160,7 @@ export function resolveContractPlaceholders(
     const v = map[norm(key)];
     return v !== undefined ? v : _m;
   };
-  let out = content.replace(/\{\{\s*([a-zA-Z0-9_ -]+?)\s*\}\}/g, replacer);
+  let out = disambiguateCompanyPlaceholders(content).replace(/\{\{\s*([a-zA-Z0-9_ -]+?)\s*\}\}/g, replacer);
   out = out.replace(/\(\(\s*([a-zA-Z0-9_ -]+?)\s*\)\)/g, replacer);
   if (data.startDate) out = applyEmploymentStartDate(out, data.startDate);
   return out;

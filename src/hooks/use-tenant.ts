@@ -50,16 +50,31 @@ export function useTenantByDomain() {
 
   useEffect(() => {
     const domain = getTenantDomain();
-    
-    supabase
-      .from("tenants_public" as any)
-      .select("*")
-      .eq("domain", domain)
-      .maybeSingle()
-      .then(({ data }: any) => {
-        setTenant(data as Tenant | null);
+
+    (async () => {
+      // 1) Primary-Domain-Match
+      const { data: primaryMatch } = await supabase
+        .from("tenants_public" as any)
+        .select("*")
+        .eq("domain", domain)
+        .maybeSingle();
+
+      if (primaryMatch) {
+        setTenant(primaryMatch as Tenant | null);
         setLoading(false);
-      });
+        return;
+      }
+
+      // 2) Fallback: Alias-Match (domain_aliases ist ein text[])
+      const { data: aliasMatch } = await supabase
+        .from("tenants_public" as any)
+        .select("*")
+        .contains("domain_aliases", [domain])
+        .maybeSingle();
+
+      setTenant((aliasMatch as Tenant | null) ?? null);
+      setLoading(false);
+    })();
   }, []);
 
   return { tenant, loading };

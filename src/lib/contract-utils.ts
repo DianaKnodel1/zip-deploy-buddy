@@ -27,9 +27,34 @@ interface ContractData {
   companyName: string;
   companyCeoName: string;
   companyAddress?: string;
+  companyCity?: string;
   startDate?: string; // already formatted DE
   weeklyHours?: string;
   monthlySalary?: string;
+}
+
+/**
+ * Viele Vorlagen verwenden im Firmenblock die generischen Platzhalter
+ * {{address}} / {{city}} – diese würden sonst mit den Daten des Arbeitnehmers
+ * gefüllt. Dieser Pre-Processor erkennt den Firmenblock (alles direkt nach
+ * {{company_name}} bis zum nächsten alleinstehenden "und") und ersetzt das
+ * erste Vorkommen von {{address}}/{{city}} dort mit firmenspezifischen
+ * Platzhaltern.
+ */
+function disambiguateCompanyPlaceholders(template: string): string {
+  if (!template) return template;
+  const companyIdx = template.search(/\{\{\s*company_name\s*\}\}/i);
+  if (companyIdx < 0) return template;
+  // Ende des Firmenblocks: erstes alleinstehendes "und" auf eigener Zeile
+  const after = template.slice(companyIdx);
+  const undMatch = after.match(/\n\s*und\s*\n/i);
+  const blockEnd = undMatch ? companyIdx + (undMatch.index ?? 0) : template.length;
+  const before = template.slice(0, companyIdx);
+  let block = template.slice(companyIdx, blockEnd);
+  const rest = template.slice(blockEnd);
+  block = block.replace(/\{\{\s*address\s*\}\}/i, "{{company_address}}");
+  block = block.replace(/\{\{\s*city\s*\}\}/i, "{{company_city}}");
+  return before + block + rest;
 }
 
 export function formatGermanDate(d: Date | string | null | undefined): string {
@@ -72,6 +97,7 @@ export function resolveContractPlaceholders(
     companyName?: string;
     companyCeoName?: string;
     companyAddress?: string;
+    companyCity?: string;
     startDate?: string;
     weeklyHours?: string;
     monthlySalary?: string;
@@ -118,6 +144,9 @@ export function resolveContractPlaceholders(
     companyadress: data.companyAddress ?? "",
     company_adress: data.companyAddress ?? "",
     firmenadresse: data.companyAddress ?? "",
+    company_city: data.companyCity ?? data.companyAddress ?? "",
+    companycity: data.companyCity ?? data.companyAddress ?? "",
+    firmenstadt: data.companyCity ?? data.companyAddress ?? "",
     start_date: data.startDate || today,
     startdate: data.startDate || today,
     startdatum: data.startDate || today,
@@ -131,7 +160,7 @@ export function resolveContractPlaceholders(
     const v = map[norm(key)];
     return v !== undefined ? v : _m;
   };
-  let out = content.replace(/\{\{\s*([a-zA-Z0-9_ -]+?)\s*\}\}/g, replacer);
+  let out = disambiguateCompanyPlaceholders(content).replace(/\{\{\s*([a-zA-Z0-9_ -]+?)\s*\}\}/g, replacer);
   out = out.replace(/\(\(\s*([a-zA-Z0-9_ -]+?)\s*\)\)/g, replacer);
   if (data.startDate) out = applyEmploymentStartDate(out, data.startDate);
   return out;
@@ -142,7 +171,8 @@ export function replacePlaceholders(template: string, data: ContractData): strin
   const startDate = data.startDate || today;
   const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
   const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
-  const resolved = template
+  const companyCity = data.companyCity || data.companyAddress || "";
+  const resolved = disambiguateCompanyPlaceholders(template)
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)
     .replace(/\{\{address\}\}/g, data.address)
@@ -155,6 +185,7 @@ export function replacePlaceholders(template: string, data: ContractData): strin
     .replace(/\{\{company_name\}\}/g, data.companyName)
     .replace(/\{\{company_ceo_name\}\}/g, data.companyCeoName)
     .replace(/\{\{company_address\}\}/g, data.companyAddress ?? "")
+    .replace(/\{\{company_city\}\}/g, companyCity)
     .replace(/\{\{start_date\}\}/g, startDate)
     .replace(/\{\{employment_start_date\}\}/g, startDate)
     .replace(/\{\{date\}\}/g, today);

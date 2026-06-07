@@ -540,39 +540,27 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     .not("status", "in", '("deaktiviert","abgelehnt")');
   if (pErr) { console.error("recovery profiles query", pErr); return; }
 
-  const { data: apps, error: aErr } = await ctx.admin
-    .from("applications")
-    .select("id,email,full_name,first_name,tenant_id,status")
-    .eq("tenant_id", tenantId)
-    .eq("status", "akzeptiert");
-  if (aErr) { console.error("recovery apps query", aErr); return; }
+  // Bewerber sind aus Recovery ausgeschlossen — sie laufen über den
+  // normalen `reminder_invite`-Reminder mit aktuellem Portal-Link.
+  // Recovery ist nur für Mitarbeiter mit Auth-Account.
 
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
-  const emailToUser = new Map<string, any>((usersList?.users ?? []).map(u => [(u.email ?? "").toLowerCase(), u]));
 
-  type Recipient = { email: string; first_name: string; kind: "mitarbeiter" | "bewerber" };
+  type Recipient = { email: string; first_name: string; profile_id: string };
   const recipients: Recipient[] = [];
   const seen = new Set<string>();
 
   for (const p of profiles ?? []) {
+    // Bounce-Schutz: tote Adressen überspringen.
+    if ((p as any).email_status && (p as any).email_status !== "active") continue;
     const u = userMap.get((p as any).user_id);
     if (!u?.email) continue;
     const email = u.email.toLowerCase();
     if (seen.has(email)) continue;
     seen.add(email);
     const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
-    recipients.push({ email, first_name: firstName, kind: "mitarbeiter" });
-  }
-  for (const app of apps ?? []) {
-    const email = (app.email ?? "").toLowerCase();
-    if (!email) continue;
-    // Bewerber, die schon einen Account haben, laufen über "mitarbeiter" oben.
-    if (emailToUser.has(email)) continue;
-    if (seen.has(email)) continue;
-    seen.add(email);
-    const firstName = (app as any).first_name ?? ((app as any).full_name ?? "").split(" ")[0] ?? "";
-    recipients.push({ email, first_name: firstName, kind: "bewerber" });
+    recipients.push({ email, first_name: firstName, profile_id: (p as any).id });
   }
 
   // ── Idempotenz-Anker ──

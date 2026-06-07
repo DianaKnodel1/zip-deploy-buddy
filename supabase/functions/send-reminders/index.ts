@@ -187,7 +187,21 @@ serve(async (req) => {
     const tenants = new Map<string, TenantRow>();
     (tList ?? []).forEach((t: any) => tenants.set(t.id, t as TenantRow));
 
-    const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), recoveryStats: new Map() };
+    const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), sentCountByTenant12h: new Map(), recoveryStats: new Map() };
+
+    // 12h-Cap pro Tenant vorladen (alle bisherigen sent in den letzten 12h).
+    {
+      const cutoff12h = new Date(Date.now() - 12 * 3600_000).toISOString();
+      const { data: recent } = await admin
+        .from("reminder_log")
+        .select("tenant_id")
+        .eq("status", "sent")
+        .gte("sent_at", cutoff12h);
+      for (const r of (recent ?? []) as Array<{ tenant_id: string | null }>) {
+        if (!r.tenant_id) continue;
+        ctx.sentCountByTenant12h.set(r.tenant_id, (ctx.sentCountByTenant12h.get(r.tenant_id) ?? 0) + 1);
+      }
+    }
 
     if (mode === "domain_recovery") {
       if (!recoveryTenantId) return json({ error: "tenant_id required for domain_recovery" }, 400);
@@ -322,9 +336,63 @@ function capReached(ctx: SendCtx, tenantId: string, type: ReminderType): boolean
   const key = `${tenantId}:${type}`;
   return (ctx.sentCountByTenantType.get(key) ?? 0) >= MAX_SENDS_PER_RUN_PER_TENANT;
 }
+// 12h-Obergrenze pro Tenant über alle Reminder-Typen.
+function tenant12hCapReached(ctx: SendCtx, tenantId: string): boolean {
+  return (ctx.sentCountByTenant12h.get(tenantId) ?? 0) >= MAX_SENDS_PER_TENANT_PER_12H;
+}
 function bumpSent(ctx: SendCtx, tenantId: string, type: ReminderType) {
   const key = `${tenantId}:${type}`;
   ctx.sentCountByTenantType.set(key, (ctx.sentCountByTenantType.get(key) ?? 0) + 1);
+  ctx.sentCountByTenant12h.set(tenantId, (ctx.sentCountByTenant12h.get(tenantId) ?? 0) + 1);
+}
+
+// Schreibt einen Eintrag in email_send_log (zentrale Logs-Tabelle, die das
+// Admin-UI /admin/email-logs anzeigt). Enthält gerendertes Subject/HTML und
+// Absender, damit die Vorschau auch für Reminder-Mails funktioniert.
+async function logEmailSend(
+  admin: SendCtx["admin"],
+  tenant: TenantRow | null,
+  type: ReminderType,
+  email: string,
+  subject: string,
+  html: string | null,
+  status: "sent" | "failed",
+  error?: string,
+  extraMeta?: Record<string, unknown>,
+) {
+  try {
+    const senderEmail = tenant ? (tenant.sender_email ?? tenant.smtp_username ?? null) : null;
+    const fromName = tenant ? (tenant.sender_name ?? tenant.name) : null;
+    const messageId = `${type}-${crypto.randomUUID()}`;
+    const templateMap: Record<ReminderType, string> = {
+      invite: "reminder_invite",
+      confirm_email: "reminder_confirm_email",
+      complete_registration: "reminder_complete_registration",
+      no_recent_booking: "reminder_no_recent_booking",
+      domain_recovery: "reminder_domain_recovery",
+    };
+    await admin.from("email_send_log").insert({
+      message_id: messageId,
+      template_name: templateMap[type],
+      recipient_email: email,
+      status,
+      error_message: error ?? null,
+      rendered_subject: subject,
+      rendered_html: html,
+      sender_email: senderEmail,
+      tenant_id: tenant?.id ?? null,
+      metadata: {
+        reminder_type: type,
+        from_name: fromName,
+        from_email: senderEmail,
+        smtp_host: tenant?.smtp_host ?? null,
+        subject,
+        ...(extraMeta ?? {}),
+      },
+    });
+  } catch (e) {
+    console.error("logEmailSend failed", e);
+  }
 }
 
 // ───── 1. Invite-Reminder ─────

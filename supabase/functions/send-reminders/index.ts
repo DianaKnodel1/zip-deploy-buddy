@@ -535,12 +535,13 @@ async function runNoRecentBooking(ctx: SendCtx) {
     const tenant = (p as any).tenant_id ? ctx.tenants.get((p as any).tenant_id) : null;
     if (!hasValidSmtp(tenant)) {
       ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "no_tenant_smtp" });
+      await logSkipped(ctx.admin, email, (p as any).tenant_id ?? null, "no_recent_booking", "no_tenant_smtp");
       continue;
     }
-    if (capReached(ctx, tenant.id, "no_recent_booking")) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_run_cap_reached" }); continue; }
+    if (capReached(ctx, tenant.id, "no_recent_booking")) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_run_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "no_recent_booking");
-    if (!gate.ok) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: gate.reason }); continue; }
+    if (!gate.ok) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", gate.reason ?? "skip"); continue; }
 
     if (ctx.dryRun) { ctx.results.push({ type: "no_recent_booking", email, status: "sent" }); continue; }
 

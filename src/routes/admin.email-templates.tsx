@@ -619,32 +619,15 @@ function AdminEmailTemplatesPage() {
               </TabsContent>
               <TabsContent value="recovery">
                 <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 mb-3 text-[11px] text-amber-900 dark:text-amber-200">
-                  Einmaliger Versand pro Empfänger, wenn du im Admin die <strong>primäre Portal-Domain</strong> wechselst — getrennte Texte für Mitarbeiter (Login zum Portal) und akzeptierte Bewerber (Registrierung).
+                  Einmaliger Versand pro Mitarbeiter, wenn du im Admin die <strong>primäre Portal-Domain</strong> wechselst. Bewerber laufen über die normale Einladungs-Erinnerung mit der aktuellen Portal-URL — kein eigenes Template nötig.
                 </div>
-                <Tabs defaultValue="recovery_mitarbeiter" className="space-y-3">
-                  <TabsList>
-                    <TabsTrigger value="recovery_mitarbeiter" className="text-xs">Mitarbeiter</TabsTrigger>
-                    <TabsTrigger value="recovery_bewerber" className="text-xs">Akzeptierte Bewerber</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="recovery_mitarbeiter">
-                    <TemplateEditor
-                      label="Domain-Wechsel – Mitarbeiter"
-                      subject={rRecoveryMaSubject} onSubjectChange={setRRecoveryMaSubject}
-                      body={rRecoveryMaBody} onBodyChange={setRRecoveryMaBody}
-                      signature={signature} onSignatureChange={setSignature}
-                      tenant={selectedTenant}
-                    />
-                  </TabsContent>
-                  <TabsContent value="recovery_bewerber">
-                    <TemplateEditor
-                      label="Domain-Wechsel – akzeptierte Bewerber"
-                      subject={rRecoveryBewSubject} onSubjectChange={setRRecoveryBewSubject}
-                      body={rRecoveryBewBody} onBodyChange={setRRecoveryBewBody}
-                      signature={signature} onSignatureChange={setSignature}
-                      tenant={selectedTenant}
-                    />
-                  </TabsContent>
-                </Tabs>
+                <TemplateEditor
+                  label="Domain-Wechsel – Mitarbeiter"
+                  subject={rRecoveryMaSubject} onSubjectChange={setRRecoveryMaSubject}
+                  body={rRecoveryMaBody} onBodyChange={setRRecoveryMaBody}
+                  signature={signature} onSignatureChange={setSignature}
+                  tenant={selectedTenant}
+                />
               </TabsContent>
             </Tabs>
           </TabsContent>

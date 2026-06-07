@@ -286,12 +286,29 @@ async function logReminder(
   tenantId: string | null,
   type: ReminderType,
   attempt: number,
-  status: "sent" | "failed",
+  status: "sent" | "failed" | "skipped",
   error?: string,
 ) {
   await admin.from("reminder_log").insert({
-    email, tenant_id: tenantId, reminder_type: type, attempt, status, error: error ?? null,
+    email, tenant_id: tenantId, reminder_type: type, attempt: Math.max(1, attempt), status, error: error ?? null,
   });
+}
+
+// Skipped-Events ebenfalls persistieren, damit der Admin-Audit-Log alle
+// übersprungenen Empfänger nachvollziehen kann (cap, bounced, too_soon, …).
+async function logSkipped(
+  admin: SendCtx["admin"],
+  email: string,
+  tenantId: string | null,
+  type: ReminderType,
+  reason: string,
+) {
+  if (!email) return;
+  try {
+    await admin.from("reminder_log").insert({
+      email, tenant_id: tenantId, reminder_type: type, attempt: 1, status: "skipped", error: reason,
+    });
+  } catch { /* best-effort */ }
 }
 
 // Cap-Check pro Tenant + Typ

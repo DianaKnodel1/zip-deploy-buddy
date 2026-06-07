@@ -5,6 +5,7 @@ export const Route = createFileRoute("/admin/email-logs")({
 });
 
 import { useState, useEffect, useMemo } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { EmptyState } from "@/components/EmptyState";
-import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Eye, Send } from "lucide-react";
+import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Eye, Send, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -24,12 +25,14 @@ import {
   EMAIL_TYPE_LABELS,
   computeEmailStats,
 } from "@/lib/email-stats";
+import { acknowledgeFailedEmails } from "@/lib/email-log-ack.functions";
 
 type EmailLogFull = EmailLog & {
   rendered_html?: string | null;
   rendered_subject?: string | null;
   sender_email?: string | null;
   tenant_id?: string | null;
+  acknowledged_at?: string | null;
 };
 
 function AdminEmailLogsPage() {
@@ -41,6 +44,8 @@ function AdminEmailLogsPage() {
   const [resending, setResending] = useState<string | null>(null);
   const [previewLog, setPreviewLog] = useState<EmailLogFull | null>(null);
   const [sendingTest, setSendingTest] = useState(false);
+  const [acking, setAcking] = useState(false);
+  const ackFn = useServerFn(acknowledgeFailedEmails);
   const { toast } = useToast();
 
   const loadData = async () => {

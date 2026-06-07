@@ -16,9 +16,13 @@ import {
   getAffectedRecipients,
   getRecoveryStatus,
   getRecoveryPreview,
+  listBouncedRecipients,
+  resetEmailStatus,
   type AffectedRecipient,
   type RecoveryStatusEntry,
+  type BouncedRecipient,
 } from "@/lib/tenant-domains.functions";
+import { MailX, Undo2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/recovery")({
   component: AdminRecoveryPage,

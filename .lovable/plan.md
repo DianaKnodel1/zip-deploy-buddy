@@ -1,62 +1,62 @@
-## Antworten kurz + Fixes pro Punkt
 
-### 1. HTML-Vorschau & Absender fehlen (auch bei heutiger Mail)
-Ursache: Die Edge-Function `send-reminders` schreibt aktuell **nichts** in `email_send_log` — sie hat eine eigene Tabelle `reminder_log` (ohne HTML/Absender). Deshalb zeigt der Logs-Modal "kein gerendertes HTML gespeichert". Der Hinweis "Neu versendete Mails ab dem Update…" war Wunsch, ist aber bei Reminder-Mails noch nicht aktiv.
+## Befunde aus dem Code
 
-**Fix:** `send-reminders` zusätzlich in `email_send_log` schreiben — mit `rendered_subject`, `rendered_html`, `sender_email`, `tenant_id`, `metadata.smtp_host`, `message_id`. Sowohl bei Erfolg als auch Fehler (bei Fehler ohne `rendered_html` falls vor dem Render abgebrochen, sonst mit). Danach: Vorschau funktioniert für alle künftigen Reminder.
+1. **Passwort vergessen schlägt fehl für registrierte Nutzer** (Screenshot 1)
+   - `src/routes/forgot-password.tsx` ruft `supabase.auth.resetPasswordForEmail()` → das ist Supabase-Auth-SMTP (NICHT Tenant-SMTP). Für unbekannte E-Mails antwortet Supabase mit „ok" ohne zu senden, deshalb funktioniert es nur dort scheinbar. Für registrierte Adressen läuft Supabase ins Rate-Limit / SMTP-Fehler („Error sending recovery email").
+   - Fix: eigene Server-Funktion, die per `supabaseAdmin.auth.admin.generateLink({ type: "recovery" })` einen Reset-Link erzeugt und ihn mit dem **Tenant-SMTP** des passenden Tenants verschickt (genau wie Reminder/Recovery jetzt schon). Reset-Subject/-Body kommen aus `tenants.reset_email_subject/body` (Spalten existieren bereits).
 
-Für die heutige 7.6. 03:54-Mail: kann **rückwirkend nicht** wiederhergestellt werden — Vorschau erst ab nächstem Run.
+2. **Sabine Frauki ohne Tenant sichtbar** (Screenshot 2+3)
+   - In Listen und Detail (`admin.applications.index.tsx`, `admin.employees.$userId.tsx`) gibt es keine Tenant-Anzeige im Header. Tenant muss überall sichtbar sein, damit man sofort sieht, zu welchem Mandant ein Datensatz gehört.
 
-### 2. Banner "Aktion erforderlich – 40 E-Mails"
-Aktuell zählt der Banner **alle** failed-Logs (auch alte permanente Fehler wie SMTP-Auth-Failure). Das ist Lärm.
+3. **Individueller Vertrag wird ignoriert / alter Vertrag bleibt sichtbar** (Screenshots 4+5)
+   - `src/routes/_employee/contract.tsx` Z. 318: wenn ein `contracts`-Eintrag existiert, wird direkt der alte signierte Vertrag gezeigt. Der Override-Branch (Z. 412) wird nur erreicht, wenn KEIN `contract` existiert.
+   - Beim Speichern eines neuen Overrides setzen wir `contract_signed_at = null` im Profil, aber der alte `contracts`-Datensatz bleibt liegen → daher das alte PDF.
+   - Fix: Im Employee-View Override-`updated_at` mit `contract.signed_at` vergleichen. Ist Override neuer → alten Vertrag ausblenden, OverrideSigning anzeigen. Beim erfolgreichen Re-Signing wird ein neuer `contracts`-Eintrag erzeugt (passiert bereits in `handleSignContract`), der dann der aktuelle ist.
 
-**Fix:**
-- Banner zählt nur Fails der **letzten 24h**, die **nicht "bounced/auth-failed permanent"** sind.
-- Button "Alle als bearbeitet markieren" → setzt eine neue Spalte `acknowledged_at` in `email_send_log`. Acknowledgte Fails fallen aus dem Banner raus, bleiben aber in der Tabelle sichtbar (mit Badge "bearbeitet").
-- Banner-Text: konkrete Empfehlung ("SMTP-Login prüfen", "Bounce-Liste leeren") basierend auf häufigster Fehlerursache der letzten 24h.
+4. **Domain-Wechsel (.de → .com) und Accept-Mail**
+   - Reminder/Recovery-Cron nutzt bereits `primary_domain ?? domain` ✓
+   - SMTP wird pro Tenant aus `tenants.smtp_*` geladen — Wechsel der Sender-Domain passiert KEIN Cross-Tenant-Routing ✓
+   - **Aber**: `admin.applications.index.tsx` baut den Accept-Link aus `tenant.domain` (Z. 78–80), nicht aus `primary_domain`. Nach Umschalten auf `.com` würde der Bewerber weiter `.de` bekommen.
+   - Fix: TenantMap auch `primary_domain` laden und Link mit `primary_domain ?? domain` bauen.
 
-### 3. "Reminder-Cron" Karte auf /admin/recovery zeigt "Unbekannt"
-"Unbekannt" = noch nie ein Cron-Run im `reminder_log` registriert. Die Karte zeigt Cron-Health (wann lief der automatische 5-Min-Job zuletzt) — ist eine andere Sicht als die Reminder-Tabelle (welche Mails). Aber auf der Recovery-Seite verwirrt sie.
+## Änderungen
 
-**Fix:** Karte von `/admin/recovery` **entfernen** (gehört thematisch zu Reminders) und stattdessen auf `/admin/reminders` oben einblenden. Auf Recovery bleibt nur der Recovery-eigene Cron-Status.
+### A) Passwort vergessen via Tenant-SMTP
+Neue Server-Funktion `requestTenantPasswordReset` (`src/lib/password-reset.functions.ts`, publik, kein Auth-Middleware):
+- Input: `{ email, host }` (host = `window.location.hostname` vom Client).
+- Tenant via Host (primary + aliases) auflösen, sonst erster aktiver Tenant.
+- `supabaseAdmin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: https://portal.<primary>/reset-password } })`.
+- Wenn `tenant.smtp_*` vorhanden: Mail via gleichem nodemailer-ähnlichen Pfad wie `send-reminders` (kleiner Helper extrahieren, oder direkt `nodemailer` im Server-Function). Subject/Body aus `tenants.reset_email_subject/body` (Fallback Default). Platzhalter: `{{reset_url}}`, `{{first_name}}`.
+- In `email_send_log` schreiben (template_name=`password_reset`).
+- Antwort: immer `{ ok: true }` (keine User-Enumeration).
+- `forgot-password.tsx` ruft diese Funktion statt `supabase.auth.resetPasswordForEmail`.
 
-### 4. Reminder-Limit pro Tenant
-Aktuell: `MAX_SENDS_PER_RUN_PER_TENANT = 50` pro Typ pro Run. Bei 4 Typen × 5-Min-Cron × 12h = theoretisch 12 000 / Tenant — aber praktisch limitiert durch Empfängerpool. Gewünscht: **240 Mails / 12h pro Tenant** als harte Obergrenze.
+### B) Tenant überall sichtbar
+- `admin.employees.$userId.tsx`: Tenant-Name als Badge neben Name (analog Status).
+- `admin.applications.index.tsx`: Tenant-Spalte bzw. -Badge in der Zeile.
 
-**Fix:** Neuer Check in `send-reminders`: vor Versand pro Tenant zählen, wieviele Mails dieser Tenant in den letzten 12h verschickt hat (aus `reminder_log` `status='sent'`). Wenn ≥ 240 → alle weiteren Mails dieses Tenants in diesem Run skippen mit Grund `tenant_12h_cap_reached`. Konfigurierbar als Konstante `MAX_SENDS_PER_TENANT_PER_12H = 240`.
+### C) Override aktualisiert alten Vertrag
+`src/routes/_employee/contract.tsx`:
+- Beim Laden zusätzlich `override.updated_at` mitnehmen (bereits in `getMyContractOverride`).
+- Render-Logik:
+  ```
+  const overrideNewer = override && override.updated_at && contract
+    && new Date(override.updated_at) > new Date(contract.signed_at);
+  if (override && (override.html_body || override.pdf_url) && (!contract || overrideNewer)) {
+    return <OverrideSigning .../>
+  }
+  ```
+- Beim Speichern eines Overrides (Admin): `contracts.signed_at = null`? — nein, der alte Vertrag bleibt als Historie. Nur Sichtbarkeit umschalten.
 
-### 5. Mail beim Akzeptieren der Bewerbung
-✅ Bereits aktiv — `sendWelcomeEmail()` wird in `admin.applications.$appId.tsx` direkt aufgerufen wenn Status auf `akzeptiert` geht. Fallback über `reminder_invite` Cron falls Sofort-Mail fehlschlägt. Keine Änderung nötig.
+### D) Accept-Mail-Link auf primary_domain
+- In `admin.applications.index.tsx` Tenant-Map um `primary_domain` erweitern und Link entsprechend bauen.
 
-### 6. Passwort-vergessen / Registrieren scheitert bei `serkanmelihoff23@outlook.de`
-Wichtig: Das sind **Supabase-Auth-Mails** (recovery, signup-confirmation) — die laufen **nicht** über Tenant-SMTP, sondern über den Default-Supabase-Mailer oder den in Supabase-Project konfigurierten Custom SMTP. Fehler "Error sending recovery email" = Supabase konnte die Mail nicht rausgeben.
+## Was sich NICHT ändert
+- Reminder-Cron, Recovery-Cron, SMTP-Routing pro Tenant — bereits korrekt.
+- Auth-Mails von Supabase (Confirm-Mail) bleiben Supabase-SMTP (nur Passwort-Reset wird auf Tenant-SMTP umgestellt, weil das der primäre Schmerz ist).
 
-Mögliche Ursachen (von wahrscheinlich nach unwahrscheinlich):
-1. **Diese Adresse ist auf Supabase-Rate-Limit/Bounce-Sperre** (du hast sie zigfach getestet → Supabase blockt sie temporär für ~1h).
-2. **Default-Supabase-SMTP** hat 4 Mails/h Limit — bei vielen Tests sofort erschöpft.
-3. Kein Custom SMTP in Supabase Auth → Settings hinterlegt.
+## Migration
+Keine neue Migration nötig — alle Spalten existieren bereits.
 
-**Fix-Schritte (ohne Code):**
-- In Supabase Dashboard → Authentication → Email Templates → **Custom SMTP aktivieren** mit den gleichen Privateemail-Daten wie im Tenant (oder einem dedizierten Auth-SMTP).
-- Solange das nicht passiert: Test mit **anderer Adresse** (z.B. neue Gmail). Wenn die geht → Rate-Limit auf deiner Outlook-Adresse.
-
-**Code-Seite** ist sauber — `forgot-password.tsx` ruft korrekt `supabase.auth.resetPasswordForEmail()` auf.
-
-## Implementierungs-Reihenfolge
-1. **#1 + #4 zusammen**: Edge-Function `send-reminders` patchen (Logs in `email_send_log` schreiben + 12h-Cap pro Tenant). Manueller Redeploy.
-2. **#2**: Migration `email_send_log.acknowledged_at`, Banner-Logik + Button im UI.
-3. **#3**: Cron-Karte von `/admin/recovery` entfernen, in `/admin/reminders` einbauen.
-4. **#5**: nichts zu tun, nur dem User bestätigt.
-5. **#6**: Nur Doku-Antwort an User (Supabase Dashboard-Aktion nötig — kein Code).
-
-## Geänderte/neue Dateien
-- `supabase/functions/send-reminders/index.ts` (Logs schreiben + 12h-Cap)
-- `supabase/manual-migrations/20260607010000_email_log_acknowledged.sql` (neu)
-- `src/routes/admin.email-logs.tsx` (Banner-Filter, Ack-Button, Badge)
-- `src/routes/admin.recovery.tsx` (Cron-Karte entfernen)
-- `src/routes/admin.reminders.tsx` (Cron-Karte oben einblenden)
-
-## Bewusst NICHT in diesem Schritt
-- Supabase-Auth-SMTP-Konfiguration (Dashboard-Aktion durch dich).
-- Rückwirkende HTML-Wiederherstellung alter Logs (technisch unmöglich).
-- Soft-Bounce-Klassifizierung (separates Thema, später).
+## Manuelle Schritte nach Deploy
+Keine. Nur Vorhandensein der `reset_email_subject/body` auf Tenants prüfen; sonst greift Default-Template.

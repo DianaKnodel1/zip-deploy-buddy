@@ -234,6 +234,10 @@ async function canSend(
   email: string,
   type: ReminderType,
 ): Promise<{ ok: boolean; nextAttempt: number; reason?: string }> {
+  // Bounce-Schutz: tote Adressen niemals erneut anschreiben.
+  const isBounced = await isEmailBounced(admin, email);
+  if (isBounced) return { ok: false, nextAttempt: 0, reason: "email_bounced" };
+
   const { data, error } = await admin
     .from("reminder_log")
     .select("attempt, sent_at, status")
@@ -251,6 +255,31 @@ async function canSend(
     if (ageDays < MIN_DAYS_BETWEEN) return { ok: false, nextAttempt: 0, reason: "too_soon" };
   }
   return { ok: true, nextAttempt: sentLogs.length + 1 };
+}
+
+async function isEmailBounced(admin: SendCtx["admin"], email: string): Promise<boolean> {
+  const lc = email.toLowerCase();
+  // Check applications zuerst (häufiger Treffer für invite-Flow)
+  const { data: app } = await admin
+    .from("applications")
+    .select("email_status")
+    .ilike("email", lc)
+    .neq("email_status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (app) return true;
+  // Profiles via auth.users (E-Mail liegt nicht in profiles)
+  const { data: usersList } = await admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
+  const user = (usersList?.users ?? []).find((u: any) => (u.email ?? "").toLowerCase() === lc);
+  if (!user) return false;
+  const { data: prof } = await admin
+    .from("profiles")
+    .select("email_status")
+    .eq("user_id", user.id)
+    .neq("email_status", "active")
+    .limit(1)
+    .maybeSingle();
+  return !!prof;
 }
 
 async function logReminder(

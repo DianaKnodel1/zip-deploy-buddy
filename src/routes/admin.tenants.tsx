@@ -5,9 +5,11 @@ export const Route = createFileRoute("/admin/tenants")({
 });
 
 import { useState, useRef } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/image-compression";
 import { useAllTenants, type Tenant } from "@/hooks/use-tenant";
+import { switchToNewPrimaryDomain } from "@/lib/tenant-domains.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,9 +20,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/EmptyState";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Plus, Pencil, Trash2, User, Mail, Loader2, AlertTriangle, CheckCircle2, PenTool } from "lucide-react";
+import { Globe, Plus, Pencil, Trash2, User, Mail, Loader2, AlertTriangle, CheckCircle2, PenTool, ArrowRightLeft } from "lucide-react";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { SignatureGenerator } from "@/components/SignatureGenerator";
+
 
 function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void }) {
   const [name, setName] = useState(tenant?.name ?? "");

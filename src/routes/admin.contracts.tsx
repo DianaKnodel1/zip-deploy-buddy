@@ -18,7 +18,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
-import { Plus, Pencil, Copy, FileText, Info } from "lucide-react";
+import { Plus, Pencil, Copy, FileText, Info, Trash2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
@@ -166,6 +170,16 @@ function AdminContractsPage() {
     loadTemplates();
   };
 
+  const handleDelete = async (t: Template) => {
+    const { error } = await supabase.from("contract_templates").delete().eq("id", t.id);
+    if (error) {
+      toast({ title: "Fehler beim Löschen", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Template gelöscht" });
+    loadTemplates();
+  };
+
   const filtered = templates.filter((t) => {
     if (filterTenant !== "all" && t.tenant_id !== filterTenant) return false;
     if (filterType !== "all" && t.employment_type !== filterType) return false;
@@ -264,6 +278,30 @@ function AdminContractsPage() {
                   <Switch checked={t.is_active} onCheckedChange={() => toggleActive(t)} />
                   <Button variant="ghost" size="icon" onClick={() => openEdit(t)}><Pencil className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" onClick={() => handleDuplicate(t)}><Copy className="h-4 w-4" /></Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Template „{t.title}" löschen?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Diese Aktion kann nicht rückgängig gemacht werden. Bereits generierte Verträge bleiben erhalten.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(t)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Endgültig löschen
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardContent>
             </Card>

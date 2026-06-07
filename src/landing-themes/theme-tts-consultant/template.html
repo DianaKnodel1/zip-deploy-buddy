@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{{firmenname}} — Unternehmensberatung</title>
+<meta name="description" content="{{firmenname}} — Strategische Unternehmensberatung für den Mittelstand." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="icon" href="assets/favicon.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-row">
+    <a href="#start" class="logo"><img src="assets/logo.png" alt="{{firmenname}}" class="logo-img"/><span class="logo-text">{{firmenname}}</span></a>
+    <button id="burger" class="burger" aria-label="Menü">☰</button>
+    <nav id="nav-links" class="nav-links">
+      <a href="#leistungen">Leistungen</a>
+      <a href="#prozess">Prozess</a>
+      <a href="#stimmen">Stimmen</a>
+      <a href="#faq">FAQ</a>
+      <a href="#kontakt">Kontakt</a>
+    </nav>
+    <a href="#kontakt" class="btn btn-accent nav-cta">Erstgespräch →</a>
+  </div>
+</header>
+
+<section id="start" class="hero">
+  <div class="container hero-grid">
+    <div class="hero-text" data-animate>
+      <span class="kicker">{{hero_kicker}}</span>
+      <h1>{{hero_title}}</h1>
+      <p class="lead">{{hero_subtitle}}</p>
+      <div class="hero-ctas">
+        <a href="#kontakt" class="btn btn-accent btn-lg">{{hero_cta_primary}}</a>
+        <a href="#leistungen" class="btn btn-outline btn-lg">{{hero_cta_secondary}}</a>
+      </div>
+    </div>
+    <div class="hero-media" data-animate>
+      <img src="{{hero_image}}" alt="Beratung" />
+    </div>
+  </div>
+</section>
+
+<section class="trust-strip">
+  <div class="container">
+    <p class="trust-label">{{trust_label}}</p>
+    <div class="trust-items">
+      <div class="trust-item">{{trust_1}}</div>
+      <div class="trust-item">{{trust_2}}</div>
+      <div class="trust-item">{{trust_3}}</div>
+      <div class="trust-item">{{trust_4}}</div>
+    </div>
+  </div>
+</section>
+
+<section id="leistungen" class="services">
+  <div class="container">
+    <div class="section-head" data-animate>
+      <h2>{{services_title}}</h2>
+      <p>{{services_subtitle}}</p>
+    </div>
+    <div class="services-grid">
+      <div class="service-card" data-animate><div class="service-num">01</div><h3>{{service_1_title}}</h3><p>{{service_1_body}}</p></div>
+      <div class="service-card" data-animate><div class="service-num">02</div><h3>{{service_2_title}}</h3><p>{{service_2_body}}</p></div>
+      <div class="service-card" data-animate><div class="service-num">03</div><h3>{{service_3_title}}</h3><p>{{service_3_body}}</p></div>
+      <div class="service-card" data-animate><div class="service-num">04</div><h3>{{service_4_title}}</h3><p>{{service_4_body}}</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="prozess" class="process">
+  <div class="container">
+    <div class="section-head" data-animate><h2>{{process_title}}</h2></div>
+    <ol class="timeline">
+      <li data-animate><span class="t-num">1</span><div><h4>{{step_1}}</h4></div></li>
+      <li data-animate><span class="t-num">2</span><div><h4>{{step_2}}</h4></div></li>
+      <li data-animate><span class="t-num">3</span><div><h4>{{step_3}}</h4></div></li>
+      <li data-animate><span class="t-num">4</span><div><h4>{{step_4}}</h4></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="stimmen" class="testimonial">
+  <div class="container" data-animate>
+    <blockquote>„{{testimonial_quote}}"</blockquote>
+    <cite>— {{testimonial_author}}</cite>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="container">
+    <div class="section-head" data-animate><h2>{{faq_title}}</h2></div>
+    <div class="faq-list">
+      <div class="faq-item"><button class="faq-q" type="button">{{faq_1_q}} <span class="faq-ico">+</span></button><div class="faq-a"><p>{{faq_1_a}}</p></div></div>
+      <div class="faq-item"><button class="faq-q" type="button">{{faq_2_q}} <span class="faq-ico">+</span></button><div class="faq-a"><p>{{faq_2_a}}</p></div></div>
+      <div class="faq-item"><button class="faq-q" type="button">{{faq_3_q}} <span class="faq-ico">+</span></button><div class="faq-a"><p>{{faq_3_a}}</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="kontakt" class="cta">
+  <div class="container cta-grid">
+    <div data-animate>
+      <h2>{{cta_title}}</h2>
+      <p>{{cta_body}}</p>
+      <p class="cta-meta">📞 {{telefon}} &nbsp;·&nbsp; ✉ {{email}}</p>
+    </div>
+    <form id="application-form" class="lead-form" data-animate>
+      <h3>Erstgespräch anfragen</h3>
+      <label>Name<input name="full_name" required /></label>
+      <label>E-Mail<input type="email" name="email" required /></label>
+      <label>Telefon<input name="phone" /></label>
+      <label>Unternehmen<input name="company" /></label>
+      <label>Ihre Anfrage<textarea name="message" rows="3"></textarea></label>
+      <button type="submit" class="btn btn-accent btn-lg btn-block">Absenden</button>
+      <p id="form-status" class="status"></p>
+    </form>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <p class="footer-logo">{{firmenname}}</p>
+      <p>{{strasse}}<br/>{{plz}} {{stadt}}</p>
+      <p>📞 {{telefon}}<br/>✉ {{email}}</p>
+    </div>
+    <div>
+      <h5>Rechtliches</h5>
+      <p>HRB {{hrb}}<br/>{{registergericht}}<br/>USt-IdNr: {{ust_id}}<br/>Geschäftsführer: {{geschaeftsfuehrer}}</p>
+    </div>
+    <div>
+      <h5>Links</h5>
+      <a href="#leistungen">Leistungen</a>
+      <a href="#prozess">Prozess</a>
+      <a href="#faq">FAQ</a>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <p>© <span id="year"></span> {{firmenname}}. Alle Rechte vorbehalten.</p>
+  </div>
+</footer>
+
+<script>document.getElementById('year').textContent=new Date().getFullYear();</script>
+<script src="script.js"></script>
+</body>
+</html>

@@ -481,3 +481,72 @@ export const resetEmailStatus = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
+
+// ============================================================
+// 8) Domain-Wechsel-Wizard: neue Domain hinzufügen + als primary setzen
+//    + alte Primary als Alias behalten — alles atomar in einem Call.
+// ============================================================
+
+export const switchToNewPrimaryDomain = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({
+      tenant_id: z.string().uuid(),
+      new_domain: z.string().min(3).max(253),
+    }).parse(input)
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const sb = supabaseAdmin as any;
+    const target = normalizeDomain(data.new_domain);
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(target)) {
+      throw new Error(`Ungültige Domain: ${target}`);
+    }
+
+    const { data: tenant, error } = await sb
+      .from("tenants")
+      .select("id,domain,domain_aliases,primary_domain")
+      .eq("id", data.tenant_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!tenant) throw new Error("Tenant nicht gefunden");
+
+    const currentPrimary = normalizeDomain(tenant.primary_domain ?? tenant.domain);
+    const root = normalizeDomain(tenant.domain);
+    const existingAliases: string[] = Array.isArray(tenant.domain_aliases)
+      ? tenant.domain_aliases.map((s: string) => normalizeDomain(s))
+      : [];
+
+    if (target === currentPrimary) {
+      return { ok: true, primary_domain: target, aliases: existingAliases, unchanged: true };
+    }
+
+    // Neue Aliases = vorhandene + alte Primary (falls != root) + alte Root (falls schon andere Primary war)
+    const newAliasSet = new Set<string>(existingAliases);
+    if (currentPrimary && currentPrimary !== target) newAliasSet.add(currentPrimary);
+    if (root && root !== target) newAliasSet.add(root);
+    newAliasSet.delete(target); // target nie als Alias
+    const newAliases = Array.from(newAliasSet);
+
+    const { error: upErr } = await sb
+      .from("tenants")
+      .update({
+        primary_domain: target,
+        primary_domain_changed_at: new Date().toISOString(),
+        domain_aliases: newAliases,
+      })
+      .eq("id", data.tenant_id);
+    if (upErr) throw new Error(upErr.message);
+
+    try {
+      await sb.from("activity_log").insert({
+        action: "domain_gewechselt_wizard",
+        entity_type: "tenant",
+        entity_id: data.tenant_id,
+        actor_id: context.userId,
+        comment: `Primary: ${currentPrimary} → ${target}. Aliase: ${newAliases.join(", ") || "—"}`,
+      });
+    } catch {}
+
+    return { ok: true, primary_domain: target, aliases: newAliases, previous_primary: currentPrimary };
+  });

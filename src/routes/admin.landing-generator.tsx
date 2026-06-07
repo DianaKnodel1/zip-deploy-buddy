@@ -466,7 +466,19 @@ document.addEventListener('click', function(e){
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                 <Eye className="h-3.5 w-3.5" /> Live-Vorschau
               </div>
-              <span className="text-[10px] text-muted-foreground">aktualisiert live</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 text-xs"
+                onClick={() => {
+                  const blob = new Blob([previewSrcDoc], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, "_blank", "noopener,noreferrer");
+                  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> In neuem Tab öffnen
+              </Button>
             </div>
             <div className="rounded-lg border-2 border-border overflow-hidden bg-background shadow-sm">
               <div className="flex items-center gap-1.5 bg-muted/50 px-3 py-2 border-b">

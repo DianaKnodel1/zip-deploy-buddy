@@ -1,62 +1,77 @@
+# Plan: E-Mail-Härtung + Landing-Modul fertigbauen
 
-## Befunde aus dem Code
+## Teil 1 — E-Mail-Härtung (klein, 1 Schritt)
 
-1. **Passwort vergessen schlägt fehl für registrierte Nutzer** (Screenshot 1)
-   - `src/routes/forgot-password.tsx` ruft `supabase.auth.resetPasswordForEmail()` → das ist Supabase-Auth-SMTP (NICHT Tenant-SMTP). Für unbekannte E-Mails antwortet Supabase mit „ok" ohne zu senden, deshalb funktioniert es nur dort scheinbar. Für registrierte Adressen läuft Supabase ins Rate-Limit / SMTP-Fehler („Error sending recovery email").
-   - Fix: eigene Server-Funktion, die per `supabaseAdmin.auth.admin.generateLink({ type: "recovery" })` einen Reset-Link erzeugt und ihn mit dem **Tenant-SMTP** des passenden Tenants verschickt (genau wie Reminder/Recovery jetzt schon). Reset-Subject/-Body kommen aus `tenants.reset_email_subject/body` (Spalten existieren bereits).
+### A) Sender-Domain-Mismatch-Warner
+Im Tenant-Edit-Dialog (`/admin/tenants`): wenn `sender_email`-Domain weder zu `domain`, `primary_domain` noch zu `domain_aliases` passt → roter Banner „Sender-Domain passt nicht zur Tenant-Domain — Mails landen wahrscheinlich im Spam". Nur Warnung, kein Block (manche nutzen bewusst Subdomain wie `mail.…`).
 
-2. **Sabine Frauki ohne Tenant sichtbar** (Screenshot 2+3)
-   - In Listen und Detail (`admin.applications.index.tsx`, `admin.employees.$userId.tsx`) gibt es keine Tenant-Anzeige im Header. Tenant muss überall sichtbar sein, damit man sofort sieht, zu welchem Mandant ein Datensatz gehört.
+### B) SMTP-Health-Check-Button
+Neue Server-Funktion `testTenantSmtp({ tenantId, recipient })`:
+- lädt Tenant per ID
+- baut nodemailer-Transport mit `tenant.smtp_*`
+- sendet kurze Test-Mail („SMTP-Test von …")
+- loggt in `email_send_log` mit `template_name='smtp_test'`
+- Response: `{ ok, error? }`
 
-3. **Individueller Vertrag wird ignoriert / alter Vertrag bleibt sichtbar** (Screenshots 4+5)
-   - `src/routes/_employee/contract.tsx` Z. 318: wenn ein `contracts`-Eintrag existiert, wird direkt der alte signierte Vertrag gezeigt. Der Override-Branch (Z. 412) wird nur erreicht, wenn KEIN `contract` existiert.
-   - Beim Speichern eines neuen Overrides setzen wir `contract_signed_at = null` im Profil, aber der alte `contracts`-Datensatz bleibt liegen → daher das alte PDF.
-   - Fix: Im Employee-View Override-`updated_at` mit `contract.signed_at` vergleichen. Ist Override neuer → alten Vertrag ausblenden, OverrideSigning anzeigen. Beim erfolgreichen Re-Signing wird ein neuer `contracts`-Eintrag erzeugt (passiert bereits in `handleSignContract`), der dann der aktuelle ist.
+Button im Tenant-Edit-Dialog: „Test-Mail senden an…" + Empfänger-Eingabe.
 
-4. **Domain-Wechsel (.de → .com) und Accept-Mail**
-   - Reminder/Recovery-Cron nutzt bereits `primary_domain ?? domain` ✓
-   - SMTP wird pro Tenant aus `tenants.smtp_*` geladen — Wechsel der Sender-Domain passiert KEIN Cross-Tenant-Routing ✓
-   - **Aber**: `admin.applications.index.tsx` baut den Accept-Link aus `tenant.domain` (Z. 78–80), nicht aus `primary_domain`. Nach Umschalten auf `.com` würde der Bewerber weiter `.de` bekommen.
-   - Fix: TenantMap auch `primary_domain` laden und Link mit `primary_domain ?? domain` bauen.
+---
 
-## Änderungen
+## Teil 2 — Landing-Page-Modul ausbauen
 
-### A) Passwort vergessen via Tenant-SMTP
-Neue Server-Funktion `requestTenantPasswordReset` (`src/lib/password-reset.functions.ts`, publik, kein Auth-Middleware):
-- Input: `{ email, host }` (host = `window.location.hostname` vom Client).
-- Tenant via Host (primary + aliases) auflösen, sonst erster aktiver Tenant.
-- `supabaseAdmin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: https://portal.<primary>/reset-password } })`.
-- Wenn `tenant.smtp_*` vorhanden: Mail via gleichem nodemailer-ähnlichen Pfad wie `send-reminders` (kleiner Helper extrahieren, oder direkt `nodemailer` im Server-Function). Subject/Body aus `tenants.reset_email_subject/body` (Fallback Default). Platzhalter: `{{reset_url}}`, `{{first_name}}`.
-- In `email_send_log` schreiben (template_name=`password_reset`).
-- Antwort: immer `{ ok: true }` (keine User-Enumeration).
-- `forgot-password.tsx` ruft diese Funktion statt `supabase.auth.resetPasswordForEmail`.
+### C) Live-Preview pro Theme (Iframe mit Branding live gerendert)
+- Auf `/admin/landing-generator`: pro Theme-Karte ein „Vorschau"-Button → öffnet Sheet mit Iframe.
+- Neue Server-Route `src/routes/api/public/landing-preview.$themeId.tsx` (GET): rendert HTML aus Theme + Branding-Query-Params (`?firmenname=…&primary_color=…&tenant_id=…`) und gibt komplettes HTML als Response zurück.
+- Iframe-Quelle: `/api/public/landing-preview/{themeId}?…branding…`
+- Live-Update: bei Input-Change im Branding-Form → Iframe-`src` neu setzen (debounced 400ms).
 
-### B) Tenant überall sichtbar
-- `admin.employees.$userId.tsx`: Tenant-Name als Badge neben Name (analog Status).
-- `admin.applications.index.tsx`: Tenant-Spalte bzw. -Badge in der Zeile.
+### D) Theme-Editor (Texte/Bilder pro Theme im UI editierbar)
+Aktuell sind alle Texte/Bilder hart in `template.html`. Statt jedem Theme einzeln eine UI zu bauen → **Slot-System**:
+- Jedes `template.html` bekommt Platzhalter im Mustache-Stil: `{{hero_title}}`, `{{hero_subtitle}}`, `{{cta_label}}`, `{{stat_1_value}}`, `{{stat_1_label}}`, `{{testimonial_1_text}}`, `{{hero_image_url}}` etc.
+- Jedes `meta.json` bekommt neues Feld `slots: [{ key, label, type: 'text'|'longtext'|'image'|'color', default }]`. Editor rendert Form dynamisch aus dieser Liste.
+- `landing-generator.functions.ts`: ersetzt `{{key}}` mit Slot-Werten (zusätzlich zu bestehender Branding-Ersetzung).
+- Im UI: zweite Section „Inhalte" — Felder gemäß `slots[]` des gewählten Themes. Werte fließen in Preview + ZIP-Generierung.
+- Erste Iteration: nur **theme-02** vollständig „slotifizieren" als Referenz. Weitere Themes folgen nach Review (du sagst welche zuerst).
 
-### C) Override aktualisiert alten Vertrag
-`src/routes/_employee/contract.tsx`:
-- Beim Laden zusätzlich `override.updated_at` mitnehmen (bereits in `getMyContractOverride`).
-- Render-Logik:
-  ```
-  const overrideNewer = override && override.updated_at && contract
-    && new Date(override.updated_at) > new Date(contract.signed_at);
-  if (override && (override.html_body || override.pdf_url) && (!contract || overrideNewer)) {
-    return <OverrideSigning .../>
-  }
-  ```
-- Beim Speichern eines Overrides (Admin): `contracts.signed_at = null`? — nein, der alte Vertrag bleibt als Historie. Nur Sichtbarkeit umschalten.
+### E) Bewerbungsformular → `/api/public/applications` + Tenant-Auto-Zuordnung
+- In jedem Theme-`script.js`: Formular-Submit POSTet bereits an `branding.api_endpoint`. ✓
+- Sicherstellen, dass `tenant_id` aus Branding mitgesendet wird (in einigen Themes evtl. nicht im Submit-Payload). 
+- `landing-generator.functions.ts` schreibt `window.__LANDING_CONFIG__ = { api_endpoint, tenant_id, portal_url, flow_type }` ins HTML; alle Themes lesen daraus.
+- Server-Route `/api/public/applications` ist schon korrekt und persistiert mit `tenant_id` → die spätere Reminder-/Accept-Mail nutzt automatisch nur den richtigen Tenant-SMTP.
 
-### D) Accept-Mail-Link auf primary_domain
-- In `admin.applications.index.tsx` Tenant-Map um `primary_domain` erweitern und Link entsprechend bauen.
+---
 
-## Was sich NICHT ändert
-- Reminder-Cron, Recovery-Cron, SMTP-Routing pro Tenant — bereits korrekt.
-- Auth-Mails von Supabase (Confirm-Mail) bleiben Supabase-SMTP (nur Passwort-Reset wird auf Tenant-SMTP umgestellt, weil das der primäre Schmerz ist).
+## Technische Details
 
-## Migration
-Keine neue Migration nötig — alle Spalten existieren bereits.
+### Geänderte/neue Dateien
+**Härtung:**
+- `src/routes/admin.tenants.tsx` — Mismatch-Banner + Test-Button + Empfänger-Input
+- `src/lib/tenant-smtp-test.functions.ts` *(neu)* — `testTenantSmtp` server fn (nutzt `supabaseAdmin` + nodemailer; läuft im Worker — falls nodemailer im Worker Probleme macht: per Edge Function statt server fn)
 
-## Manuelle Schritte nach Deploy
-Keine. Nur Vorhandensein der `reset_email_subject/body` auf Tenants prüfen; sonst greift Default-Template.
+**Wenn nodemailer im Worker nicht läuft (üblicher Stolperstein bei TanStack/CF):** stattdessen neue Edge Function `supabase/functions/send-smtp-test/index.ts` analog zu `send-password-reset`.
+
+**Landing-Modul:**
+- `src/landing-themes/theme-02/template.html` — Platzhalter einbauen
+- `src/landing-themes/theme-02/meta.json` — `slots[]` ergänzen
+- `src/lib/landing-themes.ts` — `ThemeFiles` um `slots` erweitern
+- `src/lib/landing-generator.functions.ts` — Slot-Replacement + `window.__LANDING_CONFIG__`-Injection
+- `src/routes/api/public/landing-preview.$themeId.ts` *(neu)* — Preview-Renderer
+- `src/routes/admin.landing-generator.tsx` — Slot-Editor-Section, Preview-Iframe, „Vorschau"-Button pro Theme-Karte
+- Alle `script.js`: aus `window.__LANDING_CONFIG__` lesen statt hartem Endpoint
+
+### Was NICHT in diesem Schritt
+- Theme-Editor nur für theme-02 vollständig. Themes 03–10 bekommen `slots: []` (= keine Editor-Felder, nur Branding-Ersetzung wie bisher). Nach Review entscheidest du, welches Theme als nächstes „slotifiziert" wird.
+- One-Click-Deploy (war nicht ausgewählt) → bleibt ZIP-Download.
+
+### Manuelle Schritte nach Deploy
+Keine Migration. Falls Edge Function für SMTP-Test: `supabase functions deploy send-smtp-test --no-verify-jwt`.
+
+---
+
+## Reihenfolge der Umsetzung
+1. E-Mail-Härtung (A + B) — kleinste Einheit
+2. Landing Live-Preview-Route + Iframe (C)
+3. Slot-System + theme-02 slotifizieren (D)
+4. `window.__LANDING_CONFIG__`-Injection + alle scripts.js anpassen (E)
+
+Ich liefere das in einer Antwort. Soll ich loslegen?

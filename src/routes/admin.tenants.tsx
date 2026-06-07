@@ -69,19 +69,27 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
       toast({ title: "Fehler", description: "Name und Domain sind Pflichtfelder.", variant: "destructive" });
       return;
     }
+    // Erlaubte Domains: Haupt-Domain + alle Aliase + primary_domain
+    const tenantDomain = domain.trim().toLowerCase();
+    const aliasDomainList = domainAliases
+      .split(/[\n,;]+/)
+      .map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+      .filter((s) => s.length > 2);
+    const primaryDom = ((tenant as any)?.primary_domain ?? "").toLowerCase().trim();
+    const allowedDomains = [tenantDomain, primaryDom, ...aliasDomainList].filter(Boolean);
+    const matchesAllowed = (emailDomain: string) =>
+      allowedDomains.some((d) => emailDomain === d || emailDomain.endsWith("." + d));
     if (senderEmail.trim()) {
       const emailDomain = senderEmail.trim().split("@")[1]?.toLowerCase();
-      const tenantDomain = domain.trim().toLowerCase();
-      if (emailDomain && !emailDomain.endsWith(tenantDomain) && emailDomain !== tenantDomain) {
-        toast({ title: "Fehler", description: `Absender-E-Mail muss zur Domain ${tenantDomain} gehören (z.B. info@${tenantDomain}).`, variant: "destructive" });
+      if (emailDomain && !matchesAllowed(emailDomain)) {
+        toast({ title: "Fehler", description: `Absender-E-Mail muss zur Tenant-Domain oder einem Alias passen (${allowedDomains.join(", ")}). Beispiel: info@${tenantDomain}.`, variant: "destructive" });
         return;
       }
     }
     if (companyEmail.trim()) {
       const emailDomain = companyEmail.trim().split("@")[1]?.toLowerCase();
-      const tenantDomain = domain.trim().toLowerCase();
-      if (emailDomain && !emailDomain.endsWith(tenantDomain) && emailDomain !== tenantDomain) {
-        toast({ title: "Fehler", description: `Kontakt-E-Mail muss zur Domain ${tenantDomain} gehören.`, variant: "destructive" });
+      if (emailDomain && !matchesAllowed(emailDomain)) {
+        toast({ title: "Fehler", description: `Kontakt-E-Mail muss zur Tenant-Domain oder einem Alias passen.`, variant: "destructive" });
         return;
       }
     }
@@ -184,6 +192,24 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
         <div>
           <Label className="text-xs">Absender-E-Mail</Label>
           <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="info@bcutheme.de" className="mt-1" />
+          {(() => {
+            const ed = senderEmail.trim().split("@")[1]?.toLowerCase();
+            if (!ed) return null;
+            const td = domain.trim().toLowerCase();
+            const aliases = domainAliases.split(/[\n,;]+/).map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter((s) => s.length > 2);
+            const pd = ((tenant as any)?.primary_domain ?? "").toLowerCase().trim();
+            const allowed = [td, pd, ...aliases].filter(Boolean);
+            const ok = allowed.some((d) => ed === d || ed.endsWith("." + d));
+            if (ok) return null;
+            return (
+              <div className="mt-2 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/30">
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                <p className="text-[10px] text-foreground">
+                  Sender-Domain <code className="font-mono">{ed}</code> passt nicht zur Tenant-Domain oder einem Alias ({allowed.join(", ")}). Mails landen wahrscheinlich im Spam und Tenant-Isolation ist gefährdet.
+                </p>
+              </div>
+            );
+          })()}
         </div>
         <div>
           <Label className="text-xs">Hero-Titel</Label>

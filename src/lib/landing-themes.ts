@@ -46,6 +46,13 @@ import t10Css from "../landing-themes/theme-10/style.css?raw";
 import t10Js from "../landing-themes/theme-10/script.js?raw";
 import t10Meta from "../landing-themes/theme-10/meta.json";
 
+export type ThemeSlot = {
+  key: string;
+  label: string;
+  type: "text" | "longtext" | "image" | "color";
+  default: string;
+};
+
 export type ThemeFiles = {
   id: string;
   name: string;
@@ -53,18 +60,23 @@ export type ThemeFiles = {
   html: string;
   css: string;
   js: string;
+  slots: ThemeSlot[];
 };
 
+function pickSlots(meta: any): ThemeSlot[] {
+  return Array.isArray(meta?.slots) ? (meta.slots as ThemeSlot[]) : [];
+}
+
 export const THEMES: ThemeFiles[] = [
-  { id: t02Meta.id, name: t02Meta.name, description: t02Meta.description, html: t02Html, css: t02Css, js: t02Js },
-  { id: t03Meta.id, name: t03Meta.name, description: t03Meta.description, html: t03Html, css: t03Css, js: t03Js },
-  { id: t04Meta.id, name: t04Meta.name, description: t04Meta.description, html: t04Html, css: t04Css, js: t04Js },
-  { id: t05Meta.id, name: t05Meta.name, description: t05Meta.description, html: t05Html, css: t05Css, js: t05Js },
-  { id: t06Meta.id, name: t06Meta.name, description: t06Meta.description, html: t06Html, css: t06Css, js: t06Js },
-  { id: t07Meta.id, name: t07Meta.name, description: t07Meta.description, html: t07Html, css: t07Css, js: t07Js },
-  { id: t08Meta.id, name: t08Meta.name, description: t08Meta.description, html: t08Html, css: t08Css, js: t08Js },
-  { id: t09Meta.id, name: t09Meta.name, description: t09Meta.description, html: t09Html, css: t09Css, js: t09Js },
-  { id: t10Meta.id, name: t10Meta.name, description: t10Meta.description, html: t10Html, css: t10Css, js: t10Js },
+  { id: t02Meta.id, name: t02Meta.name, description: t02Meta.description, html: t02Html, css: t02Css, js: t02Js, slots: pickSlots(t02Meta) },
+  { id: t03Meta.id, name: t03Meta.name, description: t03Meta.description, html: t03Html, css: t03Css, js: t03Js, slots: pickSlots(t03Meta) },
+  { id: t04Meta.id, name: t04Meta.name, description: t04Meta.description, html: t04Html, css: t04Css, js: t04Js, slots: pickSlots(t04Meta) },
+  { id: t05Meta.id, name: t05Meta.name, description: t05Meta.description, html: t05Html, css: t05Css, js: t05Js, slots: pickSlots(t05Meta) },
+  { id: t06Meta.id, name: t06Meta.name, description: t06Meta.description, html: t06Html, css: t06Css, js: t06Js, slots: pickSlots(t06Meta) },
+  { id: t07Meta.id, name: t07Meta.name, description: t07Meta.description, html: t07Html, css: t07Css, js: t07Js, slots: pickSlots(t07Meta) },
+  { id: t08Meta.id, name: t08Meta.name, description: t08Meta.description, html: t08Html, css: t08Css, js: t08Js, slots: pickSlots(t08Meta) },
+  { id: t09Meta.id, name: t09Meta.name, description: t09Meta.description, html: t09Html, css: t09Css, js: t09Js, slots: pickSlots(t09Meta) },
+  { id: t10Meta.id, name: t10Meta.name, description: t10Meta.description, html: t10Html, css: t10Css, js: t10Js, slots: pickSlots(t10Meta) },
 ];
 
 export function getTheme(id: string): ThemeFiles | undefined {
@@ -75,4 +87,5 @@ export const THEME_LIST = THEMES.map((t) => ({
   id: t.id,
   name: t.name,
   description: t.description,
+  slots: t.slots,
 }));

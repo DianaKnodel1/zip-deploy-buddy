@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateLandingZip } from "@/lib/landing-generator.functions";
 import { THEME_LIST, THEMES } from "@/lib/landing-themes";
@@ -79,6 +79,20 @@ function LandingGeneratorPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastFile, setLastFile] = useState<string | null>(null);
+  // Slot-Werte pro Theme — bei Theme-Wechsel mit Defaults vorbelegen.
+  const [slotValues, setSlotValues] = useState<Record<string, string>>({});
+  const currentTheme = THEME_LIST.find((t) => t.id === themeId);
+  const currentSlots = currentTheme?.slots ?? [];
+  // Bei Theme-Wechsel Slot-Defaults laden (überschreibt vorhandene Werte nicht).
+  const lastThemeRef = useRef<string>("");
+  if (themeId && lastThemeRef.current !== themeId) {
+    lastThemeRef.current = themeId;
+    const defaults: Record<string, string> = {};
+    for (const s of currentSlots) defaults[s.key] = s.default;
+    setSlotValues((prev) => ({ ...defaults, ...prev }));
+  }
+  const setSlot = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setSlotValues((v) => ({ ...v, [key]: e.target.value }));
 
   const set = (key: keyof Branding) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setBranding((b) => ({ ...b, [key]: e.target.value }));
@@ -115,6 +129,9 @@ function LandingGeneratorPage() {
     const replace = (src: string) => {
       let out = src;
       for (const [k, v] of Object.entries(branding)) {
+        out = out.split(`{{${k}}}`).join(String(v ?? ""));
+      }
+      for (const [k, v] of Object.entries(slotValues)) {
         out = out.split(`{{${k}}}`).join(String(v ?? ""));
       }
       return out;
@@ -164,7 +181,7 @@ document.addEventListener('click', function(e){
     }
     setLoading(true);
     try {
-      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl } });
+      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl, slots: slotValues } });
       // Base64 → Blob → Download
       const bin = atob(res.zipBase64);
       const bytes = new Uint8Array(bin.length);
@@ -364,6 +381,35 @@ document.addEventListener('click', function(e){
               </div>
             </CardContent>
           </Card>
+
+          {/* Step 2b: Theme-spezifische Inhalte (Slots) */}
+          {currentSlots.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">2b. Theme-Inhalte ({currentTheme?.name})</CardTitle>
+                <CardDescription>Texte, Bilder und Farben dieses Themes individuell anpassen.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {currentSlots.map((slot) => (
+                  <Field key={slot.key} label={slot.label}>
+                    {slot.type === "longtext" ? (
+                      <Textarea rows={3} value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} className="font-mono text-xs" />
+                    ) : slot.type === "color" ? (
+                      <div className="flex gap-2">
+                        <Input type="color" value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} className="w-16 p-1 h-10" />
+                        <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} />
+                      </div>
+                    ) : slot.type === "image" ? (
+                      <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} placeholder="https://… oder /assets/foo.jpg" />
+                    ) : (
+                      <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} />
+                    )}
+                  </Field>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
 
           {/* Step 3: Build */}
           <Card>

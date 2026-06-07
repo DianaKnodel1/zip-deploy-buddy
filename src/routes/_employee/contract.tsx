@@ -147,7 +147,7 @@ function ContractPage() {
   const getSigUrlsFn = useServerFn(getContractSignatureUrls);
   const getOverrideFn = useServerFn(getMyContractOverride);
 
-  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null } | null>(null);
+  const [override, setOverride] = useState<{ html_body: string | null; pdf_url: string | null; monthly_salary_cents?: number | null; weekly_hours?: number | null; updated_at?: string | null } | null>(null);
   const [overrideLoading, setOverrideLoading] = useState(true);
   const [overridePdfUrl, setOverridePdfUrl] = useState<string | null>(null);
 
@@ -315,7 +315,15 @@ function ContractPage() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
 
-  if (contract) {
+  // Wenn der Admin nach dem letzten Vertrag einen neuen individuellen Vertrag
+  // hinterlegt hat, MUSS dieser zur Unterschrift gezeigt werden — sonst sähe
+  // der Mitarbeiter ewig den alten signierten Vertrag.
+  const overrideNewer = !!(
+    override && (override.html_body || override.pdf_url) && override.updated_at && contract &&
+    new Date(override.updated_at).getTime() > new Date(contract.signed_at).getTime()
+  );
+
+  if (contract && !overrideNewer) {
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">

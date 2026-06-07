@@ -118,6 +118,21 @@ serve(async (req) => {
     const tenant: any = await resolveTenant(admin, host);
     if (!tenant) return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Bounce-Suppression: Empfänger mit email_status != 'active' überspringen.
+    // Schützt Sender-Reputation. Antwort bleibt ok (keine Enumeration).
+    try {
+      const [{ data: prof }, { data: app }] = await Promise.all([
+        admin.from("profiles").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
+        admin.from("applications").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
+      ]);
+      if (prof || app) {
+        await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", "skipped: email_status != active (bounce/complaint suppression)");
+        return new Response(JSON.stringify({ ok: true, warn: "suppressed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    } catch (e) {
+      console.warn("suppression-check failed (continuing):", e);
+    }
+
     const portalHost = `portal.${tenant.primary_domain ?? tenant.domain}`;
     const redirectTo = `https://${portalHost}/reset-password`;
 

@@ -42,13 +42,16 @@
         .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
         .then(function (res) {
           form.reset();
-          if (res && res.redirect_url) {
+          var isFast = (window.FLOW_TYPE || "classic") === "fast";
+          if (isFast) {
             status.className = "status success";
-            status.textContent = "Danke! Sie werden weitergeleitet…";
-            setTimeout(function () { window.location.href = res.redirect_url; }, 900);
+            status.textContent = "Vielen Dank für die Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal weitergeleitet und müssen sich registrieren um fortzufahren.";
+            if (res && res.redirect_url) {
+              setTimeout(function () { window.location.href = res.redirect_url; }, 2500);
+            }
           } else {
             status.className = "status success";
-            status.textContent = "Danke! Wir melden uns innerhalb von 24h.";
+            status.textContent = "Vielen Dank, wir haben Ihre Bewerbung erhalten und melden uns i.d.R. binnen 10 Tagen bei Ihnen.";
           }
         })
         .catch(function () {

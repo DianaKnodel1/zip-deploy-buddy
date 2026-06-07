@@ -181,7 +181,7 @@ document.addEventListener('click', function(e){
     }
     setLoading(true);
     try {
-      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl } });
+      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl, slots: slotValues } });
       // Base64 → Blob → Download
       const bin = atob(res.zipBase64);
       const bytes = new Uint8Array(bin.length);

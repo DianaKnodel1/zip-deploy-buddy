@@ -1,5 +1,16 @@
 {
   "id": "theme-02",
   "name": "Testpilot — Grün & Warm",
-  "description": "Tester-Vibe à la testpilotteam.de: warme Sofa-Hero, grüne Akzente, Stat-Karten unter dem Hero, klare CTAs."
+  "description": "Tester-Vibe à la testpilotteam.de: warme Sofa-Hero, grüne Akzente, Stat-Karten unter dem Hero, klare CTAs.",
+  "slots": [
+    { "key": "hero_title", "label": "Hero-Überschrift (HTML erlaubt)", "type": "longtext", "default": "Geld verdienen<br/><span class=\"accent\">von Zuhause</span>" },
+    { "key": "hero_subtitle", "label": "Hero-Untertitel", "type": "longtext", "default": "Werde Produkttester und bewerte Apps, Websites & digitale Produkte bequem aus dem Home Office. Verdiene bis zu <strong>4.400 €/Monat</strong> — als Minijob, Teilzeit oder Vollzeit." },
+    { "key": "hero_chip_1", "label": "Hero-Chip 1", "type": "text", "default": "🏠 100% Home Office" },
+    { "key": "hero_chip_2", "label": "Hero-Chip 2", "type": "text", "default": "⏰ Flexible Zeiteinteilung" },
+    { "key": "hero_chip_3", "label": "Hero-Chip 3", "type": "text", "default": "⚡ Sofort loslegen" },
+    { "key": "hero_cta_primary", "label": "Hero-CTA primär", "type": "text", "default": "Jetzt bewerben ↗" },
+    { "key": "hero_cta_secondary", "label": "Hero-CTA sekundär", "type": "text", "default": "Verdienst ansehen" }
+  ]
 }
+</content>
+</invoke>

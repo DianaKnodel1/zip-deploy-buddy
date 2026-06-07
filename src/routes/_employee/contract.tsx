@@ -409,7 +409,7 @@ function ContractPage() {
   }
 
   // Noch kein Vertrag → Signing-Flow direkt im Portal
-  if (!contract) {
+  if ((!contract || overrideNewer)) {
     const fullName = profile?.full_name ?? "";
     const [first, ...rest] = fullName.split(" ");
     const lastName = rest.join(" ");

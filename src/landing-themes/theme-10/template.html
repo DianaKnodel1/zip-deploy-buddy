@@ -186,12 +186,21 @@
 <section id="cta" class="cta">
   <div class="container cta-grid">
     <div data-animate>
-      <h2>Bereit für den<br/>nächsten Schritt?</h2>
-      <p>Lassen Sie uns gemeinsam Ihre Vision in messbare Ergebnisse verwandeln.</p>
+      <span class="eyebrow" style="color:var(--gold)">Jetzt bewerben</span>
+      <h2>Bereit für den<br/>nächsten Schritt<span class="dot">.</span></h2>
+      <p>Bewerben Sie sich in wenigen Minuten. Wir melden uns innerhalb von 24 Stunden persönlich bei Ihnen.</p>
+      <p class="cta-meta" style="margin-top:24px;color:rgba(243,238,226,.65);font-size:.92rem">📞 {{telefon}} &nbsp;·&nbsp; ✉ {{email}}</p>
     </div>
-    <div class="cta-right" data-animate>
-      <a href="mailto:{{email}}" class="btn btn-accent btn-lg">Kontakt aufnehmen →</a>
-    </div>
+    <form id="application-form" class="lead-form" data-animate>
+      <h3>Bewerbungsformular</h3>
+      <label>Vollständiger Name<input name="full_name" required placeholder="Max Mustermann" /></label>
+      <label>E-Mail-Adresse<input type="email" name="email" required placeholder="name@beispiel.de" /></label>
+      <label>Telefonnummer<input name="phone" placeholder="+49 …" /></label>
+      <label>Position / Bereich<input name="company" placeholder="z. B. Consultant, Senior Advisor" /></label>
+      <label>Ihre Nachricht<textarea name="message" rows="4" placeholder="Kurze Vorstellung & Motivation"></textarea></label>
+      <button type="submit" class="btn btn-accent btn-lg btn-block">Bewerbung absenden →</button>
+      <p id="form-status" class="status"></p>
+    </form>
   </div>
 </section>
 

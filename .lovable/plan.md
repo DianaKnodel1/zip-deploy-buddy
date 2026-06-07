@@ -1,41 +1,98 @@
-## Looping / Reload-Bug (höchste Priorität)
+# Landing-Modul + Härtung — Plan
 
-**Diagnose:** `src/contexts/AuthContext.tsx` ruft bei JEDEM `onAuthStateChange`-Event `applySession` auf — inklusive `INITIAL_SESSION` (bei jedem Mount) und `TOKEN_REFRESHED` (Tab-Fokus, ~stündlich). Das setzt `session`-State neu → komplette App rerendert → Queries/Realtime-Subscriptions (FloatingChat, AdminData, use-admin-badges) bauen sich neu auf → kurzer Spinner überall. Genau dein Symptom: „Daten neu geladen, alle paar Sekunden, auf jeder Route".
+## 1. Theme-Bereinigung & neue Vorlagen
 
-**Fix:**
-1. In `AuthContext` Events filtern: nur bei `SIGNED_IN`, `SIGNED_OUT`, `USER_UPDATED` reagieren. `TOKEN_REFRESHED` / `INITIAL_SESSION` ignorieren (Session-Restore läuft schon über `getSession()`).
-2. `checkAdminRole` cachen: nur neu prüfen, wenn `user.id` sich tatsächlich ändert (nicht bei jedem Token-Refresh).
-3. Zusätzlich in `FloatingChat.tsx` + `admin.chat.tsx`: prüfen, dass `useEffect`-Deps stabil sind (keine Objekte/Funktionen die jedes Render neu erzeugt werden → würden Channel-Resubscribe-Loop auslösen).
+**Behalten:** `theme-10` (Design Studio Core — Gold Executive)
 
-## Erklärungen (keine Code-Änderung)
+**Löschen:** theme-02, 03, 04, 05, 06, 07, 08, 09 (Ordner + Imports in `src/lib/landing-themes.ts`)
 
-**Sender-Domain-Banner:** Live-Check in `/admin/tenants` Edit-Dialog — `sender_email`-Domain muss zu `domain`, `primary_domain` oder einem `domain_aliases`-Eintrag passen. Wenn nicht → roter Hinweis „passt nicht, Mails landen wahrscheinlich im Spam". Wichtig nach `.de → .com`-Wechsel: alte `sender_email@…de` würde sonst unbemerkt schlechte Deliverability haben.
+**Neu hinzufügen (je Ordner mit `meta.json`, `template.html`, `style.css`, `script.js`):**
 
-**SMTP-Test:** dein vorhandener `TestEmailButton` reicht — sendet via Tenant-SMTP eine Test-Mail. Kein neuer Code nötig.
+- **`theme-tts-consultant`** — Replica von TTS Consultant (klassischer Beratungs-Look: Navy/Weiß, Hero mit Berater-Portrait rechts, Trust-Logos-Strip, 4-Spalten-Leistungen, Prozess-Timeline, Testimonials, FAQ-Accordion, vollständiger Footer mit Impressum-Block).
+- **`theme-privacy-guardian`** — Replica von Privacy Guardian (Datenschutz-/Compliance-Vibe: weißer Hero mit grünem/blauem Akzent, Schild-Icon-Hero, Feature-Cards mit Häkchen-Listen, "So funktioniert's"-Steps, Pricing-Tabelle optional, DSGVO-Trust-Section, Footer).
 
-## Härtung Email — Bounce-Suppression (wie gewünscht)
+Jedes Theme bekommt im `meta.json` ein vollständiges `slots`-Array (siehe Punkt 2) mit allen sichtbaren Textbausteinen — Hero-Titel, -Subtitel, Chips, CTAs, jede Section-Headline + Body, Footer-Claims, FAQ-Fragen/Antworten.
 
-1. **Migration** `supabase/manual-migrations/20260608000000_bounce_suppression.sql`:
-   - Spalte `bounce_count int default 0` in `email_send_log` (falls nicht da).
-   - Trigger: bei `status='bounce'` zähle pro Empfänger; bei 3+ → Insert in `suppressed_emails` (Tabelle existiert bereits laut email-infrastructure-guide).
-2. **Send-Pfad** (`send-reminders`, `send-password-reset`, `send-signup-confirmation`): vor jedem Send `select 1 from suppressed_emails where email=… and tenant_id=…` → wenn vorhanden, skip + log `skipped: suppressed`.
-3. **Admin-UI** (`admin.email-logs.tsx`): Filter „Nur gesperrte", Button „Sperre aufheben" pro Adresse.
+## 2. Theme-Editor mit Textbausteinen (Slots-System)
 
-## Reihenfolge der Umsetzung
-1. **Auth-Loop-Fix** (1 Datei, kritischer Bug)
-2. **Bounce-Suppression** (Migration + 3 Edge-Functions + UI-Filter)
+Aktuell existiert `meta.json.slots` bereits (siehe theme-02), wird aber im UI nicht editierbar dargestellt. Ausbau:
 
-## Zu ändernde Dateien
-- `src/contexts/AuthContext.tsx` — Event-Filter, Admin-Cache
-- `src/components/FloatingChat.tsx` — Deps-Stabilisierung prüfen
-- `src/routes/admin.chat.tsx` — dito
-- `supabase/manual-migrations/20260608000000_bounce_suppression.sql` *(neu)*
-- `supabase/functions/send-reminders/index.ts` — Suppression-Check
-- `supabase/functions/send-password-reset/index.ts` — Suppression-Check
-- `supabase/functions/send-signup-confirmation/index.ts` — Suppression-Check
-- `src/routes/admin.email-logs.tsx` — Filter + Unblock-Button
+- **Alle 3 Themes** bekommen vollständige Slot-Definitionen für jeden sichtbaren Text (nicht nur Hero). Slot-Typen: `text`, `longtext` (Textarea), `image` (Data-URL), `color`.
+- **In `src/routes/admin.landing-generator.tsx`:** Nach Theme-Auswahl rechts neben dem Branding-Formular einen Tab "Texte bearbeiten" einblenden. Pro Slot ein Eingabefeld (gruppiert nach Section: Hero / Leistungen / Prozess / FAQ / Footer). Default-Werte aus `meta.json.slots[].default` vorausgefüllt; Reset-Button pro Slot.
+- **Live-Vorschau:** der vorhandene `<iframe>`-Preview rendert bei jeder Slot-Änderung neu (debounce 400 ms) — slots werden in den `generateLandingZip`-Call mitgegeben (Server-Function akzeptiert sie bereits).
+- **Speichern pro Tenant** (optional Stage 2): JSON-Snapshot in `tenants.landing_slots` jsonb-Spalte, damit Änderungen über Sessions hinweg persistieren.
 
-## Was wir NICHT machen
-- Resend-Button, SMTP-Audit-Trail, Domain-Wechsel-Wizard (waren nicht ausgewählt — können danach folgen).
+## 3. Tenant-Isolation Audit (E-Mails)
+
+Code-Review-Aufgabe, kein neues Feature — nur Verifikation + Fixes wo nötig:
+
+- **send-reminders/index.ts**: Empfänger werden aus `applications` / `profiles` geladen, jeder Datensatz hat `tenant_id`. Tenant wird daraus aufgelöst → SMTP, Sender, Portal-Link stammen aus dem **eigenen** Tenant. ✔ Bereits korrekt (siehe Code).
+- **send-password-reset / send-signup-confirmation**: prüfen, dass `tenant_id` aus dem User-Record gezogen wird (nicht aus Request-Body, der manipulierbar wäre).
+- **Recovery-Mail Portal-Link**: in `reminder_recovery_body` muss `{{portal_link}}` zwingend aus `tenant.primary_domain` oder `tenant.domain` des **gleichen** Tenants gebaut werden — niemals Cross-Tenant-Fallback. Audit + ggf. Hard-Assertion + Log.
+- **Banner im Admin-UI**: in `/admin/tenants` Edit-Dialog ein Hinweis, wenn `sender_email`-Domain nicht zu `domain` / `primary_domain` / `domain_aliases` passt (verhindert versehentliche Cross-Tenant-Konfiguration).
+
+## 4. Bounce/Soft-Fail Auto-Suppression
+
+Neue Migration `supabase/manual-migrations/20260608000000_bounce_suppression.sql`:
+
+```text
+- ALTER TABLE suppressed_emails: stelle sicher (tenant_id, email) UNIQUE
+- Trigger auf email_send_log AFTER INSERT:
+    wenn NEW.status IN ('bounced','failed') mit SMTP-Code >= 500:
+      count = (select count(*) from email_send_log
+               where recipient_email = NEW.recipient_email
+                 and status in ('bounced','failed')
+                 and created_at > now() - interval '30 days')
+      wenn count >= 3:
+        INSERT INTO suppressed_emails (tenant_id, email, reason, source)
+        VALUES (..., NEW.recipient_email, 'auto:3x_bounce', 'trigger')
+        ON CONFLICT DO NOTHING
+```
+
+**Send-Pfad-Härtung** (send-reminders, send-password-reset, send-signup-confirmation): vor jedem Versand `select 1 from suppressed_emails where email = ? and tenant_id = ?` — wenn vorhanden, skip + log `suppressed`.
+
+**Admin-UI** (`admin.email-logs.tsx`): existierender `BounceSuppressionPanel` zeigt bereits Liste + Unblock. Ergänzen: Spalte „Auto-gesperrt nach 3 Bounces" (Quelle = `auto:3x_bounce`).
+
+## 5. Domain-Wechsel-Wizard
+
+**Heutiger Stand (umständlich):** Admin geht in `/admin/tenants` → Edit-Dialog → fügt neue Domain in `domain_aliases` array ein → setzt `primary_domain` auf neue Domain → speichert. Dabei muss er `domain_aliases` als JSON-Array korrekt pflegen und darf die alte Domain nicht löschen. Fehleranfällig.
+
+**Wizard (3 Klicks):** neuer Button „Domain wechseln" in `/admin/tenants` öffnet Modal:
+
+1. **Schritt 1 — Neue Domain eingeben:** Input für neue Domain (z. B. `digital-dgigmbh.com`). Live-Check: ist die Domain im Tenant-Workspace bereits aktiv (DNS-Validierung optional)?
+2. **Schritt 2 — Bestätigung:** Zeigt Vorher/Nachher:
+   - `primary_domain`: `digital-dgigmbh.de` → **`digital-dgigmbh.com`**
+   - `domain_aliases`: `[]` → **`["digital-dgigmbh.de"]`** (alte automatisch als Alias)
+   - Hinweis: „Alte Mails an `…@digital-dgigmbh.de` werden weiterhin akzeptiert, neue Mails kommen von `…@digital-dgigmbh.com`. Recovery-Mail wird an akzeptierte Bewerber/Mitarbeiter versendet."
+3. **Schritt 3 — Aktivieren:** Button „Wechsel durchführen" → 1 Server-Function `switchPrimaryDomain({tenantId, newDomain})` macht atomar:
+   - `primary_domain = newDomain`
+   - `domain_aliases = array_append(domain_aliases, alte_primary)` (deduped)
+   - `primary_domain_changed_at = now()`
+   - triggert Recovery-Mail-Lauf (`send-reminders` mode=`domain_recovery`)
+
+**Vereinfachung:** Admin muss `domain_aliases` JSON nie wieder manuell editieren. Die manuelle Bearbeitung bleibt im erweiterten Edit-Dialog für Edge-Cases verfügbar.
+
+## Reihenfolge
+
+1. Themes bereinigen + TTS + Privacy Guardian bauen (mit vollen Slots)
+2. Theme-Editor-UI (Slot-Felder + Live-Preview-Update)
+3. Bounce-Suppression Migration + Send-Pfad-Checks
+4. Tenant-Isolation Audit + Banner-Verschärfung
+5. Domain-Wechsel-Wizard
+
+## Geänderte/neue Dateien
+
+- `src/landing-themes/theme-02..09/` — **gelöscht**
+- `src/landing-themes/theme-tts-consultant/` — **neu** (4 Dateien)
+- `src/landing-themes/theme-privacy-guardian/` — **neu** (4 Dateien)
+- `src/landing-themes/theme-10/meta.json` — slots erweitern
+- `src/lib/landing-themes.ts` — Imports anpassen
+- `src/routes/admin.landing-generator.tsx` — Slot-Editor + Live-Preview-Wiring
+- `supabase/manual-migrations/20260608000000_bounce_suppression.sql` — **neu**
+- `supabase/functions/send-reminders/index.ts` — Suppression-Check vor Send
+- `supabase/functions/send-password-reset/index.ts` — Tenant-Lookup absichern
+- `supabase/functions/send-signup-confirmation/index.ts` — dito
+- `src/routes/admin.tenants.tsx` — Wizard-Button + Modal + Sender-Domain-Banner
+- `src/lib/tenant-domains.functions.ts` — neue `switchPrimaryDomain` server fn
 
 Soll ich loslegen?

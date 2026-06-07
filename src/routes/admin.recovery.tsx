@@ -369,7 +369,27 @@ function AdminRecoveryPage() {
             <TabsTrigger value="preview"><Eye className="h-3.5 w-3.5 mr-1.5" />Mail-Vorschau</TabsTrigger>
             <TabsTrigger value="history"><History className="h-3.5 w-3.5 mr-1.5" />Vergangene Läufe</TabsTrigger>
             <TabsTrigger value="bounced"><MailX className="h-3.5 w-3.5 mr-1.5" />Bounces ({bounced.length})</TabsTrigger>
+            <TabsTrigger value="audit"><Activity className="h-3.5 w-3.5 mr-1.5" />Verlauf</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="audit">
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                <AuditLogPanel
+                  rows={logRows}
+                  total={logTotal}
+                  page={logPage}
+                  pageSize={LOG_PAGE_SIZE}
+                  loading={loadingLog}
+                  filters={logFilters}
+                  onFiltersChange={(f) => { setLogFilters(f); loadLog(tenantId || null, 1, f); }}
+                  onPageChange={(p) => loadLog(tenantId || null, p, logFilters)}
+                  onExport={exportLogCsv}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
 
           <TabsContent value="status">
             <Card>

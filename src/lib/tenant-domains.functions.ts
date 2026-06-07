@@ -385,3 +385,99 @@ export const enqueueDomainRecoveryMails = createServerFn({ method: "POST" })
 
     return json;
   });
+
+// ============================================================
+// 5) Bounce-Verwaltung
+// ============================================================
+
+export interface BouncedRecipient {
+  kind: "mitarbeiter" | "bewerber";
+  id: string;                 // user_id (Mitarbeiter) oder applications.id (Bewerber)
+  name: string;
+  email: string;
+  bounced_at: string | null;
+  reason: string | null;
+}
+
+export const listBouncedRecipients = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ tenant_id: z.string().uuid() }).parse(input)
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const sb = supabaseAdmin as any;
+    const out: BouncedRecipient[] = [];
+
+    const { data: profs } = await sb
+      .from("profiles")
+      .select("user_id,full_name,email_status,email_bounced_at,email_bounce_reason")
+      .eq("tenant_id", data.tenant_id)
+      .neq("email_status", "active");
+    if (profs?.length) {
+      const { data: usersList } = await sb.auth.admin.listUsers({ page: 1, perPage: 5000 });
+      const emailByUserId = new Map<string, string>(
+        (usersList?.users ?? []).map((u: any) => [u.id, (u.email ?? "").toLowerCase()])
+      );
+      for (const p of profs) {
+        out.push({
+          kind: "mitarbeiter",
+          id: p.user_id,
+          name: p.full_name ?? "",
+          email: emailByUserId.get(p.user_id) ?? "",
+          bounced_at: p.email_bounced_at ?? null,
+          reason: p.email_bounce_reason ?? null,
+        });
+      }
+    }
+
+    const { data: apps } = await sb
+      .from("applications")
+      .select("id,email,full_name,first_name,email_status,email_bounced_at,email_bounce_reason")
+      .eq("tenant_id", data.tenant_id)
+      .neq("email_status", "active");
+    for (const a of apps ?? []) {
+      out.push({
+        kind: "bewerber",
+        id: a.id,
+        name: a.full_name ?? a.first_name ?? "",
+        email: (a.email ?? "").toLowerCase(),
+        bounced_at: a.email_bounced_at ?? null,
+        reason: a.email_bounce_reason ?? null,
+      });
+    }
+
+    return { bounced: out };
+  });
+
+export const resetEmailStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({
+      kind: z.enum(["mitarbeiter", "bewerber"]),
+      id: z.string(),  // user_id oder applications.id
+    }).parse(input)
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const sb = supabaseAdmin as any;
+    const table = data.kind === "mitarbeiter" ? "profiles" : "applications";
+    const col = data.kind === "mitarbeiter" ? "user_id" : "id";
+    const { error } = await sb
+      .from(table)
+      .update({ email_status: "active", email_bounced_at: null, email_bounce_reason: null })
+      .eq(col, data.id);
+    if (error) throw new Error(error.message);
+
+    try {
+      await sb.from("activity_log").insert({
+        action: "email_status_reset",
+        entity_type: table,
+        entity_id: data.id,
+        actor_id: context.userId,
+        comment: "E-Mail-Status manuell von 'bounced' auf 'active' zurückgesetzt",
+      });
+    } catch {}
+
+    return { ok: true };
+  });

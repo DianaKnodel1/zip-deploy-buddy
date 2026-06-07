@@ -102,8 +102,6 @@ interface TenantRow {
   reminder_no_booking_body: string | null;
   reminder_recovery_subject: string | null;
   reminder_recovery_body: string | null;
-  reminder_recovery_bewerber_subject: string | null;
-  reminder_recovery_bewerber_body: string | null;
 }
 
 type ReminderType = "invite" | "confirm_email" | "complete_registration" | "no_recent_booking" | "domain_recovery";
@@ -177,7 +175,7 @@ serve(async (req) => {
     // Tenants vorladen
     const { data: tList, error: tErr } = await admin
       .from("tenants")
-      .select("id,name,domain,primary_domain,primary_domain_changed_at,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body,reminder_recovery_bewerber_subject,reminder_recovery_bewerber_body");
+      .select("id,name,domain,primary_domain,primary_domain_changed_at,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body");
     if (tErr) return json({ error: tErr.message }, 500);
 
     const tenants = new Map<string, TenantRow>();
@@ -234,6 +232,10 @@ async function canSend(
   email: string,
   type: ReminderType,
 ): Promise<{ ok: boolean; nextAttempt: number; reason?: string }> {
+  // Bounce-Schutz: tote Adressen niemals erneut anschreiben.
+  const isBounced = await isEmailBounced(admin, email);
+  if (isBounced) return { ok: false, nextAttempt: 0, reason: "email_bounced" };
+
   const { data, error } = await admin
     .from("reminder_log")
     .select("attempt, sent_at, status")
@@ -251,6 +253,31 @@ async function canSend(
     if (ageDays < MIN_DAYS_BETWEEN) return { ok: false, nextAttempt: 0, reason: "too_soon" };
   }
   return { ok: true, nextAttempt: sentLogs.length + 1 };
+}
+
+async function isEmailBounced(admin: SendCtx["admin"], email: string): Promise<boolean> {
+  const lc = email.toLowerCase();
+  // Check applications zuerst (häufiger Treffer für invite-Flow)
+  const { data: app } = await admin
+    .from("applications")
+    .select("email_status")
+    .ilike("email", lc)
+    .neq("email_status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (app) return true;
+  // Profiles via auth.users (E-Mail liegt nicht in profiles)
+  const { data: usersList } = await admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
+  const user = (usersList?.users ?? []).find((u: any) => (u.email ?? "").toLowerCase() === lc);
+  if (!user) return false;
+  const { data: prof } = await admin
+    .from("profiles")
+    .select("email_status")
+    .eq("user_id", user.id)
+    .neq("email_status", "active")
+    .limit(1)
+    .maybeSingle();
+  return !!prof;
 }
 
 async function logReminder(
@@ -323,6 +350,7 @@ async function runInvites(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "invite", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -394,6 +422,7 @@ async function runConfirmEmail(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "confirm_email", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -442,6 +471,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "complete_registration", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -511,6 +541,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -531,48 +562,36 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
   ctx.recoveryStats.set(tenantId, stats);
 
   // ── Empfänger sammeln ──
-  // 1) Mitarbeiter (alle inkl. abgeschlossen, ohne deaktiviert/abgelehnt)
-  // 2) Akzeptierte Bewerber (applications.status='akzeptiert') ohne Auth-Account
+  // Nur Mitarbeiter mit Auth-Account (ohne deaktiviert/abgelehnt).
+  // Bewerber laufen über reminder_invite mit aktuellem Portal-Link.
   const { data: profiles, error: pErr } = await ctx.admin
     .from("profiles")
-    .select("user_id,full_name,tenant_id,status")
+    .select("id,user_id,full_name,tenant_id,status,email_status")
     .eq("tenant_id", tenantId)
     .not("status", "in", '("deaktiviert","abgelehnt")');
   if (pErr) { console.error("recovery profiles query", pErr); return; }
 
-  const { data: apps, error: aErr } = await ctx.admin
-    .from("applications")
-    .select("id,email,full_name,first_name,tenant_id,status")
-    .eq("tenant_id", tenantId)
-    .eq("status", "akzeptiert");
-  if (aErr) { console.error("recovery apps query", aErr); return; }
+  // Bewerber sind aus Recovery ausgeschlossen — sie laufen über den
+  // normalen `reminder_invite`-Reminder mit aktuellem Portal-Link.
+  // Recovery ist nur für Mitarbeiter mit Auth-Account.
 
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
-  const emailToUser = new Map<string, any>((usersList?.users ?? []).map(u => [(u.email ?? "").toLowerCase(), u]));
 
-  type Recipient = { email: string; first_name: string; kind: "mitarbeiter" | "bewerber" };
+  type Recipient = { email: string; first_name: string; profile_id: string };
   const recipients: Recipient[] = [];
   const seen = new Set<string>();
 
   for (const p of profiles ?? []) {
+    // Bounce-Schutz: tote Adressen überspringen.
+    if ((p as any).email_status && (p as any).email_status !== "active") continue;
     const u = userMap.get((p as any).user_id);
     if (!u?.email) continue;
     const email = u.email.toLowerCase();
     if (seen.has(email)) continue;
     seen.add(email);
     const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
-    recipients.push({ email, first_name: firstName, kind: "mitarbeiter" });
-  }
-  for (const app of apps ?? []) {
-    const email = (app.email ?? "").toLowerCase();
-    if (!email) continue;
-    // Bewerber, die schon einen Account haben, laufen über "mitarbeiter" oben.
-    if (emailToUser.has(email)) continue;
-    if (seen.has(email)) continue;
-    seen.add(email);
-    const firstName = (app as any).first_name ?? ((app as any).full_name ?? "").split(" ")[0] ?? "";
-    recipients.push({ email, first_name: firstName, kind: "bewerber" });
+    recipients.push({ email, first_name: firstName, profile_id: (p as any).id });
   }
 
   // ── Idempotenz-Anker ──
@@ -621,14 +640,10 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     }
 
     const attempt = (ctx.sentCountByTenantType.get(`${tenant.id}:domain_recovery`) ?? 0) + 1;
-    const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
+    const portalLink = `https://${portalHost(tenant)}/login`;
     const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
-    const isBewerber = rec.kind === "bewerber";
-    const subjectTpl = isBewerber ? tenant.reminder_recovery_bewerber_subject : tenant.reminder_recovery_subject;
-    const bodyTpl    = isBewerber ? tenant.reminder_recovery_bewerber_body    : tenant.reminder_recovery_body;
-    const defaultTpl = isBewerber ? DEFAULT_TEMPLATES.domain_recovery_bewerber : DEFAULT_TEMPLATES.domain_recovery_mitarbeiter;
-    const subject = renderSubject(subjectTpl, defaultTpl.subject, vars);
-    const html = renderBodyHtml(tenant, bodyTpl, defaultTpl.body, vars, { withDomainBanner: false });
+    const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery_mitarbeiter.subject, vars);
+    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery_mitarbeiter.body, vars, { withDomainBanner: false });
 
     try {
       await sendMail(tenant, rec.email, subject, html);
@@ -638,9 +653,35 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
       sentThisRun++;
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", errMsg);
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: errMsg });
+      // Hard-Bounce-Detection: SMTP 5.x.x → Empfänger als 'bounced' markieren.
+      await maybeMarkBounced(ctx.admin, rec.email, e);
     }
+  }
+}
+
+// Setzt profiles.email_status / applications.email_status auf 'bounced',
+// wenn der SMTP-Fehler ein dauerhafter 5.x.x ist (z.B. 550 No such user).
+// 4.x.x (Mailbox voll, temporär) wird ignoriert — kommt evtl. wieder.
+async function maybeMarkBounced(admin: any, email: string, err: any) {
+  const code = Number(err?.responseCode ?? err?.code ?? 0);
+  const msg = String(err?.message ?? err ?? "");
+  const isHardBounce = (code >= 500 && code < 600) || /\b5\d{2}\b/.test(msg);
+  if (!isHardBounce) return;
+  const reason = (msg.slice(0, 240)) || `SMTP ${code}`;
+  const at = new Date().toISOString();
+  try {
+    await admin.from("profiles").update({ email_status: "bounced", email_bounced_at: at, email_bounce_reason: reason })
+      .eq("email_status", "active")
+      .in("user_id", (await admin.auth.admin.listUsers({ page: 1, perPage: 5000 })).data.users
+        .filter((u: any) => (u.email ?? "").toLowerCase() === email.toLowerCase())
+        .map((u: any) => u.id));
+    await admin.from("applications").update({ email_status: "bounced", email_bounced_at: at, email_bounce_reason: reason })
+      .eq("email_status", "active").ilike("email", email);
+  } catch (e) {
+    console.error("maybeMarkBounced failed", e);
   }
 }
 
@@ -745,14 +786,6 @@ const DEFAULT_TEMPLATES = {
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">unser Mitarbeiter-Portal von <strong>{{tenant_name}}</strong> hat eine neue Adresse. Deine Zugangsdaten bleiben gleich — einfach mit der neuen URL einloggen und weitermachen.</p>
 {{cta:Zum neuen Portal|{{portal_link}}}}
-<p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
-  },
-  domain_recovery_bewerber: {
-    subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
-    body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Wir sind umgezogen</h1>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">schön, dass du dabei bist! Unser Portal hat eine neue Adresse — bitte schließe deine Registrierung bei <strong>{{tenant_name}}</strong> ab sofort hier ab:</p>
-{{cta:Jetzt registrieren|{{portal_link}}}}
 <p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Oder kopiere diesen Link: {{portal_link}}</p>`,
   },
 };

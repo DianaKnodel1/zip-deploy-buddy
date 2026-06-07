@@ -237,7 +237,7 @@ document.addEventListener('click', function(e){
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">1. Theme wählen</CardTitle>
-              <CardDescription>Weitere Themes (02–06) folgen, sobald du sie lieferst.</CardDescription>
+              <CardDescription>3 Vorlagen: Executive, klassische Beratung, Datenschutz.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-2">

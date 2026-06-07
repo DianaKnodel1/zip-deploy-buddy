@@ -887,7 +887,111 @@ function TestEmailButton({ tenantId, smtpConfigured }: { tenantId: string; smtpC
   );
 }
 
+function DomainSwitchWizard({ tenant, onDone }: { tenant: Tenant; onDone: () => void }) {
+  const switchFn = useServerFn(switchToNewPrimaryDomain);
+  const { toast } = useToast();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [newDomain, setNewDomain] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const currentPrimary = ((tenant as any).primary_domain ?? tenant.domain ?? "").toLowerCase();
+  const aliases: string[] = Array.isArray((tenant as any).domain_aliases) ? (tenant as any).domain_aliases : [];
+  const normalized = newDomain.toLowerCase().trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const valid = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalized) && normalized !== currentPrimary;
+
+  const futureAliases = Array.from(new Set([...aliases.map((s) => s.toLowerCase()), currentPrimary].filter((a) => a && a !== normalized)));
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      const res = await switchFn({ data: { tenant_id: tenant.id, new_domain: normalized } });
+      toast({ title: "Domain gewechselt", description: `Aktive Versand-Domain ist jetzt ${res.primary_domain}.` });
+      onDone();
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err?.message ?? "Wechsel fehlgeschlagen", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className={step >= 1 ? "font-semibold text-foreground" : ""}>1. Neue Domain</span>
+        <span>→</span>
+        <span className={step >= 2 ? "font-semibold text-foreground" : ""}>2. Bestätigung</span>
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-3">
+          <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
+            <p><span className="font-semibold">Aktuelle Primary:</span> <code className="font-mono">{currentPrimary || "—"}</code></p>
+            <p><span className="font-semibold">Bestehende Aliase:</span> <code className="font-mono">{aliases.join(", ") || "—"}</code></p>
+          </div>
+          <div>
+            <Label className="text-xs">Neue Domain (Primary)</Label>
+            <Input
+              autoFocus
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value)}
+              placeholder="digital-dgigmbh.com"
+              className="mt-1 font-mono"
+            />
+            {newDomain && !valid && (
+              <p className="text-[11px] text-destructive mt-1">
+                {normalized === currentPrimary ? "Bereits aktive Primary." : "Ungültiges Domain-Format."}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button size="sm" disabled={!valid} onClick={() => setStep(2)}>Weiter →</Button>
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-3">
+          <div className="rounded-md border border-border p-3 space-y-2 text-xs">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Neue Primary-Domain</p>
+                <code className="font-mono text-foreground">{normalized}</code>
+                <p className="text-muted-foreground mt-1">Neue Mails (Login, Reminder, Onboarding) gehen ab sofort von dieser Domain raus.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 pt-2 border-t border-border">
+              <ArrowRightLeft className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Aliase nach Wechsel</p>
+                <code className="font-mono text-foreground">{futureAliases.join(", ") || "—"}</code>
+                <p className="text-muted-foreground mt-1">Bewerber, die alte Links/Mails aufrufen, landen weiterhin im richtigen Tenant.</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3 text-[11px] text-amber-900 dark:text-amber-100">
+            <p className="font-semibold mb-1">⚠ Wichtig vor dem Wechsel</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li>SMTP-Absender (<code>sender_email</code>) muss zur neuen Domain passen (sonst Spam-Risiko).</li>
+              <li>DNS (SPF/DKIM/DMARC) für <code>{normalized}</code> muss eingerichtet sein.</li>
+              <li>Im Anschluss kannst du auf <code>/admin/recovery</code> die Bewerber/Mitarbeiter über den Wechsel informieren.</li>
+            </ul>
+          </div>
+          <div className="flex justify-between gap-2 pt-2">
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setStep(1)}>← Zurück</Button>
+            <Button size="sm" disabled={busy} onClick={handleSubmit} className="gap-2">
+              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Wechsel durchführen
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminTenantsPage() {
+
   const { tenants, loading, reload } = useAllTenants();
   const [editTenant, setEditTenant] = useState<Tenant | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);

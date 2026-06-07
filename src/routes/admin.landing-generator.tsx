@@ -131,6 +131,9 @@ function LandingGeneratorPage() {
       for (const [k, v] of Object.entries(branding)) {
         out = out.split(`{{${k}}}`).join(String(v ?? ""));
       }
+      for (const [k, v] of Object.entries(slotValues)) {
+        out = out.split(`{{${k}}}`).join(String(v ?? ""));
+      }
       return out;
     };
     let html = replace(theme.html);

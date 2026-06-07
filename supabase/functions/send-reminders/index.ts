@@ -647,6 +647,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
 
     if (sentThisRun >= DOMAIN_RECOVERY_CAP_PER_RUN) {
       ctx.results.push({ type: "domain_recovery", email: rec.email, status: "skipped", error: "recovery_run_cap_reached" });
+      await logSkipped(ctx.admin, rec.email, tenant.id, "domain_recovery", "recovery_run_cap_reached");
       continue;
     }
 

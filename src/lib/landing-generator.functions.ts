@@ -101,9 +101,11 @@ export const generateLandingZip = createServerFn({ method: "POST" })
     const theme = getTheme(data.themeId);
     if (!theme) throw new Error(`Theme nicht gefunden: ${data.themeId}`);
 
-    const html = applyPlaceholders(theme.html, data.branding);
-    const css = applyPlaceholders(theme.css, data.branding);
-    const js = applyPlaceholders(theme.js, data.branding);
+    const slots = data.slots ?? {};
+    let html = applyPlaceholders(theme.html, data.branding, slots);
+    html = injectLandingConfig(html, data.branding);
+    const css = applyPlaceholders(theme.css, data.branding, slots);
+    const js = applyPlaceholders(theme.js, data.branding, slots);
 
     const zip = new JSZip();
     zip.file("index.html", html);

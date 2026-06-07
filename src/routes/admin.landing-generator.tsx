@@ -154,6 +154,17 @@ function LandingGeneratorPage() {
     // → andernfalls bleibt der iframe in "Laden..." hängen.
     html = html.replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i, "");
     const previewScript = `<script>
+var LEGAL_IDS = ["impressum","datenschutz","agb"];
+function syncLegal(){
+  var h = (location.hash||"").replace("#","");
+  document.querySelectorAll(".legal").forEach(function(el){ el.classList.remove("is-open"); });
+  if (LEGAL_IDS.indexOf(h) >= 0){
+    var el = document.getElementById(h);
+    if (el){ el.classList.add("is-open"); el.scrollIntoView({behavior:"smooth",block:"start"}); }
+  }
+}
+window.addEventListener("hashchange", syncLegal);
+setTimeout(syncLegal, 50);
 document.addEventListener('click', function(e){
   var burger = e.target.closest && e.target.closest('#burger, .burger, [aria-label="Menü"], [aria-label="Menu"]');
   if(burger){
@@ -164,10 +175,18 @@ document.addEventListener('click', function(e){
   }
   var a = e.target.closest && e.target.closest('a[href^="#"]');
   if(a){
-    e.preventDefault();
     var id = a.getAttribute('href');
     if(id && id.length > 1){
-      try { history.replaceState(null, '', id); } catch(_){}
+      var target = id.slice(1);
+      // Legal-Links: nativen Hash-Wechsel zulassen → :target + hashchange greifen
+      if (LEGAL_IDS.indexOf(target) >= 0){
+        e.preventDefault();
+        if (location.hash === id){ syncLegal(); } else { location.hash = id; }
+        return;
+      }
+      e.preventDefault();
+      document.querySelectorAll('.legal').forEach(function(s){ s.classList.remove('is-open'); });
+      if (location.hash){ try { history.replaceState(null, '', location.pathname + location.search); } catch(_){} }
       var el = document.querySelector(id);
       if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
     }

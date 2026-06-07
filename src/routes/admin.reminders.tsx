@@ -37,12 +37,25 @@ const TYPE_LABELS: Record<string, string> = {
 
 function AdminRemindersPage() {
   const { toast } = useToast();
+  const healthFn = useServerFn(getReminderHealth);
   const [rows, setRows] = useState<ReminderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [running, setRunning] = useState<"send" | "dry" | null>(null);
+  const [health, setHealth] = useState<any>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+
+  const loadHealth = async () => {
+    setLoadingHealth(true);
+    try {
+      const r = await healthFn({ data: {} });
+      setHealth(r);
+    } catch { /* silent */ } finally {
+      setLoadingHealth(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +68,7 @@ function AdminRemindersPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadHealth(); }, []);
 
   const filtered = useMemo(() => rows.filter(r => {
     if (filterType !== "all" && r.reminder_type !== filterType) return false;

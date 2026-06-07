@@ -216,3 +216,80 @@ function AdminRemindersPage() {
     </div>
   );
 }
+
+function formatAge(ms: number | null): string {
+  if (ms === null) return "noch nie";
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "gerade eben";
+  if (m < 60) return `vor ${m} Min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `vor ${h} Std`;
+  return `vor ${Math.floor(h / 24)} Tagen`;
+}
+
+function HealthCard({ health, loading, onRefresh }: {
+  health: {
+    last_run_at: string | null;
+    age_ms: number | null;
+    severity: "green" | "yellow" | "red" | "unknown";
+    counts_24h: { sent: number; failed: number; skipped: number };
+    bounced: number;
+  } | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const sevColor = health?.severity === "green"
+    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+    : health?.severity === "yellow"
+    ? "bg-amber-100 text-amber-700 border-amber-200"
+    : health?.severity === "red"
+    ? "bg-red-100 text-red-700 border-red-200"
+    : "bg-muted text-muted-foreground";
+  const sevLabel = health?.severity === "green" ? "Healthy"
+    : health?.severity === "yellow" ? "Verzögert"
+    : health?.severity === "red" ? "Stillstand"
+    : "Unbekannt";
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <div className="text-sm font-medium flex items-center gap-2">
+                Reminder-Cron
+                <Badge variant="outline" className={sevColor}>{sevLabel}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Letzter Lauf: {loading ? "lädt…" : formatAge(health?.age_ms ?? null)}
+                {health?.last_run_at ? ` · ${new Date(health.last_run_at).toLocaleString("de-DE")}` : ""}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="text-center">
+              <div className="font-semibold text-emerald-700">{health?.counts_24h.sent ?? 0}</div>
+              <div className="text-muted-foreground">gesendet 24h</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-destructive">{health?.counts_24h.failed ?? 0}</div>
+              <div className="text-muted-foreground">fehlgeschlagen</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold">{health?.counts_24h.skipped ?? 0}</div>
+              <div className="text-muted-foreground">übersprungen</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-amber-700">{health?.bounced ?? 0}</div>
+              <div className="text-muted-foreground">Bounces</div>
+            </div>
+            <Button size="sm" variant="ghost" onClick={onRefresh} disabled={loading}>
+              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

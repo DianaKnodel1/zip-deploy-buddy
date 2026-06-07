@@ -1,86 +1,84 @@
 ## Ziel
 
-1. **Neue Landing-Page / Domain anbinden = nur noch DNS + ein Eintrag im Admin-Portal.** Kein SSH, kein Caddy-Config-Edit mehr.
-2. **Recovery-Versand bug-fix** (`updated_at`-Crash → 0 Empfänger).
-3. **Recovery-Mail-Editor** in `/admin/email-templates` (zwei separate Templates: Mitarbeiter / Bewerber, Ton "Wir sind umgezogen", ohne Platzhalter-Hinweise).
+1. **Recovery vereinfachen**: nur 1 Template (Mitarbeiter), Bewerber komplett raus. Recovery-Empfänger automatisch auf „stille" Mitarbeiter (ohne aktiven Reminder-Flow) einschränken — wer eh bald einen Reminder kriegt, kriegt keine zusätzliche Recovery-Mail.
+2. **Domain-Onboarding 1-Klick**: Neue Domain anbinden ohne SSH (Caddy Wildcard + Cloudflare-DNS-01).
+3. **Hard-Bounce-Handling**: 5.x.x-Bounces markieren Empfänger als `inactive` und werden bei Retries übersprungen.
 
 ---
 
-## 1. Domain-Onboarding 1-Klick (das Hauptproblem)
+## 1. Recovery-Cleanup
 
-**Heute musst du:**
-- DNS `portal.NEUE-DOMAIN.com` → VPS-IP setzen
-- Auf VPS: Caddyfile/nginx editieren (`server_name portal.neue-domain.com`)
-- Service reloaden
-- Tenant in DB anlegen / Domain-Alias eintragen
+**Code-Änderungen:**
+- `getRecoveryPreview` (in `tenant-domains.functions.ts`): Bewerber-Render-Pfad entfernen, nur `mitarbeiter` zurückgeben. Legacy-Felder (`subject`/`html`/`portal_link`) bleiben für Abwärtskompat.
+- `getAffectedRecipients`: Bewerber-Block (`kind: "bewerber_akzeptiert"`) ganz raus. Außerdem Mitarbeiter weiter filtern: nur die, die **keinen aktiven Reminder-Trigger** in den nächsten 7 Tagen haben (keine offenen Tasks mit Deadline, kein anstehender Termin, kein offenes Onboarding) — Detail-Logik definiere ich beim Bauen.
+- `send-reminders/index.ts`: Bewerber-Recovery-Branch entfernen, Spalten `reminder_recovery_bewerber_*` nicht mehr lesen.
+- `/admin/email-templates`: „Domain-Wechsel"-Tab zurück auf **einen** Editor (Mitarbeiter), Sub-Tabs raus.
+- `/admin/recovery`: Vorschau-Tabs raus, nur Mitarbeiter-Preview.
+- Migration `20260606200000_recovery_template_split.sql`: bleibt liegen (Spalten machen nichts kaputt), oder wir droppen sie sauber — entscheide ich beim Bauen, je nachdem ob sie schon auf VPS gelaufen ist.
 
-**Nach diesem Plan musst du nur noch:**
-- DNS setzen (einmalig pro Domain, das geht nicht weg)
-- Im Admin-Portal: `/admin/tenants` → Domain eintragen → fertig
+**Recovery-Definition wird:** „Einmaliger Broadcast nach `primary_domain_changed_at` an aktive Mitarbeiter, die im normalen Reminder-Flow nicht in den nächsten 7 Tagen angeschrieben würden."
 
-**Wie:** Caddy/Nginx auf **Wildcard + Catch-All** umstellen statt pro Domain. Der TanStack-Server liest schon `req.headers.host`, der Tenant-Lookup in `TenantContext` matcht per `domain` + `domain_aliases`. Wir brauchen also nur **eine** Caddy-Regel:
+---
+
+## 2. Domain-Onboarding 1-Klick (mit Cloudflare)
+
+Da alle Domains hinter Cloudflare-Proxy laufen, geht Let's Encrypt HTTP-01 nicht. Lösung: **Caddy mit DNS-01 via Cloudflare-API**.
+
+**Setup (einmalig, manuell):**
+- Cloudflare API-Token erzeugen mit Scope `Zone:DNS:Edit` für alle relevanten Zonen.
+- Token als Secret `CLOUDFLARE_API_TOKEN` in Lovable Cloud speichern + auf VPS in Caddy-Env.
+- Caddy-Build mit `caddy-dns/cloudflare`-Plugin (xcaddy).
+- Caddyfile auf Wildcard + on-demand-TLS + Ask-Endpoint umstellen:
 
 ```text
-portal.*, *.lovable.app {
+{
+  on_demand_tls {
+    ask https://portal.<root-domain>/api/public/caddy-ask
+  }
+}
+
+*.* {
+  tls {
+    dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    on_demand
+  }
   reverse_proxy 127.0.0.1:3000
 }
 ```
 
-Caddy macht TLS automatisch via ACME (Let's Encrypt on-demand). Voraussetzung: `on_demand_tls` mit Ask-Endpoint, der gegen unsere Tenant-DB prüft, ob die Domain bekannt ist (sonst stellt Caddy für jede Random-Subdomain Zertifikate aus).
+**Neu im Code:**
+- `src/routes/api/public/caddy-ask.ts`: `GET ?domain=portal.foo.com` → 200 wenn `foo.com` (ohne `portal.`-Präfix) in `tenants.domain` oder `domain_aliases` einer aktiven Zeile, sonst 404. Verhindert dass Caddy für Random-Subdomains Certs anfordert.
+- `/admin/settings`: neuer Block „Neue Domain anbinden" mit Schritt-Anleitung (1. CF-DNS A-Record auf VPS, 2. im Tenant-Formular eintragen, 3. fertig — Caddy holt Cert binnen 30s).
+- `scripts/setup-server2.sh`: Caddyfile-Template + xcaddy-Build dokumentieren.
 
-**Konkrete Schritte:**
-- Neue Server-Route `/api/public/caddy-ask?domain=...` → `200` wenn Domain in `tenants.domain` oder `domain_aliases` (sonst `404`).
-- Caddyfile-Snippet im `/admin/settings` als Copy-Paste anzeigen + Doku-Block "So bindest du eine neue Domain an" (DNS-Record, dann Tenant anlegen).
-- `scripts/setup-server2.sh` updaten: einmaliger Caddy-Setup mit Wildcard + on-demand-TLS.
-
-**Ergebnis:** Neue Domain anbinden dauert ~2 Minuten (DNS + 1 Formular), kein SSH mehr.
+**User-Aufwand pro neuer Domain danach:** DNS-A-Record bei Cloudflare + Tenant/Alias eintragen. Kein SSH.
 
 ---
 
-## 2. Recovery-Versand Bug-Fix
+## 3. Hard-Bounce-Handling
 
-**Bug:** `src/lib/tenant-domains.functions.ts` Zeile 178 selektiert `applications.updated_at` — Spalte existiert nicht. Folge: `getAffectedRecipients` crashed silent → 0 Empfänger.
-
-**Fix:** `updated_at` aus dem SELECT entfernen, `last_contact` auf `app.created_at` fallback (Zeile 222).
-
-2-Zeilen-Änderung, dann läuft Recovery wieder.
-
----
-
-## 3. Recovery-Mail-Editor in `/admin/email-templates`
-
-**Heute:** Felder `tenants.reminder_recovery_subject/body` existieren, aber **kein UI** — nur SQL. Vorschau läuft auf `/admin/recovery`, aber nicht editierbar.
+**Heute:** `email_send_log` und `reminder_log` speichern `status=failed` + `error`. Bei nächstem Recovery-Lauf werden tote Adressen erneut versucht → Reputation leidet.
 
 **Plan:**
-- In `/admin/email-templates` zwei neue Einträge anlegen:
-  - **„Domain-Wechsel – Mitarbeiter"** (CTA: „Zum neuen Portal & Onboarding fortsetzen")
-  - **„Domain-Wechsel – akzeptierte Bewerber"** (CTA: „Jetzt registrieren auf der neuen Domain")
-- Migration: zwei zusätzliche Spalten
-  ```sql
-  ALTER TABLE tenants
-    ADD COLUMN reminder_recovery_bewerber_subject text,
-    ADD COLUMN reminder_recovery_bewerber_body    text;
-  -- die bestehenden reminder_recovery_subject/body werden zu "Mitarbeiter"
-  ```
-- Editor-UI: gleicher Komponenten-Stil wie bestehende Email-Templates-Seite (Subject-Input, HTML-Body, Live-Vorschau rechts daneben).
-- **Ton "Wir sind umgezogen":** ich schreibe euch 2 Default-Texte mit freundlichem Umzugs-Wording statt Notfall (Beispiel-Tonalität: „Wir haben eine neue Adresse für dich! Ab sofort findest du dein Portal unter …").
-- **Keine Platzhalter-Hinweise mehr** in der UI (du sagtest du brauchst sie nicht) — Platzhalter werden trotzdem ersetzt (`{{first_name}}`, `{{portal_link}}`, `{{tenant_name}}`), nur kein „Verfügbare Platzhalter:"-Hilfetext.
-- `send-reminders`-Edge-Function: wählt Template anhand `recipient.kind` (`mitarbeiter` vs `bewerber_akzeptiert`).
-- Vorschau auf `/admin/recovery` zeigt beide Templates als Tabs.
+- Migration: `profiles.email_status` (`active` | `bounced` | `complained`) + `applications.email_status`. Default `active`.
+- Migration: View/Function `mark_email_bounced(email text, reason text)` → setzt `email_status='bounced'` auf passenden Zeilen + schreibt `activity_log`.
+- `send-reminders/index.ts`: nach jedem Send-Fehler `error`/`response_code` parsen — wenn `5xx` SMTP-Code → `mark_email_bounced` aufrufen. Vor dem Send: `email_status != 'active'` → überspringen + als `skipped` loggen.
+- `/admin/employees` + `/admin/applications.index`: kleines Badge „📭 bounced" + Filter „nur aktive E-Mails", manueller Reset-Button („Adresse wieder zulassen").
+- Optional Phase 2: wenn ein Mailgun/SES-Webhook existiert, hier andocken. Aktuell parsen wir nur SMTP-Response.
 
 ---
 
-## 4. Reihenfolge der Umsetzung
+## 4. Reihenfolge
 
-1. **Bug-Fix Recovery** (2 Zeilen, sofort, damit Recovery überhaupt sendet)
-2. **Migration + Template-Editor** (Mitarbeiter + Bewerber getrennt)
-3. **Send-Reminders Edge-Function** an neue Spalten anpassen
-4. **Caddy on-demand-TLS + Ask-Endpoint** (das wirft den größten Zeit-Gewinn ab)
-5. **Doku-Block** in `/admin/settings` mit Caddyfile-Snippet & Onboarding-Anleitung
+1. Recovery-Cleanup (Bewerber raus, Mitarbeiter-Filter „still" — kleiner Eingriff)
+2. Bounce-Handling Migration + send-reminders-Filter (verhindert Schaden bei nächstem Recovery)
+3. Caddy/Cloudflare-DNS-01-Setup + `caddy-ask`-Route + Admin-Doku-Block
+4. UI-Badges für bounced
 
 ---
 
-## Offene Frage vor dem Bauen
+## Vor dem Bauen brauche ich von dir
 
-Caddy on-demand-TLS heißt: jede Domain, die du in `/admin/tenants` einträgst und deren DNS auf den VPS zeigt, bekommt automatisch ein TLS-Cert. **Cloudflare-User:** wenn du Cloudflare-Proxy (orange Wolke) nutzt, klappt das nicht direkt — dann müsstest du Cloudflare-Origin-Certs nutzen ODER Proxy auf grau stellen.
-→ Sag mir bevor ich baue: **läuft `digital-dgigmbh.com` über Cloudflare-Proxy oder direkt auf den VPS?** (Das entscheidet die Caddy-Config.)
+1. **Recovery-Definition OK?** „Mitarbeiter ohne anstehenden Reminder in 7 Tagen" — oder lieber **alle Mitarbeiter** (auch wer eh bald Reminder kriegt, kriegt halt 2 Mails)?
+2. **Cloudflare API-Token**: bist du OK damit, einen Zone:DNS:Edit-Token zu erstellen und mir als Secret bereitzustellen? (Ohne den geht 1-Klick-Domain nicht — Alternative wäre Cloudflare-Origin-Certs manuell pro Domain.)
+3. **Bounce-Reset**: soll nach X Tagen automatisch „bounced" → „active" zurückspringen, oder nur manuell per Button?

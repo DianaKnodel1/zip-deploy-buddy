@@ -134,6 +134,8 @@ function AdminRemindersPage() {
         </div>
       </div>
 
+      <HealthCard health={health} loading={loadingHealth} onRefresh={loadHealth} />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
           <p className="text-2xl font-bold">{stats.total}</p>

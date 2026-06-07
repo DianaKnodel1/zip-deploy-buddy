@@ -155,11 +155,19 @@ function LandingGeneratorPage() {
     html = html.replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i, "");
     const previewScript = `<script>
 document.addEventListener('click', function(e){
+  var burger = e.target.closest && e.target.closest('#burger, .burger, [aria-label="Menü"], [aria-label="Menu"]');
+  if(burger){
+    e.preventDefault();
+    var nav = document.getElementById('nav-links') || document.querySelector('.nav-links, nav');
+    if(nav) nav.classList.toggle('open');
+    return;
+  }
   var a = e.target.closest && e.target.closest('a[href^="#"]');
   if(a){
     e.preventDefault();
     var id = a.getAttribute('href');
     if(id && id.length > 1){
+      try { history.replaceState(null, '', id); } catch(_){}
       var el = document.querySelector(id);
       if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
     }

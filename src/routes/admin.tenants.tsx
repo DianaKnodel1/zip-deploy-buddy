@@ -69,19 +69,27 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
       toast({ title: "Fehler", description: "Name und Domain sind Pflichtfelder.", variant: "destructive" });
       return;
     }
+    // Erlaubte Domains: Haupt-Domain + alle Aliase + primary_domain
+    const tenantDomain = domain.trim().toLowerCase();
+    const aliasDomainList = domainAliases
+      .split(/[\n,;]+/)
+      .map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+      .filter((s) => s.length > 2);
+    const primaryDom = ((tenant as any)?.primary_domain ?? "").toLowerCase().trim();
+    const allowedDomains = [tenantDomain, primaryDom, ...aliasDomainList].filter(Boolean);
+    const matchesAllowed = (emailDomain: string) =>
+      allowedDomains.some((d) => emailDomain === d || emailDomain.endsWith("." + d));
     if (senderEmail.trim()) {
       const emailDomain = senderEmail.trim().split("@")[1]?.toLowerCase();
-      const tenantDomain = domain.trim().toLowerCase();
-      if (emailDomain && !emailDomain.endsWith(tenantDomain) && emailDomain !== tenantDomain) {
-        toast({ title: "Fehler", description: `Absender-E-Mail muss zur Domain ${tenantDomain} gehören (z.B. info@${tenantDomain}).`, variant: "destructive" });
+      if (emailDomain && !matchesAllowed(emailDomain)) {
+        toast({ title: "Fehler", description: `Absender-E-Mail muss zur Tenant-Domain oder einem Alias passen (${allowedDomains.join(", ")}). Beispiel: info@${tenantDomain}.`, variant: "destructive" });
         return;
       }
     }
     if (companyEmail.trim()) {
       const emailDomain = companyEmail.trim().split("@")[1]?.toLowerCase();
-      const tenantDomain = domain.trim().toLowerCase();
-      if (emailDomain && !emailDomain.endsWith(tenantDomain) && emailDomain !== tenantDomain) {
-        toast({ title: "Fehler", description: `Kontakt-E-Mail muss zur Domain ${tenantDomain} gehören.`, variant: "destructive" });
+      if (emailDomain && !matchesAllowed(emailDomain)) {
+        toast({ title: "Fehler", description: `Kontakt-E-Mail muss zur Tenant-Domain oder einem Alias passen.`, variant: "destructive" });
         return;
       }
     }

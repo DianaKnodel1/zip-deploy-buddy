@@ -490,6 +490,7 @@ async function runConfirmEmail(ctx: SendCtx) {
 
     if (!hasValidSmtp(tenant)) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "no_tenant_smtp" }); await logSkipped(ctx.admin, email, tenantId ?? null, "confirm_email", "no_tenant_smtp"); continue; }
     if (capReached(ctx, tenant.id, "confirm_email")) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "confirm_email");
     if (!gate.ok) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", gate.reason ?? "skip"); continue; }
@@ -501,6 +502,7 @@ async function runConfirmEmail(ctx: SendCtx) {
     const tokenHash = (linkRes.data?.properties as any)?.hashed_token;
     if (!tokenHash) {
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", "no_token");
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, "(no token)", null, "failed", "no_token");
       ctx.results.push({ type: "confirm_email", email, status: "failed", error: "no_token" });
       continue;
     }
@@ -512,12 +514,15 @@ async function runConfirmEmail(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "sent");
       ctx.results.push({ type: "confirm_email", email, status: "sent" });
       bumpSent(ctx, tenant.id, "confirm_email");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "confirm_email", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "confirm_email", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }

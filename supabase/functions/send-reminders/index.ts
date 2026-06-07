@@ -421,6 +421,7 @@ async function runInvites(ctx: SendCtx) {
       continue;
     }
     if (capReached(ctx, tenant.id, "invite")) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "invite", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "invite", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "invite");
     if (!gate.ok) { ctx.results.push({ type: "invite", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "invite", gate.reason ?? "skip"); continue; }
@@ -436,12 +437,15 @@ async function runInvites(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "invite", email, subject, html, "sent");
       ctx.results.push({ type: "invite", email, status: "sent" });
       bumpSent(ctx, tenant.id, "invite");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "invite", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "invite", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "invite", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }

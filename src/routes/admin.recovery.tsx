@@ -268,30 +268,16 @@ function AdminRecoveryPage() {
                 ) : (
                   <>
                     <div className="text-xs text-muted-foreground">
-                      So sieht die Recovery-Mail für deine Empfänger aus. Texte bearbeitbar unter
-                      <a href="/admin/email-templates" className="underline mx-1">/admin/email-templates → Erinnerungen → Domain-Wechsel</a>
-                      (getrennte Tabs für Mitarbeiter und Bewerber).
+                      So sieht die Recovery-Mail für deine Mitarbeiter aus. Text bearbeitbar unter
+                      <a href="/admin/email-templates" className="underline mx-1">/admin/email-templates → Erinnerungen → Domain-Wechsel</a>.
                     </div>
-                    <Tabs defaultValue="mitarbeiter">
-                      <TabsList>
-                        <TabsTrigger value="mitarbeiter" className="text-xs">Mitarbeiter</TabsTrigger>
-                        <TabsTrigger value="bewerber" className="text-xs">Akzeptierte Bewerber</TabsTrigger>
-                      </TabsList>
-                      {(["mitarbeiter", "bewerber"] as const).map((k) => {
-                        const p = preview[k] ?? preview;
-                        return (
-                          <TabsContent key={k} value={k} className="space-y-2">
-                            <div className="text-sm"><span className="font-medium">Betreff:</span> {p.subject}</div>
-                            <div className="text-xs text-muted-foreground">Portal-Link: <code>{p.portal_link}</code></div>
-                            <iframe
-                              title={`Recovery-Mail-Vorschau ${k}`}
-                              srcDoc={p.html}
-                              className="w-full h-[600px] rounded-md border bg-white"
-                            />
-                          </TabsContent>
-                        );
-                      })}
-                    </Tabs>
+                    <div className="text-sm"><span className="font-medium">Betreff:</span> {preview.subject}</div>
+                    <div className="text-xs text-muted-foreground">Portal-Link: <code>{preview.portal_link}</code></div>
+                    <iframe
+                      title="Recovery-Mail-Vorschau"
+                      srcDoc={preview.html}
+                      className="w-full h-[600px] rounded-md border bg-white"
+                    />
                   </>
                 )}
               </CardContent>
@@ -364,9 +350,7 @@ function RecipientStatusTable({
                   <div className="text-xs text-muted-foreground">{r.email ?? "—"}</div>
                 </td>
                 <td className="py-2 px-2 text-xs">
-                  {r.kind === "bewerber_akzeptiert"
-                    ? <Badge variant="outline">Bewerber</Badge>
-                    : <Badge variant="outline">Mitarbeiter</Badge>}
+                  <Badge variant="outline">Mitarbeiter</Badge>
                 </td>
                 <td className="py-2 px-2">
                   <StatusBadge status={status} />

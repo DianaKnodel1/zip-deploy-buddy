@@ -741,6 +741,11 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
       await logSkipped(ctx.admin, rec.email, tenant.id, "domain_recovery", "recovery_run_cap_reached");
       continue;
     }
+    if (tenant12hCapReached(ctx, tenant.id)) {
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "skipped", error: "tenant_12h_cap_reached" });
+      await logSkipped(ctx.admin, rec.email, tenant.id, "domain_recovery", "tenant_12h_cap_reached");
+      continue;
+    }
 
     stats.would_send_this_run++;
 
@@ -759,6 +764,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     try {
       await sendMail(tenant, rec.email, subject, html);
       await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "domain_recovery", rec.email, subject, html, "sent");
       ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       bumpSent(ctx, tenant.id, "domain_recovery");
       sentThisRun++;
@@ -766,6 +772,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     } catch (e: any) {
       const errMsg = String(e?.message ?? e);
       await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "domain_recovery", rec.email, subject, html, "failed", errMsg);
       ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: errMsg });
       // Hard-Bounce-Detection: SMTP 5.x.x → Empfänger als 'bounced' markieren.
       await maybeMarkBounced(ctx.admin, rec.email, e);

@@ -38,6 +38,8 @@ const InputSchema = z.object({
   // Logo als data-URL: "data:image/png;base64,...."
   logoDataUrl: z.string().max(15_000_000).optional().nullable(),
   faviconDataUrl: z.string().max(1_000_000).optional().nullable(),
+  // Theme-Slot-Werte (Texte/Bilder/Farben aus dem UI-Theme-Editor).
+  slots: z.record(z.string().min(1).max(60), z.string().max(20_000)).optional().default({}),
 });
 
 function applyPlaceholders(

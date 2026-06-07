@@ -551,6 +551,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     const tenant = (p as any).tenant_id ? ctx.tenants.get((p as any).tenant_id) : null;
     if (!hasValidSmtp(tenant)) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "no_tenant_smtp" }); await logSkipped(ctx.admin, email, (p as any).tenant_id ?? null, "complete_registration", "no_tenant_smtp"); continue; }
     if (capReached(ctx, tenant.id, "complete_registration")) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "complete_registration");
     if (!gate.ok) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", gate.reason ?? "skip"); continue; }
@@ -566,12 +567,15 @@ async function runCompleteRegistration(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "sent");
       ctx.results.push({ type: "complete_registration", email, status: "sent" });
       bumpSent(ctx, tenant.id, "complete_registration");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "complete_registration", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "complete_registration", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }

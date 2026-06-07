@@ -382,6 +382,35 @@ document.addEventListener('click', function(e){
             </CardContent>
           </Card>
 
+          {/* Step 2b: Theme-spezifische Inhalte (Slots) */}
+          {currentSlots.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">2b. Theme-Inhalte ({currentTheme?.name})</CardTitle>
+                <CardDescription>Texte, Bilder und Farben dieses Themes individuell anpassen.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {currentSlots.map((slot) => (
+                  <Field key={slot.key} label={slot.label}>
+                    {slot.type === "longtext" ? (
+                      <Textarea rows={3} value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} className="font-mono text-xs" />
+                    ) : slot.type === "color" ? (
+                      <div className="flex gap-2">
+                        <Input type="color" value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} className="w-16 p-1 h-10" />
+                        <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} />
+                      </div>
+                    ) : slot.type === "image" ? (
+                      <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} placeholder="https://… oder /assets/foo.jpg" />
+                    ) : (
+                      <Input value={slotValues[slot.key] ?? slot.default} onChange={setSlot(slot.key)} />
+                    )}
+                  </Field>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+
           {/* Step 3: Build */}
           <Card>
             <CardHeader className="pb-3">

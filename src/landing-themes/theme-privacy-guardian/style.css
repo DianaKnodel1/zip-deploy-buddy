@@ -133,3 +133,5 @@ a{color:inherit;text-decoration:none}
 .legal h3{font-size:16px;font-weight:700;margin:24px 0 8px;color:var(--ink)}
 .legal p,.legal li{color:var(--muted);font-size:14px;margin-bottom:8px}
 .legal ul{padding-left:24px}
+
+.nav-cta-group{display:inline-flex;align-items:center;gap:10px}

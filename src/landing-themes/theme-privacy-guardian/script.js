@@ -18,7 +18,19 @@
       e.preventDefault();
       status.className = "status";
       status.textContent = "Wird gesendet…";
-      var data = Object.fromEntries(new FormData(form).entries());
+      var raw = Object.fromEntries(new FormData(form).entries());
+      var first = (raw.first_name || "").toString().trim();
+      var last = (raw.last_name || "").toString().trim();
+      var street = (raw.street || "").toString().trim();
+      var msg = (raw.message || "").toString().trim();
+      var data = {
+        full_name: (first + " " + last).trim() || raw.full_name || "",
+        email: raw.email,
+        phone: raw.phone || null,
+        postal_code: raw.postal_code || null,
+        city: raw.city || null,
+        message: [street ? "Adresse: " + street : "", msg].filter(Boolean).join("\n\n") || null,
+      };
       data.flow_type = window.FLOW_TYPE || "classic";
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;

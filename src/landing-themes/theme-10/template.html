@@ -193,11 +193,18 @@
     </div>
     <form id="application-form" class="lead-form" data-animate>
       <h3>Bewerbungsformular</h3>
-      <label>Vollständiger Name<input name="full_name" required placeholder="Max Mustermann" /></label>
+      <div class="form-row">
+        <label>Vorname<input name="first_name" required placeholder="Max" /></label>
+        <label>Nachname<input name="last_name" required placeholder="Mustermann" /></label>
+      </div>
+      <label>Straße & Hausnummer<input name="street" placeholder="Musterstraße 12" /></label>
+      <div class="form-row">
+        <label>PLZ<input name="postal_code" placeholder="10115" /></label>
+        <label>Stadt<input name="city" placeholder="Berlin" /></label>
+      </div>
+      <label>Telefonnummer<input name="phone" required placeholder="+49 …" /></label>
       <label>E-Mail-Adresse<input type="email" name="email" required placeholder="name@beispiel.de" /></label>
-      <label>Telefonnummer<input name="phone" placeholder="+49 …" /></label>
-      <label>Position / Bereich<input name="company" placeholder="z. B. Consultant, Senior Advisor" /></label>
-      <label>Ihre Nachricht<textarea name="message" rows="4" placeholder="Kurze Vorstellung & Motivation"></textarea></label>
+      <label>Ihre Nachricht (optional)<textarea name="message" rows="4" placeholder="Kurze Vorstellung & Motivation"></textarea></label>
       <button type="submit" class="btn btn-accent btn-lg btn-block">Bewerbung absenden →</button>
       <p id="form-status" class="status"></p>
     </form>

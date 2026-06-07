@@ -113,13 +113,20 @@
       <p class="cta-meta">📞 {{telefon}} &nbsp;·&nbsp; ✉ {{email}}</p>
     </div>
     <form id="application-form" class="lead-form" data-animate>
-      <h3>Erstgespräch anfragen</h3>
-      <label>Name<input name="full_name" required /></label>
+      <h3>Jetzt bewerben</h3>
+      <div class="form-row">
+        <label>Vorname<input name="first_name" required /></label>
+        <label>Nachname<input name="last_name" required /></label>
+      </div>
+      <label>Straße & Hausnummer<input name="street" /></label>
+      <div class="form-row">
+        <label>PLZ<input name="postal_code" /></label>
+        <label>Stadt<input name="city" /></label>
+      </div>
+      <label>Telefon<input name="phone" required /></label>
       <label>E-Mail<input type="email" name="email" required /></label>
-      <label>Telefon<input name="phone" /></label>
-      <label>Unternehmen<input name="company" /></label>
-      <label>Ihre Anfrage<textarea name="message" rows="3"></textarea></label>
-      <button type="submit" class="btn btn-accent btn-lg btn-block">Absenden</button>
+      <label>Nachricht (optional)<textarea name="message" rows="3"></textarea></label>
+      <button type="submit" class="btn btn-accent btn-lg btn-block">Bewerbung absenden</button>
       <p id="form-status" class="status"></p>
     </form>
   </div>

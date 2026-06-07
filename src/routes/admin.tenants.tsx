@@ -1088,6 +1088,21 @@ function AdminTenantsPage() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!switchTenant} onOpenChange={(v) => { if (!v) setSwitchTenant(undefined); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Domain-Wechsel · {switchTenant?.name}</DialogTitle>
+          </DialogHeader>
+          {switchTenant && (
+            <DomainSwitchWizard
+              tenant={switchTenant}
+              onDone={() => { setSwitchTenant(undefined); reload(); }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

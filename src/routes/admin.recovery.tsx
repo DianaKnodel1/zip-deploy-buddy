@@ -39,6 +39,8 @@ function AdminRecoveryPage() {
   const previewFn = useServerFn(getRecoveryPreview);
   const bouncedFn = useServerFn(listBouncedRecipients);
   const resetFn = useServerFn(resetEmailStatus);
+  const healthFn = useServerFn(getReminderHealth);
+  const logFn = useServerFn(listReminderLog);
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>("");

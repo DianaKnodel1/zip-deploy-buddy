@@ -343,12 +343,13 @@ async function runInvites(ctx: SendCtx) {
     const tenant = app.tenant_id ? ctx.tenants.get(app.tenant_id) : null;
     if (!hasValidSmtp(tenant)) {
       ctx.results.push({ type: "invite", email, status: "skipped", error: "no_tenant_smtp" });
+      await logSkipped(ctx.admin, email, app.tenant_id ?? null, "invite", "no_tenant_smtp");
       continue;
     }
-    if (capReached(ctx, tenant.id, "invite")) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_run_cap_reached" }); continue; }
+    if (capReached(ctx, tenant.id, "invite")) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "invite", "tenant_run_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "invite");
-    if (!gate.ok) { ctx.results.push({ type: "invite", email, status: "skipped", error: gate.reason }); continue; }
+    if (!gate.ok) { ctx.results.push({ type: "invite", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "invite", gate.reason ?? "skip"); continue; }
 
     if (ctx.dryRun) { ctx.results.push({ type: "invite", email, status: "sent" }); continue; }
 

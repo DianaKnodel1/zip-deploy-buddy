@@ -119,6 +119,8 @@ function AdminRecoveryPage() {
     } finally {
       setResettingId(null);
     }
+  };
+
 
   useEffect(() => {
     (async () => {

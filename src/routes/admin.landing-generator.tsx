@@ -195,6 +195,17 @@ document.addEventListener('click', function(e){
   var b = e.target.closest && e.target.closest('.faq-q');
   if(b){ var item = b.closest('.faq-item'); if(item) item.classList.toggle('open'); }
 }, true);
+document.addEventListener('submit', function(e){
+  var f = e.target && e.target.id === 'application-form' ? e.target : null;
+  if(!f) return;
+  e.preventDefault();
+  var status = document.getElementById('form-status');
+  if(status){
+    status.className = 'status success';
+    status.textContent = 'Vorschau: Das Formular wird in der echten Landing-Page versendet.';
+  }
+  try { f.reset(); } catch(_){}
+}, true);
 <\/script>`;
     html = html.replace(/<\/body>/i, previewScript + "</body>");
 

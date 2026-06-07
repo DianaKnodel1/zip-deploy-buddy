@@ -192,6 +192,24 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
         <div>
           <Label className="text-xs">Absender-E-Mail</Label>
           <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="info@bcutheme.de" className="mt-1" />
+          {(() => {
+            const ed = senderEmail.trim().split("@")[1]?.toLowerCase();
+            if (!ed) return null;
+            const td = domain.trim().toLowerCase();
+            const aliases = domainAliases.split(/[\n,;]+/).map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter((s) => s.length > 2);
+            const pd = ((tenant as any)?.primary_domain ?? "").toLowerCase().trim();
+            const allowed = [td, pd, ...aliases].filter(Boolean);
+            const ok = allowed.some((d) => ed === d || ed.endsWith("." + d));
+            if (ok) return null;
+            return (
+              <div className="mt-2 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/30">
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                <p className="text-[10px] text-foreground">
+                  Sender-Domain <code className="font-mono">{ed}</code> passt nicht zur Tenant-Domain oder einem Alias ({allowed.join(", ")}). Mails landen wahrscheinlich im Spam und Tenant-Isolation ist gefährdet.
+                </p>
+              </div>
+            );
+          })()}
         </div>
         <div>
           <Label className="text-xs">Hero-Titel</Label>

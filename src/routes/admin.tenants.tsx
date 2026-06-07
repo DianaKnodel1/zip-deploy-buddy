@@ -1071,6 +1071,9 @@ function AdminTenantsPage() {
                     <Button variant="ghost" size="sm" onClick={() => toggleActive(t)} className="text-xs">
                       {t.is_active ? "Deaktivieren" : "Aktivieren"}
                     </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Domain wechseln (Wizard)" onClick={() => setSwitchTenant(t)}>
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditTenant(t); setDialogOpen(true); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -1078,6 +1081,7 @@ function AdminTenantsPage() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+
                 </div>
               </CardContent>
             </Card>

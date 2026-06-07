@@ -305,6 +305,9 @@ function AdminEmailLogsPage() {
                         <Badge variant="secondary" className={`text-[10px] ${EMAIL_STATUS_COLORS[log.status] ?? "bg-muted text-muted-foreground"}`}>
                           {EMAIL_STATUS_LABELS[log.status] ?? log.status}
                         </Badge>
+                        {log.acknowledged_at && ["failed", "dlq", "bounced"].includes(log.status) && (
+                          <Badge variant="outline" className="text-[10px] gap-1"><Check className="h-2.5 w-2.5" />bearbeitet</Badge>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-medium text-foreground text-xs">{log.recipient_email}</td>

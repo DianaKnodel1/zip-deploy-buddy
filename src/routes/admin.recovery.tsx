@@ -182,16 +182,33 @@ function AdminRecoveryPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleReset = async (rec: BouncedRecipient) => {
+    setResettingId(rec.id);
+    try {
+      await resetFn({ data: { kind: rec.kind, id: rec.id } });
+      toast({ title: "E-Mail-Adresse wieder aktiv", description: rec.email });
+      loadBounced(tenantId);
+      loadHealth(tenantId || null);
+    } catch (e: any) {
+      toast({ title: "Reset fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from("tenants").select("id,name,domain,primary_domain").eq("is_active", true).order("name");
       setTenants((data ?? []) as Tenant[]);
     })();
+    loadHealth(null);
   }, []);
 
   useEffect(() => {
     if (!tenantId) {
       setRecipients([]); setHistory([]); setStatusEntries([]); setChangedAt(null); setPreview(null); setBounced([]);
+      loadHealth(null);
+      loadLog(null, 1, logFilters);
       return;
     }
     setLoadingPreview(true);
@@ -203,6 +220,8 @@ function AdminRecoveryPage() {
     loadStatus(tenantId);
     loadPreview(tenantId);
     loadBounced(tenantId);
+    loadHealth(tenantId);
+    loadLog(tenantId, 1, logFilters);
   }, [tenantId]);
 
   const send = async (opts: { dryRun?: boolean; retryFailed?: boolean }) => {

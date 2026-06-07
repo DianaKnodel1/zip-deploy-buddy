@@ -99,6 +99,23 @@ function AdminRecoveryPage() {
   const [loadingBounced, setLoadingBounced] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
+  // Health + Audit
+  const [health, setHealth] = useState<{
+    last_run_at: string | null; age_ms: number | null;
+    severity: "green" | "yellow" | "red" | "unknown";
+    counts_24h: { sent: number; failed: number; skipped: number };
+    bounced: number;
+  } | null>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [logRows, setLogRows] = useState<ReminderLogRow[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logPage, setLogPage] = useState(1);
+  const LOG_PAGE_SIZE = 50;
+  const [loadingLog, setLoadingLog] = useState(false);
+  const [logFilters, setLogFilters] = useState<{ email_query: string; type: string; status: string; range: "today" | "7d" | "30d" | "all" }>({
+    email_query: "", type: "", status: "", range: "7d",
+  });
+
   const loadBounced = async (tid: string) => {
     setLoadingBounced(true);
     try {
@@ -111,19 +128,59 @@ function AdminRecoveryPage() {
     }
   };
 
-  const handleReset = async (rec: BouncedRecipient) => {
-    setResettingId(rec.id);
+  const loadHealth = async (tid: string | null) => {
+    setLoadingHealth(true);
     try {
-      await resetFn({ data: { kind: rec.kind, id: rec.id } });
-      toast({ title: "E-Mail-Adresse wieder aktiv", description: rec.email });
-      loadBounced(tenantId);
+      const r = await healthFn({ data: { tenant_id: tid } });
+      setHealth(r as any);
     } catch (e: any) {
-      toast({ title: "Reset fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+      // silent
     } finally {
-      setResettingId(null);
+      setLoadingHealth(false);
     }
   };
 
+  const loadLog = async (tid: string | null, page = logPage, filters = logFilters) => {
+    setLoadingLog(true);
+    try {
+      const r = await logFn({
+        data: {
+          tenant_id: tid ?? undefined,
+          email_query: filters.email_query || undefined,
+          type: (filters.type || undefined) as any,
+          status: (filters.status || undefined) as any,
+          range: filters.range,
+          page,
+          page_size: LOG_PAGE_SIZE,
+        },
+      });
+      setLogRows(r.rows);
+      setLogTotal(r.total);
+      setLogPage(r.page);
+    } catch (e: any) {
+      toast({ title: "Audit-Log fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setLoadingLog(false);
+    }
+  };
+
+  const exportLogCsv = () => {
+    const header = ["sent_at", "email", "reminder_type", "status", "attempt", "error"];
+    const lines = [header.join(",")];
+    for (const r of logRows) {
+      lines.push([
+        r.sent_at, r.email, r.reminder_type, r.status, String(r.attempt),
+        `"${(r.error ?? "").replace(/"/g, '""')}"`,
+      ].join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reminder-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     (async () => {

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Send, Users, AlertTriangle, History, Eye, RefreshCw,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, Activity, FileDown, Search,
 } from "lucide-react";
 import {
   enqueueDomainRecoveryMails,
@@ -22,6 +22,7 @@ import {
   type RecoveryStatusEntry,
   type BouncedRecipient,
 } from "@/lib/tenant-domains.functions";
+import { listReminderLog, getReminderHealth, type ReminderLogRow } from "@/lib/reminder-log.functions";
 import { MailX, Undo2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/recovery")({

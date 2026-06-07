@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Send, Users, AlertTriangle, History, Eye, RefreshCw,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, Activity, FileDown, Search,
 } from "lucide-react";
 import {
   enqueueDomainRecoveryMails,
@@ -22,6 +22,7 @@ import {
   type RecoveryStatusEntry,
   type BouncedRecipient,
 } from "@/lib/tenant-domains.functions";
+import { listReminderLog, getReminderHealth, type ReminderLogRow } from "@/lib/reminder-log.functions";
 import { MailX, Undo2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/recovery")({
@@ -38,6 +39,8 @@ function AdminRecoveryPage() {
   const previewFn = useServerFn(getRecoveryPreview);
   const bouncedFn = useServerFn(listBouncedRecipients);
   const resetFn = useServerFn(resetEmailStatus);
+  const healthFn = useServerFn(getReminderHealth);
+  const logFn = useServerFn(listReminderLog);
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>("");
@@ -96,6 +99,23 @@ function AdminRecoveryPage() {
   const [loadingBounced, setLoadingBounced] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
+  // Health + Audit
+  const [health, setHealth] = useState<{
+    last_run_at: string | null; age_ms: number | null;
+    severity: "green" | "yellow" | "red" | "unknown";
+    counts_24h: { sent: number; failed: number; skipped: number };
+    bounced: number;
+  } | null>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [logRows, setLogRows] = useState<ReminderLogRow[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logPage, setLogPage] = useState(1);
+  const LOG_PAGE_SIZE = 50;
+  const [loadingLog, setLoadingLog] = useState(false);
+  const [logFilters, setLogFilters] = useState<{ email_query: string; type: string; status: string; range: "today" | "7d" | "30d" | "all" }>({
+    email_query: "", type: "", status: "", range: "7d",
+  });
+
   const loadBounced = async (tid: string) => {
     setLoadingBounced(true);
     try {
@@ -108,12 +128,67 @@ function AdminRecoveryPage() {
     }
   };
 
+  const loadHealth = async (tid: string | null) => {
+    setLoadingHealth(true);
+    try {
+      const r = await healthFn({ data: { tenant_id: tid } });
+      setHealth(r as any);
+    } catch (e: any) {
+      // silent
+    } finally {
+      setLoadingHealth(false);
+    }
+  };
+
+  const loadLog = async (tid: string | null, page = logPage, filters = logFilters) => {
+    setLoadingLog(true);
+    try {
+      const r = await logFn({
+        data: {
+          tenant_id: tid ?? undefined,
+          email_query: filters.email_query || undefined,
+          type: (filters.type || undefined) as any,
+          status: (filters.status || undefined) as any,
+          range: filters.range,
+          page,
+          page_size: LOG_PAGE_SIZE,
+        },
+      });
+      setLogRows(r.rows);
+      setLogTotal(r.total);
+      setLogPage(r.page);
+    } catch (e: any) {
+      toast({ title: "Audit-Log fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setLoadingLog(false);
+    }
+  };
+
+  const exportLogCsv = () => {
+    const header = ["sent_at", "email", "reminder_type", "status", "attempt", "error"];
+    const lines = [header.join(",")];
+    for (const r of logRows) {
+      lines.push([
+        r.sent_at, r.email, r.reminder_type, r.status, String(r.attempt),
+        `"${(r.error ?? "").replace(/"/g, '""')}"`,
+      ].join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reminder-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleReset = async (rec: BouncedRecipient) => {
     setResettingId(rec.id);
     try {
       await resetFn({ data: { kind: rec.kind, id: rec.id } });
       toast({ title: "E-Mail-Adresse wieder aktiv", description: rec.email });
       loadBounced(tenantId);
+      loadHealth(tenantId || null);
     } catch (e: any) {
       toast({ title: "Reset fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
     } finally {
@@ -121,17 +196,19 @@ function AdminRecoveryPage() {
     }
   };
 
-
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from("tenants").select("id,name,domain,primary_domain").eq("is_active", true).order("name");
       setTenants((data ?? []) as Tenant[]);
     })();
+    loadHealth(null);
   }, []);
 
   useEffect(() => {
     if (!tenantId) {
       setRecipients([]); setHistory([]); setStatusEntries([]); setChangedAt(null); setPreview(null); setBounced([]);
+      loadHealth(null);
+      loadLog(null, 1, logFilters);
       return;
     }
     setLoadingPreview(true);
@@ -143,6 +220,8 @@ function AdminRecoveryPage() {
     loadStatus(tenantId);
     loadPreview(tenantId);
     loadBounced(tenantId);
+    loadHealth(tenantId);
+    loadLog(tenantId, 1, logFilters);
   }, [tenantId]);
 
   const send = async (opts: { dryRun?: boolean; retryFailed?: boolean }) => {
@@ -190,6 +269,14 @@ function AdminRecoveryPage() {
           Bewerber sind ausgenommen — sie erhalten den neuen Link über die normalen Einladungs-Reminder.
         </p>
       </div>
+
+      <HealthCard
+        health={health}
+        loading={loadingHealth}
+        onRefresh={() => loadHealth(tenantId || null)}
+      />
+
+
 
       <Card>
         <CardContent className="p-6 space-y-4">
@@ -282,7 +369,27 @@ function AdminRecoveryPage() {
             <TabsTrigger value="preview"><Eye className="h-3.5 w-3.5 mr-1.5" />Mail-Vorschau</TabsTrigger>
             <TabsTrigger value="history"><History className="h-3.5 w-3.5 mr-1.5" />Vergangene Läufe</TabsTrigger>
             <TabsTrigger value="bounced"><MailX className="h-3.5 w-3.5 mr-1.5" />Bounces ({bounced.length})</TabsTrigger>
+            <TabsTrigger value="audit"><Activity className="h-3.5 w-3.5 mr-1.5" />Verlauf</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="audit">
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                <AuditLogPanel
+                  rows={logRows}
+                  total={logTotal}
+                  page={logPage}
+                  pageSize={LOG_PAGE_SIZE}
+                  loading={loadingLog}
+                  filters={logFilters}
+                  onFiltersChange={(f) => { setLogFilters(f); loadLog(tenantId || null, 1, f); }}
+                  onPageChange={(p) => loadLog(tenantId || null, p, logFilters)}
+                  onExport={exportLogCsv}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
 
           <TabsContent value="status">
             <Card>
@@ -469,5 +576,196 @@ function RecipientStatusTable({
 function StatusBadge({ status }: { status: string }) {
   if (status === "sent") return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200"><CheckCircle2 className="h-3 w-3 mr-1" />gesendet</Badge>;
   if (status === "failed") return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />fehlgeschlagen</Badge>;
+  if (status === "skipped") return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />übersprungen</Badge>;
   return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />ausstehend</Badge>;
+}
+
+function formatAge(ms: number | null): string {
+  if (ms === null) return "—";
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "gerade eben";
+  if (m < 60) return `vor ${m} Min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `vor ${h} Std`;
+  const d = Math.floor(h / 24);
+  return `vor ${d} Tag${d === 1 ? "" : "en"}`;
+}
+
+function HealthCard({
+  health, loading, onRefresh,
+}: {
+  health: {
+    last_run_at: string | null; age_ms: number | null;
+    severity: "green" | "yellow" | "red" | "unknown";
+    counts_24h: { sent: number; failed: number; skipped: number };
+    bounced: number;
+  } | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const sevColor = health?.severity === "green"
+    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+    : health?.severity === "yellow"
+    ? "bg-amber-100 text-amber-700 border-amber-200"
+    : health?.severity === "red"
+    ? "bg-red-100 text-red-700 border-red-200"
+    : "bg-muted text-muted-foreground";
+  const sevLabel = health?.severity === "green" ? "Healthy" : health?.severity === "yellow" ? "Verzögert" : health?.severity === "red" ? "Stillstand" : "Unbekannt";
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <div className="text-sm font-medium flex items-center gap-2">
+                Reminder-Cron
+                <Badge variant="outline" className={sevColor}>{sevLabel}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Letzter Lauf: {loading ? "lädt…" : formatAge(health?.age_ms ?? null)}
+                {health?.last_run_at ? ` · ${new Date(health.last_run_at).toLocaleString("de-DE")}` : ""}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="text-center">
+              <div className="font-semibold text-emerald-700">{health?.counts_24h.sent ?? 0}</div>
+              <div className="text-muted-foreground">gesendet 24h</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-destructive">{health?.counts_24h.failed ?? 0}</div>
+              <div className="text-muted-foreground">fehlgeschlagen</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold">{health?.counts_24h.skipped ?? 0}</div>
+              <div className="text-muted-foreground">übersprungen</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-amber-700">{health?.bounced ?? 0}</div>
+              <div className="text-muted-foreground">Bounces</div>
+            </div>
+            <Button size="sm" variant="ghost" onClick={onRefresh} disabled={loading}>
+              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AuditLogPanel({
+  rows, total, page, pageSize, loading, filters, onFiltersChange, onPageChange, onExport,
+}: {
+  rows: ReminderLogRow[];
+  total: number; page: number; pageSize: number; loading: boolean;
+  filters: { email_query: string; type: string; status: string; range: "today" | "7d" | "30d" | "all" };
+  onFiltersChange: (f: typeof filters) => void;
+  onPageChange: (p: number) => void;
+  onExport: () => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const typeLabel: Record<string, string> = {
+    invite: "Invite", confirm_email: "E-Mail bestätigen", complete_registration: "Onboarding",
+    no_recent_booking: "Keine Buchung", domain_recovery: "Domain-Recovery",
+  };
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <label className="text-xs text-muted-foreground">E-Mail-Suche</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              value={filters.email_query}
+              onChange={(e) => onFiltersChange({ ...filters, email_query: e.target.value })}
+              placeholder="z.B. müller"
+              className="w-full rounded-md border bg-background pl-7 pr-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Typ</label>
+          <select
+            value={filters.type}
+            onChange={(e) => onFiltersChange({ ...filters, type: e.target.value })}
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="">alle</option>
+            {Object.entries(typeLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Status</label>
+          <select
+            value={filters.status}
+            onChange={(e) => onFiltersChange({ ...filters, status: e.target.value })}
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="">alle</option>
+            <option value="sent">gesendet</option>
+            <option value="failed">fehlgeschlagen</option>
+            <option value="skipped">übersprungen</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Zeitraum</label>
+          <select
+            value={filters.range}
+            onChange={(e) => onFiltersChange({ ...filters, range: e.target.value as any })}
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="today">24h</option>
+            <option value="7d">7 Tage</option>
+            <option value="30d">30 Tage</option>
+            <option value="all">alle</option>
+          </select>
+        </div>
+        <Button size="sm" variant="outline" onClick={onExport} disabled={rows.length === 0}>
+          <FileDown className="h-3 w-3 mr-1.5" />CSV
+        </Button>
+      </div>
+
+      <div className="text-xs text-muted-foreground">
+        {loading ? "Lädt…" : `${total} Einträge · Seite ${page}/${totalPages}`}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs text-muted-foreground">
+              <th className="py-2 px-2">Zeit</th>
+              <th className="py-2 px-2">Empfänger</th>
+              <th className="py-2 px-2">Typ</th>
+              <th className="py-2 px-2">Status</th>
+              <th className="py-2 px-2">Info</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && !loading ? (
+              <tr><td colSpan={5} className="py-6 text-center text-sm text-muted-foreground">Keine Einträge im gewählten Zeitraum.</td></tr>
+            ) : rows.map((r) => (
+              <tr key={r.id} className="border-b last:border-0">
+                <td className="py-2 px-2 text-xs text-muted-foreground whitespace-nowrap">{new Date(r.sent_at).toLocaleString("de-DE")}</td>
+                <td className="py-2 px-2 text-xs">{r.email}</td>
+                <td className="py-2 px-2 text-xs"><Badge variant="outline">{typeLabel[r.reminder_type] ?? r.reminder_type}</Badge></td>
+                <td className="py-2 px-2"><StatusBadge status={r.status} /></td>
+                <td className="py-2 px-2 text-xs max-w-[280px] truncate" title={r.error ?? ""}>
+                  {r.error ? <span className={r.status === "failed" ? "text-destructive" : "text-muted-foreground"}>{r.error}</span> : <span className="text-muted-foreground">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex justify-between items-center pt-2">
+        <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => onPageChange(page - 1)}>← Zurück</Button>
+        <span className="text-xs text-muted-foreground">Seite {page} von {totalPages}</span>
+        <Button size="sm" variant="outline" disabled={page >= totalPages || loading} onClick={() => onPageChange(page + 1)}>Weiter →</Button>
+      </div>
+    </>
+  );
 }

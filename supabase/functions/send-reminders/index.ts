@@ -352,6 +352,7 @@ async function runInvites(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "invite", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -423,6 +424,7 @@ async function runConfirmEmail(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "confirm_email", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -471,6 +473,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "complete_registration", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }
@@ -540,6 +543,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
     } catch (e: any) {
       await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", String(e?.message ?? e));
       ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: String(e?.message ?? e) });
+      await maybeMarkBounced(ctx.admin, email, e);
     }
   }
 }

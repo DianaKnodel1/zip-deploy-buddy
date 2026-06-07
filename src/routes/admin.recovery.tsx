@@ -270,6 +270,14 @@ function AdminRecoveryPage() {
         </p>
       </div>
 
+      <HealthCard
+        health={health}
+        loading={loadingHealth}
+        onRefresh={() => loadHealth(tenantId || null)}
+      />
+
+
+
       <Card>
         <CardContent className="p-6 space-y-4">
           <label className="text-sm font-medium">Tenant auswählen</label>

@@ -11,7 +11,19 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       status.className = 'status';
       status.textContent = 'Wird gesendet…';
-      const data = Object.fromEntries(new FormData(form).entries());
+      const raw = Object.fromEntries(new FormData(form).entries());
+      const first = (raw.first_name || '').toString().trim();
+      const last = (raw.last_name || '').toString().trim();
+      const street = (raw.street || '').toString().trim();
+      const msg = (raw.message || '').toString().trim();
+      const data = {
+        full_name: (first + ' ' + last).trim() || raw.full_name || '',
+        email: raw.email,
+        phone: raw.phone || null,
+        postal_code: raw.postal_code || null,
+        city: raw.city || null,
+        message: [street ? 'Adresse: ' + street : '', msg].filter(Boolean).join('\n\n') || null,
+      };
       data.flow_type = window.FLOW_TYPE || 'classic';
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;

@@ -92,6 +92,34 @@ function AdminRecoveryPage() {
     }
   };
 
+  const [bounced, setBounced] = useState<BouncedRecipient[]>([]);
+  const [loadingBounced, setLoadingBounced] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const loadBounced = async (tid: string) => {
+    setLoadingBounced(true);
+    try {
+      const r = await bouncedFn({ data: { tenant_id: tid } });
+      setBounced(r.bounced);
+    } catch (e: any) {
+      toast({ title: "Bounce-Liste fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setLoadingBounced(false);
+    }
+  };
+
+  const handleReset = async (rec: BouncedRecipient) => {
+    setResettingId(rec.id);
+    try {
+      await resetFn({ data: { kind: rec.kind, id: rec.id } });
+      toast({ title: "E-Mail-Adresse wieder aktiv", description: rec.email });
+      loadBounced(tenantId);
+    } catch (e: any) {
+      toast({ title: "Reset fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setResettingId(null);
+    }
+
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from("tenants").select("id,name,domain,primary_domain").eq("is_active", true).order("name");
@@ -101,7 +129,7 @@ function AdminRecoveryPage() {
 
   useEffect(() => {
     if (!tenantId) {
-      setRecipients([]); setHistory([]); setStatusEntries([]); setChangedAt(null); setPreview(null);
+      setRecipients([]); setHistory([]); setStatusEntries([]); setChangedAt(null); setPreview(null); setBounced([]);
       return;
     }
     setLoadingPreview(true);
@@ -112,6 +140,7 @@ function AdminRecoveryPage() {
     loadHistory(tenantId);
     loadStatus(tenantId);
     loadPreview(tenantId);
+    loadBounced(tenantId);
   }, [tenantId]);
 
   const send = async (opts: { dryRun?: boolean; retryFailed?: boolean }) => {

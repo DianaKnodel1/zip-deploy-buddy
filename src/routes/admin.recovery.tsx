@@ -45,8 +45,6 @@ function AdminRecoveryPage() {
   const [changedAt, setChangedAt] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     subject: string; html: string; portal_link: string;
-    mitarbeiter?: { subject: string; html: string; portal_link: string };
-    bewerber?:    { subject: string; html: string; portal_link: string };
   } | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingMailPreview, setLoadingMailPreview] = useState(false);
@@ -143,7 +141,6 @@ function AdminRecoveryPage() {
 
   const statusByEmail = new Map(statusEntries.map(e => [e.email, e]));
   const mitarbeiterCount = recipients.filter(r => r.kind === "mitarbeiter").length;
-  const bewerberCount = recipients.filter(r => r.kind === "bewerber_akzeptiert").length;
   const failedCount = statusEntries.filter(e => e.status === "failed").length;
 
   return (
@@ -151,8 +148,9 @@ function AdminRecoveryPage() {
       <div>
         <h1 className="text-2xl font-bold">Domain-Recovery</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Sendet allen Mitarbeitern und akzeptierten Bewerbern eines Tenants den neuen Portal-Link der aktuellen Primary-Domain.
+          Sendet allen registrierten Mitarbeitern eines Tenants den neuen Portal-Link der aktuellen Primary-Domain.
           Nutze diese Aktion <strong>nach</strong> einem Domain-Wechsel auf <code>/admin/domains</code>.
+          Bewerber sind ausgenommen — sie erhalten den neuen Link über die normalen Einladungs-Reminder.
         </p>
       </div>
 
@@ -199,11 +197,10 @@ function AdminRecoveryPage() {
                   <div className="flex gap-2 flex-wrap">
                     <Badge variant="secondary">{recipients.length} gesamt</Badge>
                     <Badge variant="outline">{mitarbeiterCount} Mitarbeiter</Badge>
-                    <Badge variant="outline">{bewerberCount} akzept. Bewerber</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-2">
                     Versand gestaffelt (max. 20 Mails pro Cron-Lauf ≈ 240/12h pro Tenant). Pro Domain-Wechsel erhält jeder Empfänger genau eine Mail.
-                    Bewerber im Status „eingegangen" / abgelehnte / deaktivierte Profile werden ausgeschlossen.
+                    Deaktivierte/abgelehnte Profile sowie Adressen mit Hard-Bounce werden ausgeschlossen.
                   </div>
                 </div>
               )}

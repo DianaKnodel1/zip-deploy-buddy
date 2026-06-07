@@ -27,7 +27,7 @@ import {
 
 function AdminApplicationsPage() {
   const { applications, loading, loadData } = useAdminData();
-  const [tenantMap, setTenantMap] = useState<Record<string, { name: string; domain: string }>>({});
+  const [tenantMap, setTenantMap] = useState<Record<string, { name: string; domain: string; primary_domain: string | null }>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -38,9 +38,9 @@ function AdminApplicationsPage() {
   const [remindersLoading, setRemindersLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from("tenants").select("id, name, domain").then(({ data }) => {
-      const map: Record<string, { name: string; domain: string }> = {};
-      (data ?? []).forEach((t: any) => { map[t.id] = { name: t.name, domain: t.domain }; });
+    supabase.from("tenants").select("id, name, domain, primary_domain").then(({ data }) => {
+      const map: Record<string, { name: string; domain: string; primary_domain: string | null }> = {};
+      (data ?? []).forEach((t: any) => { map[t.id] = { name: t.name, domain: t.domain, primary_domain: t.primary_domain ?? null }; });
       setTenantMap(map);
     });
   }, []);
@@ -75,8 +75,10 @@ function AdminApplicationsPage() {
 
       // Send invitation email
       const tenant = app.tenant_id ? tenantMap[app.tenant_id] : null;
-      const portalLink = tenant?.domain
-        ? `https://portal.${tenant.domain}/register`
+      // Primary-Domain hat Vorrang (Admin-Wechsel .de → .com), Fallback ist tenants.domain.
+      const activeDomain = tenant?.primary_domain ?? tenant?.domain ?? null;
+      const portalLink = activeDomain
+        ? `https://portal.${activeDomain}/register`
         : `${window.location.origin}/register`;
 
       const { error: emailError } = await supabase.functions.invoke("send-invitation-email", {

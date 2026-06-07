@@ -24,14 +24,16 @@ function ForgotPasswordPage() {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+    // Tenant-SMTP-Versand statt Supabase-Auth-Default (eigene Domain & Reputation).
+    const { error } = await supabase.functions.invoke("send-password-reset", {
+      body: { email: email.trim(), host: window.location.hostname },
     });
     setLoading(false);
     if (error) {
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
       return;
     }
+    // Immer Erfolg anzeigen — keine User-Enumeration.
     setSent(true);
   };
 

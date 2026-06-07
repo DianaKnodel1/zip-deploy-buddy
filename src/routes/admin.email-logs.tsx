@@ -129,6 +129,19 @@ function AdminEmailLogsPage() {
     }
   };
 
+  const handleAckAll = async () => {
+    setAcking(true);
+    try {
+      const r = await ackFn();
+      toast({ title: "Bearbeitet markiert", description: `${r.acknowledged} Fehler-Einträge abgehakt.` });
+      await loadData();
+    } catch (e: any) {
+      toast({ title: "Fehler", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setAcking(false);
+    }
+  };
+
   if (loading) return <div className="p-6 lg:p-8 space-y-5"><PageHeaderSkeleton /><TableSkeleton rows={8} cols={5} /></div>;
 
   return (
@@ -168,14 +181,21 @@ function AdminEmailLogsPage() {
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {stats.actionRequired
-                  ? `${stats.failed} E-Mail${stats.failed === 1 ? "" : "s"} konnten nicht zugestellt werden`
+                  ? `${stats.openFailures24h} neue Fehler in den letzten 24h. Prüfe SMTP-Login oder Bounce-Liste — danach „Bearbeitet"-Button klicken.`
                   : `${stats.sent} von ${stats.total} E-Mails erfolgreich zugestellt · Erfolgsquote ${stats.successRate}%`}
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 shrink-0" onClick={loadData}>
-            <RefreshCw className="h-3.5 w-3.5" /> Aktualisieren
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            {stats.actionRequired && (
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={handleAckAll} disabled={acking}>
+                <Check className="h-3.5 w-3.5" /> {acking ? "…" : "Als bearbeitet markieren"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={loadData}>
+              <RefreshCw className="h-3.5 w-3.5" /> Aktualisieren
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -79,6 +79,20 @@ function LandingGeneratorPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastFile, setLastFile] = useState<string | null>(null);
+  // Slot-Werte pro Theme — bei Theme-Wechsel mit Defaults vorbelegen.
+  const [slotValues, setSlotValues] = useState<Record<string, string>>({});
+  const currentTheme = THEME_LIST.find((t) => t.id === themeId);
+  const currentSlots = currentTheme?.slots ?? [];
+  // Bei Theme-Wechsel Slot-Defaults laden (überschreibt vorhandene Werte nicht).
+  const lastThemeRef = useRef<string>("");
+  if (themeId && lastThemeRef.current !== themeId) {
+    lastThemeRef.current = themeId;
+    const defaults: Record<string, string> = {};
+    for (const s of currentSlots) defaults[s.key] = s.default;
+    setSlotValues((prev) => ({ ...defaults, ...prev }));
+  }
+  const setSlot = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setSlotValues((v) => ({ ...v, [key]: e.target.value }));
 
   const set = (key: keyof Branding) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setBranding((b) => ({ ...b, [key]: e.target.value }));

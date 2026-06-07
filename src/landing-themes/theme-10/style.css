@@ -127,7 +127,8 @@ section{padding:112px 0}
 
 /* LEGAL — nur sichtbar, wenn per Hash (#impressum/#datenschutz/#agb) verlinkt */
 .legal{display:none;background:var(--bg);padding:80px 0;border-top:1px solid var(--border)}
-.legal:target{display:block}
+.legal:target,.legal.is-open{display:block}
+.legal .legal-close{display:inline-block;margin-bottom:24px;font-size:.78rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);cursor:pointer}
 .legal h2{font-size:2rem;font-weight:800;margin-bottom:24px;color:var(--fg)}
 .legal h3{font-size:1.05rem;font-weight:700;margin:24px 0 8px;color:var(--fg)}
 .legal p,.legal li{color:var(--muted);font-size:.95rem;margin-bottom:8px}

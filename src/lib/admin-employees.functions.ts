@@ -46,11 +46,12 @@ export const createEmployeeAccount = createServerFn({ method: "POST" })
     if (!roleRow) throw new Error("Nicht autorisiert");
 
     // Create auth user (email pre-confirmed so they can log in immediately)
+    // Telefon NICHT an auth.users hängen – sonst "Phone already registered"
+    // wenn zwei Mitarbeiter dieselbe Nummer haben. Telefon lebt im Profil.
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email: data.email,
       password: data.password,
       email_confirm: true,
-      phone: data.phone || undefined,
       user_metadata: { full_name: data.full_name },
     });
     if (createErr || !created.user) {

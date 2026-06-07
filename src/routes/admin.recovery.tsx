@@ -281,6 +281,7 @@ function AdminRecoveryPage() {
             <TabsTrigger value="status"><Users className="h-3.5 w-3.5 mr-1.5" />Empfänger-Status</TabsTrigger>
             <TabsTrigger value="preview"><Eye className="h-3.5 w-3.5 mr-1.5" />Mail-Vorschau</TabsTrigger>
             <TabsTrigger value="history"><History className="h-3.5 w-3.5 mr-1.5" />Vergangene Läufe</TabsTrigger>
+            <TabsTrigger value="bounced"><MailX className="h-3.5 w-3.5 mr-1.5" />Bounces ({bounced.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="status">

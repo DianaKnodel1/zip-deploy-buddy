@@ -163,34 +163,27 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
     await assertAdmin(context);
     const sb = supabaseAdmin as any;
 
-    // Mitarbeiter: ALLE inkl. abgeschlossen (außer deaktiviert/abgelehnt) —
-    // matched die Filterung in der Edge-Function, damit „X Empfänger" stimmt.
+    // Mitarbeiter: ALLE inkl. abgeschlossen (außer deaktiviert/abgelehnt/gebounced) —
+    // matched die Filterung in der Edge-Function.
+    // Bewerber sind aus Recovery ausgeschlossen — sie laufen über den
+    // normalen reminder_invite-Reminder mit aktuellem Portal-Link.
     const { data: profiles, error: pErr } = await sb
       .from("profiles")
-      .select("id,user_id,full_name,phone,status,onboarding_status,last_reminder_sent_at,created_at")
+      .select("id,user_id,full_name,phone,status,onboarding_status,last_reminder_sent_at,created_at,email_status")
       .eq("tenant_id", data.tenant_id)
       .not("status", "in", '("deaktiviert","abgelehnt")');
     if (pErr) throw new Error(pErr.message);
-
-    // Akzeptierte Bewerber ohne Auth-Account — siehe Edge-Function-Logik.
-    const { data: apps, error: aErr } = await sb
-      .from("applications")
-      .select("id,email,full_name,first_name,phone,status,created_at")
-      .eq("tenant_id", data.tenant_id)
-      .eq("status", "akzeptiert");
-    if (aErr) throw new Error(aErr.message);
 
     const { data: usersList } = await sb.auth.admin.listUsers({ page: 1, perPage: 5000 });
     const emailByUserId = new Map<string, string>(
       (usersList?.users ?? []).map((u: any) => [u.id, (u.email ?? "").toLowerCase()])
     );
-    const userEmails = new Set<string>(
-      (usersList?.users ?? []).map((u: any) => (u.email ?? "").toLowerCase()).filter(Boolean)
-    );
 
     const recipients: AffectedRecipient[] = [];
     const seen = new Set<string>();
     for (const p of profiles ?? []) {
+      // Bounced/complained Adressen sind aus dem Recovery-Versand ausgeschlossen.
+      if (p.email_status && p.email_status !== "active") continue;
       const email = emailByUserId.get(p.user_id) ?? null;
       if (email) {
         if (seen.has(email)) continue;
@@ -204,22 +197,6 @@ export const getAffectedRecipients = createServerFn({ method: "POST" })
         phone: p.phone ?? null,
         status: p.status ?? p.onboarding_status ?? "",
         last_contact: p.last_reminder_sent_at ?? p.created_at ?? null,
-      });
-    }
-    for (const app of apps ?? []) {
-      const email = (app.email ?? "").toLowerCase();
-      if (!email) continue;
-      if (userEmails.has(email)) continue; // hat schon Account → läuft als „mitarbeiter"
-      if (seen.has(email)) continue;
-      seen.add(email);
-      recipients.push({
-        kind: "bewerber_akzeptiert",
-        id: app.id,
-        name: app.full_name ?? app.first_name ?? "",
-        email,
-        phone: app.phone ?? null,
-        status: "akzeptiert (Bewerber)",
-        last_contact: app.created_at ?? null,
       });
     }
 

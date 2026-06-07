@@ -125,14 +125,27 @@ section{padding:112px 0}
 .foot-bottom a{margin-left:20px;transition:color .2s}
 .foot-bottom a:hover{color:var(--gold)}
 
+/* Nav-CTA-Gruppe (Jetzt bewerben + Login) */
+.nav-cta-group{display:flex;align-items:center;gap:12px}
+
+/* Footer-Brand ohne Logo */
+.foot-brand-name{font-size:1.5rem;font-weight:800;color:var(--gold);letter-spacing:-.02em;margin-bottom:16px}
+.foot-brand-name .dot{color:var(--gold)}
+
 /* LEGAL — nur sichtbar, wenn per Hash (#impressum/#datenschutz/#agb) verlinkt */
-.legal{display:none;background:var(--bg);padding:80px 0;border-top:1px solid var(--border)}
+.legal{display:none;background:var(--bg);padding:120px 0;border-top:1px solid var(--border)}
 .legal:target,.legal.is-open{display:block}
-.legal .legal-close{display:inline-block;margin-bottom:24px;font-size:.78rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);cursor:pointer}
-.legal h2{font-size:2rem;font-weight:800;margin-bottom:24px;color:var(--fg)}
-.legal h3{font-size:1.05rem;font-weight:700;margin:24px 0 8px;color:var(--fg)}
-.legal p,.legal li{color:var(--muted);font-size:.95rem;margin-bottom:8px}
-.legal ul{padding-left:24px}
+.legal-inner{max-width:860px}
+.legal .legal-close{display:inline-block;margin-bottom:32px;font-size:.72rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);cursor:pointer;border:1px solid rgba(201,138,75,.35);padding:10px 18px;border-radius:999px;transition:all .2s}
+.legal .legal-close:hover{background:rgba(201,138,75,.1)}
+.legal .eyebrow{margin-bottom:12px}
+.legal h2{font-size:clamp(2.2rem,4.2vw,3.2rem);font-weight:800;margin:0 0 16px;color:var(--fg);letter-spacing:-.02em;line-height:1.1}
+.legal .legal-lead{font-size:1.1rem;color:var(--muted);margin-bottom:40px;padding-bottom:28px;border-bottom:1px solid var(--border);max-width:680px;line-height:1.6}
+.legal h3{font-size:1.25rem;font-weight:800;margin:36px 0 10px;color:var(--fg);letter-spacing:-.01em}
+.legal p,.legal li{color:var(--fg);font-size:1rem;margin-bottom:10px;line-height:1.75}
+.legal a{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.legal ul{padding-left:24px;margin-bottom:12px}
+.legal ul li{margin-bottom:6px}
 
 /* ANIMATIONS */
 [data-animate]{opacity:0;transform:translateY(24px);transition:opacity .8s ease,transform .8s ease}

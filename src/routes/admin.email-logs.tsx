@@ -5,6 +5,7 @@ export const Route = createFileRoute("/admin/email-logs")({
 });
 
 import { useState, useEffect, useMemo } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { EmptyState } from "@/components/EmptyState";
-import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Eye, Send } from "lucide-react";
+import { Mail, RefreshCw, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Eye, Send, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -24,12 +25,14 @@ import {
   EMAIL_TYPE_LABELS,
   computeEmailStats,
 } from "@/lib/email-stats";
+import { acknowledgeFailedEmails } from "@/lib/email-log-ack.functions";
 
 type EmailLogFull = EmailLog & {
   rendered_html?: string | null;
   rendered_subject?: string | null;
   sender_email?: string | null;
   tenant_id?: string | null;
+  acknowledged_at?: string | null;
 };
 
 function AdminEmailLogsPage() {
@@ -41,6 +44,8 @@ function AdminEmailLogsPage() {
   const [resending, setResending] = useState<string | null>(null);
   const [previewLog, setPreviewLog] = useState<EmailLogFull | null>(null);
   const [sendingTest, setSendingTest] = useState(false);
+  const [acking, setAcking] = useState(false);
+  const ackFn = useServerFn(acknowledgeFailedEmails);
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -124,6 +129,19 @@ function AdminEmailLogsPage() {
     }
   };
 
+  const handleAckAll = async () => {
+    setAcking(true);
+    try {
+      const r = await ackFn();
+      toast({ title: "Bearbeitet markiert", description: `${r.acknowledged} Fehler-Einträge abgehakt.` });
+      await loadData();
+    } catch (e: any) {
+      toast({ title: "Fehler", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setAcking(false);
+    }
+  };
+
   if (loading) return <div className="p-6 lg:p-8 space-y-5"><PageHeaderSkeleton /><TableSkeleton rows={8} cols={5} /></div>;
 
   return (
@@ -163,14 +181,21 @@ function AdminEmailLogsPage() {
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {stats.actionRequired
-                  ? `${stats.failed} E-Mail${stats.failed === 1 ? "" : "s"} konnten nicht zugestellt werden`
+                  ? `${stats.openFailures24h} neue Fehler in den letzten 24h. Prüfe SMTP-Login oder Bounce-Liste — danach „Bearbeitet"-Button klicken.`
                   : `${stats.sent} von ${stats.total} E-Mails erfolgreich zugestellt · Erfolgsquote ${stats.successRate}%`}
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 shrink-0" onClick={loadData}>
-            <RefreshCw className="h-3.5 w-3.5" /> Aktualisieren
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            {stats.actionRequired && (
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={handleAckAll} disabled={acking}>
+                <Check className="h-3.5 w-3.5" /> {acking ? "…" : "Als bearbeitet markieren"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={loadData}>
+              <RefreshCw className="h-3.5 w-3.5" /> Aktualisieren
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -280,6 +305,9 @@ function AdminEmailLogsPage() {
                         <Badge variant="secondary" className={`text-[10px] ${EMAIL_STATUS_COLORS[log.status] ?? "bg-muted text-muted-foreground"}`}>
                           {EMAIL_STATUS_LABELS[log.status] ?? log.status}
                         </Badge>
+                        {log.acknowledged_at && ["failed", "dlq", "bounced"].includes(log.status) && (
+                          <Badge variant="outline" className="text-[10px] gap-1"><Check className="h-2.5 w-2.5" />bearbeitet</Badge>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-medium text-foreground text-xs">{log.recipient_email}</td>

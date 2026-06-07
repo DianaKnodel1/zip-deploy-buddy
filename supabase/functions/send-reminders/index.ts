@@ -50,6 +50,10 @@ function isQuietHours(): boolean {
 // Max. echte Sends pro Tenant + Typ und Ausführung (verhindert Burst-Send / Domain-Flagging).
 // Quiet-Hours 08–20 Uhr = 12 aktive Läufe/Tag → 50 * 12 = 600 Mails/12h/Tenant/Typ.
 const MAX_SENDS_PER_RUN_PER_TENANT = 50;
+// Harte Obergrenze: max. Mails pro Tenant in den letzten 12h (über alle Typen
+// zusammen). Schützt Sender-Reputation. Wird zu Beginn aus reminder_log geladen
+// und pro erfolgreichem Send live hochgezählt.
+const MAX_SENDS_PER_TENANT_PER_12H = 240;
 // Eigenes Kontingent für Domain-Recovery: 20/Lauf × 12 aktive Läufe = 240/12h (real ≤200 durch Idempotenz).
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.
@@ -113,6 +117,8 @@ interface SendCtx {
   results: { type: ReminderType; email: string; status: string; error?: string }[];
   // Key: `${tenantId}:${reminderType}`
   sentCountByTenantType: Map<string, number>;
+  // Live-Zähler: Mails pro Tenant in den letzten 12h (alle Typen, inkl. heutigem Lauf).
+  sentCountByTenant12h: Map<string, number>;
   // Recovery-spezifische Vorschau-Zähler (pro Tenant aggregiert):
   recoveryStats: Map<string, { total_eligible: number; would_send_this_run: number; already_done_since_change: number; no_change_anchor: boolean }>;
 }
@@ -181,7 +187,21 @@ serve(async (req) => {
     const tenants = new Map<string, TenantRow>();
     (tList ?? []).forEach((t: any) => tenants.set(t.id, t as TenantRow));
 
-    const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), recoveryStats: new Map() };
+    const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), sentCountByTenant12h: new Map(), recoveryStats: new Map() };
+
+    // 12h-Cap pro Tenant vorladen (alle bisherigen sent in den letzten 12h).
+    {
+      const cutoff12h = new Date(Date.now() - 12 * 3600_000).toISOString();
+      const { data: recent } = await admin
+        .from("reminder_log")
+        .select("tenant_id")
+        .eq("status", "sent")
+        .gte("sent_at", cutoff12h);
+      for (const r of (recent ?? []) as Array<{ tenant_id: string | null }>) {
+        if (!r.tenant_id) continue;
+        ctx.sentCountByTenant12h.set(r.tenant_id, (ctx.sentCountByTenant12h.get(r.tenant_id) ?? 0) + 1);
+      }
+    }
 
     if (mode === "domain_recovery") {
       if (!recoveryTenantId) return json({ error: "tenant_id required for domain_recovery" }, 400);
@@ -316,9 +336,63 @@ function capReached(ctx: SendCtx, tenantId: string, type: ReminderType): boolean
   const key = `${tenantId}:${type}`;
   return (ctx.sentCountByTenantType.get(key) ?? 0) >= MAX_SENDS_PER_RUN_PER_TENANT;
 }
+// 12h-Obergrenze pro Tenant über alle Reminder-Typen.
+function tenant12hCapReached(ctx: SendCtx, tenantId: string): boolean {
+  return (ctx.sentCountByTenant12h.get(tenantId) ?? 0) >= MAX_SENDS_PER_TENANT_PER_12H;
+}
 function bumpSent(ctx: SendCtx, tenantId: string, type: ReminderType) {
   const key = `${tenantId}:${type}`;
   ctx.sentCountByTenantType.set(key, (ctx.sentCountByTenantType.get(key) ?? 0) + 1);
+  ctx.sentCountByTenant12h.set(tenantId, (ctx.sentCountByTenant12h.get(tenantId) ?? 0) + 1);
+}
+
+// Schreibt einen Eintrag in email_send_log (zentrale Logs-Tabelle, die das
+// Admin-UI /admin/email-logs anzeigt). Enthält gerendertes Subject/HTML und
+// Absender, damit die Vorschau auch für Reminder-Mails funktioniert.
+async function logEmailSend(
+  admin: SendCtx["admin"],
+  tenant: TenantRow | null,
+  type: ReminderType,
+  email: string,
+  subject: string,
+  html: string | null,
+  status: "sent" | "failed",
+  error?: string,
+  extraMeta?: Record<string, unknown>,
+) {
+  try {
+    const senderEmail = tenant ? (tenant.sender_email ?? tenant.smtp_username ?? null) : null;
+    const fromName = tenant ? (tenant.sender_name ?? tenant.name) : null;
+    const messageId = `${type}-${crypto.randomUUID()}`;
+    const templateMap: Record<ReminderType, string> = {
+      invite: "reminder_invite",
+      confirm_email: "reminder_confirm_email",
+      complete_registration: "reminder_complete_registration",
+      no_recent_booking: "reminder_no_recent_booking",
+      domain_recovery: "reminder_domain_recovery",
+    };
+    await admin.from("email_send_log").insert({
+      message_id: messageId,
+      template_name: templateMap[type],
+      recipient_email: email,
+      status,
+      error_message: error ?? null,
+      rendered_subject: subject,
+      rendered_html: html,
+      sender_email: senderEmail,
+      tenant_id: tenant?.id ?? null,
+      metadata: {
+        reminder_type: type,
+        from_name: fromName,
+        from_email: senderEmail,
+        smtp_host: tenant?.smtp_host ?? null,
+        subject,
+        ...(extraMeta ?? {}),
+      },
+    });
+  } catch (e) {
+    console.error("logEmailSend failed", e);
+  }
 }
 
 // ───── 1. Invite-Reminder ─────
@@ -347,6 +421,7 @@ async function runInvites(ctx: SendCtx) {
       continue;
     }
     if (capReached(ctx, tenant.id, "invite")) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "invite", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "invite", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "invite", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "invite");
     if (!gate.ok) { ctx.results.push({ type: "invite", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "invite", gate.reason ?? "skip"); continue; }
@@ -362,12 +437,15 @@ async function runInvites(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "invite", email, subject, html, "sent");
       ctx.results.push({ type: "invite", email, status: "sent" });
       bumpSent(ctx, tenant.id, "invite");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "invite", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "invite", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "invite", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "invite", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }
@@ -412,6 +490,7 @@ async function runConfirmEmail(ctx: SendCtx) {
 
     if (!hasValidSmtp(tenant)) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "no_tenant_smtp" }); await logSkipped(ctx.admin, email, tenantId ?? null, "confirm_email", "no_tenant_smtp"); continue; }
     if (capReached(ctx, tenant.id, "confirm_email")) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "confirm_email");
     if (!gate.ok) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", gate.reason ?? "skip"); continue; }
@@ -423,6 +502,7 @@ async function runConfirmEmail(ctx: SendCtx) {
     const tokenHash = (linkRes.data?.properties as any)?.hashed_token;
     if (!tokenHash) {
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", "no_token");
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, "(no token)", null, "failed", "no_token");
       ctx.results.push({ type: "confirm_email", email, status: "failed", error: "no_token" });
       continue;
     }
@@ -434,12 +514,15 @@ async function runConfirmEmail(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "sent");
       ctx.results.push({ type: "confirm_email", email, status: "sent" });
       bumpSent(ctx, tenant.id, "confirm_email");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "confirm_email", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "confirm_email", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }
@@ -468,6 +551,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     const tenant = (p as any).tenant_id ? ctx.tenants.get((p as any).tenant_id) : null;
     if (!hasValidSmtp(tenant)) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "no_tenant_smtp" }); await logSkipped(ctx.admin, email, (p as any).tenant_id ?? null, "complete_registration", "no_tenant_smtp"); continue; }
     if (capReached(ctx, tenant.id, "complete_registration")) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "complete_registration");
     if (!gate.ok) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", gate.reason ?? "skip"); continue; }
@@ -483,12 +567,15 @@ async function runCompleteRegistration(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "sent");
       ctx.results.push({ type: "complete_registration", email, status: "sent" });
       bumpSent(ctx, tenant.id, "complete_registration");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "complete_registration", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "complete_registration", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }
@@ -539,6 +626,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
       continue;
     }
     if (capReached(ctx, tenant.id, "no_recent_booking")) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "no_recent_booking");
     if (!gate.ok) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", gate.reason ?? "skip"); continue; }
@@ -554,12 +642,15 @@ async function runNoRecentBooking(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "no_recent_booking", email, subject, html, "sent");
       ctx.results.push({ type: "no_recent_booking", email, status: "sent" });
       bumpSent(ctx, tenant.id, "no_recent_booking");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "no_recent_booking", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }
@@ -650,6 +741,11 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
       await logSkipped(ctx.admin, rec.email, tenant.id, "domain_recovery", "recovery_run_cap_reached");
       continue;
     }
+    if (tenant12hCapReached(ctx, tenant.id)) {
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "skipped", error: "tenant_12h_cap_reached" });
+      await logSkipped(ctx.admin, rec.email, tenant.id, "domain_recovery", "tenant_12h_cap_reached");
+      continue;
+    }
 
     stats.would_send_this_run++;
 
@@ -668,6 +764,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     try {
       await sendMail(tenant, rec.email, subject, html);
       await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "domain_recovery", rec.email, subject, html, "sent");
       ctx.results.push({ type: "domain_recovery", email: rec.email, status: "sent" });
       bumpSent(ctx, tenant.id, "domain_recovery");
       sentThisRun++;
@@ -675,6 +772,7 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     } catch (e: any) {
       const errMsg = String(e?.message ?? e);
       await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "domain_recovery", rec.email, subject, html, "failed", errMsg);
       ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: errMsg });
       // Hard-Bounce-Detection: SMTP 5.x.x → Empfänger als 'bounced' markieren.
       await maybeMarkBounced(ctx.admin, rec.email, e);

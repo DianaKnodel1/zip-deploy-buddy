@@ -270,11 +270,9 @@ function AdminRecoveryPage() {
         </p>
       </div>
 
-      <HealthCard
-        health={health}
-        loading={loadingHealth}
-        onRefresh={() => loadHealth(tenantId || null)}
-      />
+      {/* Reminder-Cron-Health-Karte wurde nach /admin/reminders verschoben —
+          dort ist der passende Kontext. */}
+
 
 
 

@@ -9,6 +9,7 @@ export interface EmailLog {
   error_message: string | null;
   metadata: any;
   created_at: string;
+  acknowledged_at?: string | null;
 }
 
 export const EMAIL_STATUS_COLORS: Record<string, string> = {
@@ -39,6 +40,11 @@ export const EMAIL_TYPE_LABELS: Record<string, string> = {
   auth_confirmation: "Bestätigung",
   auth_invite: "Einladung",
   auth_magiclink: "Magic Link",
+  reminder_invite: "Reminder · Einladung",
+  reminder_confirm_email: "Reminder · E-Mail bestätigen",
+  reminder_complete_registration: "Reminder · Onboarding",
+  reminder_no_recent_booking: "Reminder · Keine Buchung",
+  reminder_domain_recovery: "Reminder · Domain-Recovery",
 };
 
 export interface EmailStats {
@@ -48,15 +54,17 @@ export interface EmailStats {
   bounced: number;
   suppressed: number;
   successRate: number;
+  /** Unbearbeitete Fails der letzten 24h (treibt den "Aktion erforderlich"-Banner) */
+  openFailures24h: number;
   actionRequired: boolean;
 }
 
 /**
  * Compute email stats from logs. Each log = 1 email (no deduplication needed).
- * Only counts final statuses (sent, failed, etc.) - no pending.
+ * `actionRequired` zählt nur nicht-acknowledgte Fails der letzten 24h —
+ * alte permanente Fehler verschwinden nach Ack aus dem Banner.
  */
 export function computeEmailStats(logs: EmailLog[]): EmailStats {
-  // Filter out any stale pending entries (should not exist with new logic)
   const finalLogs = logs.filter(l => l.status !== "pending");
   const total = finalLogs.length;
   const sent = finalLogs.filter(l => l.status === "sent").length;
@@ -65,13 +73,21 @@ export function computeEmailStats(logs: EmailLog[]): EmailStats {
   const suppressed = finalLogs.filter(l => l.status === "suppressed").length;
   const successRate = total > 0 ? Math.round((sent / total) * 100) : 100;
 
+  const cutoff = Date.now() - 24 * 3600_000;
+  const openFailures24h = finalLogs.filter(l =>
+    ["failed", "dlq", "bounced"].includes(l.status)
+    && !l.acknowledged_at
+    && new Date(l.created_at).getTime() >= cutoff
+  ).length;
+
   return {
     total,
     sent,
     failed,
     bounced,
     suppressed,
-    actionRequired: failed > 0 || bounced > 0,
+    openFailures24h,
+    actionRequired: openFailures24h > 0,
     successRate,
   };
 }

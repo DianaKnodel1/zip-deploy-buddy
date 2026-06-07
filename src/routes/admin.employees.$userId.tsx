@@ -79,6 +79,7 @@ function AdminEmployeeDetailPage() {
   // Auth contact fallback (email + phone from auth.users)
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [authPhone, setAuthPhone] = useState<string | null>(null);
+  const [tenantName, setTenantName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -90,6 +91,14 @@ function AdminEmployeeDetailPage() {
         }
       });
   }, [userId]);
+
+  // Tenant-Name für Header-Badge (zeigt sofort, zu welchem Mandant ein Mitarbeiter gehört).
+  useEffect(() => {
+    const tid = (profile as any)?.tenant_id;
+    if (!tid) { setTenantName(null); return; }
+    supabase.from("tenants").select("name").eq("id", tid).maybeSingle()
+      .then(({ data }) => setTenantName((data as any)?.name ?? null));
+  }, [(profile as any)?.tenant_id]);
 
   // Admin notes
   const [notes, setNotes] = useState<AdminNote[]>([]);
@@ -280,13 +289,18 @@ function AdminEmployeeDetailPage() {
           </div>
           <div>
             <h1 className="text-lg font-heading font-bold text-foreground">{profile.full_name}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {isAdminProfile && (
                 <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-primary/90 text-primary-foreground gap-0.5">
                   <Shield className="h-2.5 w-2.5" /> Administrator
                 </Badge>
               )}
               <Badge variant="secondary" className={`text-[10px] ${statusCfg.color}`}>{statusCfg.label}</Badge>
+              {tenantName ? (
+                <Badge variant="outline" className="text-[10px]">Tenant: {tenantName}</Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">Kein Tenant</Badge>
+              )}
               <span className="text-[11px] text-muted-foreground">seit {new Date(profile.created_at).toLocaleDateString("de-DE")}</span>
             </div>
           </div>

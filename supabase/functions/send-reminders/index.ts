@@ -609,14 +609,10 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
     }
 
     const attempt = (ctx.sentCountByTenantType.get(`${tenant.id}:domain_recovery`) ?? 0) + 1;
-    const portalLink = `https://${portalHost(tenant)}/${rec.kind === "bewerber" ? "register" : "login"}`;
+    const portalLink = `https://${portalHost(tenant)}/login`;
     const vars = baseVars(tenant, { first_name: rec.first_name, portal_link: portalLink, login_link: portalLink, booking_link: portalLink, confirmation_link: portalLink });
-    const isBewerber = rec.kind === "bewerber";
-    const subjectTpl = isBewerber ? tenant.reminder_recovery_bewerber_subject : tenant.reminder_recovery_subject;
-    const bodyTpl    = isBewerber ? tenant.reminder_recovery_bewerber_body    : tenant.reminder_recovery_body;
-    const defaultTpl = isBewerber ? DEFAULT_TEMPLATES.domain_recovery_bewerber : DEFAULT_TEMPLATES.domain_recovery_mitarbeiter;
-    const subject = renderSubject(subjectTpl, defaultTpl.subject, vars);
-    const html = renderBodyHtml(tenant, bodyTpl, defaultTpl.body, vars, { withDomainBanner: false });
+    const subject = renderSubject(tenant.reminder_recovery_subject, DEFAULT_TEMPLATES.domain_recovery_mitarbeiter.subject, vars);
+    const html = renderBodyHtml(tenant, tenant.reminder_recovery_body, DEFAULT_TEMPLATES.domain_recovery_mitarbeiter.body, vars, { withDomainBanner: false });
 
     try {
       await sendMail(tenant, rec.email, subject, html);
@@ -626,9 +622,35 @@ async function runDomainRecovery(ctx: SendCtx, tenantId: string, opts: { retryFa
       sentThisRun++;
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, rec.email, tenant.id, "domain_recovery", attempt, "failed", errMsg);
+      ctx.results.push({ type: "domain_recovery", email: rec.email, status: "failed", error: errMsg });
+      // Hard-Bounce-Detection: SMTP 5.x.x → Empfänger als 'bounced' markieren.
+      await maybeMarkBounced(ctx.admin, rec.email, e);
     }
+  }
+}
+
+// Setzt profiles.email_status / applications.email_status auf 'bounced',
+// wenn der SMTP-Fehler ein dauerhafter 5.x.x ist (z.B. 550 No such user).
+// 4.x.x (Mailbox voll, temporär) wird ignoriert — kommt evtl. wieder.
+async function maybeMarkBounced(admin: any, email: string, err: any) {
+  const code = Number(err?.responseCode ?? err?.code ?? 0);
+  const msg = String(err?.message ?? err ?? "");
+  const isHardBounce = (code >= 500 && code < 600) || /\b5\d{2}\b/.test(msg);
+  if (!isHardBounce) return;
+  const reason = (msg.slice(0, 240)) || `SMTP ${code}`;
+  const at = new Date().toISOString();
+  try {
+    await admin.from("profiles").update({ email_status: "bounced", email_bounced_at: at, email_bounce_reason: reason })
+      .eq("email_status", "active")
+      .in("user_id", (await admin.auth.admin.listUsers({ page: 1, perPage: 5000 })).data.users
+        .filter((u: any) => (u.email ?? "").toLowerCase() === email.toLowerCase())
+        .map((u: any) => u.id));
+    await admin.from("applications").update({ email_status: "bounced", email_bounced_at: at, email_bounce_reason: reason })
+      .eq("email_status", "active").ilike("email", email);
+  } catch (e) {
+    console.error("maybeMarkBounced failed", e);
   }
 }
 

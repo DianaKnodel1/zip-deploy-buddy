@@ -995,7 +995,9 @@ function AdminTenantsPage() {
   const { tenants, loading, reload } = useAllTenants();
   const [editTenant, setEditTenant] = useState<Tenant | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [switchTenant, setSwitchTenant] = useState<Tenant | undefined>();
   const { toast } = useToast();
+
 
   const toggleActive = async (t: Tenant) => {
     await supabase.from("tenants").update({ is_active: !t.is_active }).eq("id", t.id);

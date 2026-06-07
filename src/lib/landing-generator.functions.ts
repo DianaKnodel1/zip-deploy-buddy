@@ -43,12 +43,32 @@ const InputSchema = z.object({
 function applyPlaceholders(
   src: string,
   branding: z.infer<typeof BrandingSchema>,
+  slotValues: Record<string, string> = {},
 ): string {
   let out = src;
   for (const [key, value] of Object.entries(branding)) {
     out = out.split(`{{${key}}}`).join(String(value ?? ""));
   }
+  for (const [key, value] of Object.entries(slotValues)) {
+    out = out.split(`{{${key}}}`).join(String(value ?? ""));
+  }
   return out;
+}
+
+// Injiziert window.PORTAL_API/TENANT_ID/PORTAL_URL/FLOW_TYPE in jedes generierte
+// HTML — unabhängig davon, ob das Theme-Template einen <script>-Block dafür hat.
+// Garantiert, dass Bewerbungen die richtige tenant_id mitsenden → Reminder/Accept-
+// Mail nutzen automatisch den korrekten Tenant-SMTP.
+function injectLandingConfig(html: string, b: z.infer<typeof BrandingSchema>): string {
+  const escape = (s: string) => String(s ?? "").replace(/[<>"']/g, (c) => ({ "<": "\\u003c", ">": "\\u003e", '"': '\\"', "'": "\\'" }[c]!));
+  const block = `<script>
+window.PORTAL_API = "${escape(b.api_endpoint)}";
+window.PORTAL_URL = "${escape(b.portal_url ?? "")}";
+window.TENANT_ID = "${escape(b.tenant_id ?? "")}";
+window.FLOW_TYPE = "${escape(b.flow_type)}";
+</script>`;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, block + "</head>");
+  return block + html;
 }
 
 function parseDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array } | null {

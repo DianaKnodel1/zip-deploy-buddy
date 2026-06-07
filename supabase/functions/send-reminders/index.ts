@@ -50,6 +50,10 @@ function isQuietHours(): boolean {
 // Max. echte Sends pro Tenant + Typ und Ausführung (verhindert Burst-Send / Domain-Flagging).
 // Quiet-Hours 08–20 Uhr = 12 aktive Läufe/Tag → 50 * 12 = 600 Mails/12h/Tenant/Typ.
 const MAX_SENDS_PER_RUN_PER_TENANT = 50;
+// Harte Obergrenze: max. Mails pro Tenant in den letzten 12h (über alle Typen
+// zusammen). Schützt Sender-Reputation. Wird zu Beginn aus reminder_log geladen
+// und pro erfolgreichem Send live hochgezählt.
+const MAX_SENDS_PER_TENANT_PER_12H = 240;
 // Eigenes Kontingent für Domain-Recovery: 20/Lauf × 12 aktive Läufe = 240/12h (real ≤200 durch Idempotenz).
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.
@@ -113,6 +117,8 @@ interface SendCtx {
   results: { type: ReminderType; email: string; status: string; error?: string }[];
   // Key: `${tenantId}:${reminderType}`
   sentCountByTenantType: Map<string, number>;
+  // Live-Zähler: Mails pro Tenant in den letzten 12h (alle Typen, inkl. heutigem Lauf).
+  sentCountByTenant12h: Map<string, number>;
   // Recovery-spezifische Vorschau-Zähler (pro Tenant aggregiert):
   recoveryStats: Map<string, { total_eligible: number; would_send_this_run: number; already_done_since_change: number; no_change_anchor: boolean }>;
 }

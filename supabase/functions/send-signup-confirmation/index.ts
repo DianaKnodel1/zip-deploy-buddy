@@ -62,6 +62,20 @@ serve(async (req) => {
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
     }
 
+    // Bounce-Suppression: bekanntermaßen tote Adressen nicht erneut anschreiben.
+    try {
+      const [{ data: prof }, { data: app }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
+        supabaseAdmin.from("applications").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
+      ]);
+      if (prof || app) {
+        return json({ error: "Diese E-Mail-Adresse wurde gesperrt (Bounce/Complaint). Bitte korrigieren oder Sperre im Admin aufheben." }, 400);
+      }
+    } catch (e) {
+      console.warn("suppression-check failed (continuing):", e);
+    }
+
+
     // 2. User anlegen + Confirmation-Link in EINEM Call.
     //    generateLink({type:'signup'}) erstellt den User automatisch und liefert den Link
     //    zurück OHNE Mailversand durch GoTrue.

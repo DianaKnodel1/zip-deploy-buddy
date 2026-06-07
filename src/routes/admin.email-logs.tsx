@@ -26,6 +26,7 @@ import {
   computeEmailStats,
 } from "@/lib/email-stats";
 import { acknowledgeFailedEmails } from "@/lib/email-log-ack.functions";
+import { BounceSuppressionPanel } from "@/components/BounceSuppressionPanel";
 
 type EmailLogFull = EmailLog & {
   rendered_html?: string | null;
@@ -199,8 +200,12 @@ function AdminEmailLogsPage() {
         </div>
       </div>
 
+      {/* Bounce Suppression */}
+      <BounceSuppressionPanel />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">

@@ -342,6 +342,66 @@ function AdminRecoveryPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="bounced">
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  Adressen mit dauerhaftem Hard-Bounce (SMTP 5.x.x) werden automatisch markiert und in allen Reminder-/Recovery-Läufen übersprungen, damit unsere Sender-Reputation nicht leidet. Reset, sobald die Adresse wieder erreichbar ist.
+                </div>
+                {loadingBounced ? (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Lade…</div>
+                ) : bounced.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Keine gebouncten Adressen für diesen Tenant.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-xs text-muted-foreground">
+                          <th className="py-2 px-2">Empfänger</th>
+                          <th className="py-2 px-2">Typ</th>
+                          <th className="py-2 px-2">Bounced am</th>
+                          <th className="py-2 px-2">Grund</th>
+                          <th className="py-2 px-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bounced.map((b) => (
+                          <tr key={`${b.kind}-${b.id}`} className="border-b last:border-0">
+                            <td className="py-2 px-2">
+                              <div className="font-medium">{b.name || "—"}</div>
+                              <div className="text-xs text-muted-foreground">{b.email}</div>
+                            </td>
+                            <td className="py-2 px-2 text-xs">
+                              <Badge variant="outline">{b.kind === "mitarbeiter" ? "Mitarbeiter" : "Bewerber"}</Badge>
+                            </td>
+                            <td className="py-2 px-2 text-xs text-muted-foreground">
+                              {b.bounced_at ? new Date(b.bounced_at).toLocaleString("de-DE") : "—"}
+                            </td>
+                            <td className="py-2 px-2 text-xs text-destructive max-w-[280px] truncate" title={b.reason ?? ""}>
+                              {b.reason ?? "—"}
+                            </td>
+                            <td className="py-2 px-2 text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={resettingId === b.id}
+                                onClick={() => handleReset(b)}
+                              >
+                                {resettingId === b.id
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : <><Undo2 className="h-3 w-3 mr-1" />Wieder zulassen</>}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       )}
     </div>

@@ -626,6 +626,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
       continue;
     }
     if (capReached(ctx, tenant.id, "no_recent_booking")) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_run_cap_reached"); continue; }
+    if (tenant12hCapReached(ctx, tenant.id)) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_12h_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_12h_cap_reached"); continue; }
 
     const gate = await canSend(ctx.admin, email, "no_recent_booking");
     if (!gate.ok) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", gate.reason ?? "skip"); continue; }
@@ -641,12 +642,15 @@ async function runNoRecentBooking(ctx: SendCtx) {
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "sent");
+      await logEmailSend(ctx.admin, tenant, "no_recent_booking", email, subject, html, "sent");
       ctx.results.push({ type: "no_recent_booking", email, status: "sent" });
       bumpSent(ctx, tenant.id, "no_recent_booking");
       await jitterDelay();
     } catch (e: any) {
-      await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", String(e?.message ?? e));
-      ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: String(e?.message ?? e) });
+      const errMsg = String(e?.message ?? e);
+      await logReminder(ctx.admin, email, tenant.id, "no_recent_booking", gate.nextAttempt, "failed", errMsg);
+      await logEmailSend(ctx.admin, tenant, "no_recent_booking", email, subject, html, "failed", errMsg);
+      ctx.results.push({ type: "no_recent_booking", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
   }

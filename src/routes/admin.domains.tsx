@@ -101,6 +101,35 @@ function AdminDomainsPage() {
     }
   };
 
+  const handleTogglePause = async (tenant_id: string, currentlyPaused: boolean) => {
+    let reason: string | null = null;
+    if (!currentlyPaused) {
+      reason = window.prompt(
+        "Grund für die Pause (optional, wird im Activity-Log gespeichert):",
+        "",
+      );
+      if (reason === null) return; // Abbruch
+      reason = reason.trim() || null;
+    } else {
+      if (!window.confirm("Mail-Versand für diesen Tenant wieder AKTIVIEREN? Reminder-/Recovery-Mails gehen ab sofort wieder raus.")) return;
+    }
+    setTogglingPause(tenant_id);
+    try {
+      await setPausedFn({ data: { tenant_id, paused: !currentlyPaused, reason } });
+      toast({
+        title: currentlyPaused ? "Mail-Versand reaktiviert" : "Mail-Versand pausiert",
+        description: currentlyPaused
+          ? "Reminder/Recovery werden wieder versendet."
+          : "Es werden keine Reminder-/Recovery-Mails mehr versendet, bis du wieder aktivierst.",
+      });
+      await runCheck();
+    } catch (e: any) {
+      toast({ title: "Fehler", description: e.message, variant: "destructive" });
+    } finally {
+      setTogglingPause(null);
+    }
+  };
+
   const exportCsv = (tenant_id: string, tenant_name: string, primary_domain: string) => {
     const list = affected[tenant_id] ?? [];
     if (list.length === 0) {

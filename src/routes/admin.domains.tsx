@@ -35,20 +35,24 @@ function AdminDomainsPage() {
   const checkFn = useServerFn(checkDomainsHealth);
   const setPrimaryFn = useServerFn(setPrimaryDomain);
   const getAffectedFn = useServerFn(getAffectedRecipients);
+  const setPausedFn = useServerFn(setTenantEmailsPaused);
 
   const [rows, setRows] = useState<DomainRow[]>([]);
+  const [pauseState, setPauseState] = useState<Record<string, { paused: boolean; at: string | null; reason: string | null; by: string | null }>>({});
   const [loading, setLoading] = useState(true);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [openTenantId, setOpenTenantId] = useState<string | null>(null);
   const [affected, setAffected] = useState<Record<string, AffectedRecipient[]>>({});
   const [loadingAffected, setLoadingAffected] = useState<string | null>(null);
   const [settingPrimary, setSettingPrimary] = useState<string | null>(null);
+  const [togglingPause, setTogglingPause] = useState<string | null>(null);
 
   const runCheck = async () => {
     setLoading(true);
     try {
       const res = await checkFn({ data: {} as any });
       setRows(res.domains as DomainRow[]);
+      setPauseState((res as any).pause_state ?? {});
       setCheckedAt(res.checked_at);
     } catch (e: any) {
       toast({ title: "Health-Check fehlgeschlagen", description: e.message, variant: "destructive" });

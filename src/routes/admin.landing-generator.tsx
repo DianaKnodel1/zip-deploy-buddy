@@ -40,6 +40,9 @@ type Branding = {
   supabase_anon_key: string;
   tenant_id: string;
   flow_type: "classic" | "fast";
+  seo_title: string;
+  seo_description: string;
+  seo_image: string;
 };
 
 const EMPTY: Branding = {
@@ -66,6 +69,9 @@ const EMPTY: Branding = {
   supabase_anon_key: "",
   tenant_id: "",
   flow_type: "classic",
+  seo_title: "",
+  seo_description: "",
+  seo_image: "",
 };
 
 function LandingGeneratorPage() {

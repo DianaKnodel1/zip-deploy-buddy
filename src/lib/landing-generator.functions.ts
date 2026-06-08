@@ -23,7 +23,7 @@ const BrandingSchema = z.object({
   steuernummer: z.string().max(40).default(""),
   geschaeftsfuehrer: z.string().max(120).default(""),
   impressum: z.string().max(5000).default(""),
-  landing_domain: z.string().max(255).default(""),
+  landing_domain: z.string().min(1, "Landing-Domain ist Pflicht (für SEO/Canonical)").max(255),
   api_endpoint: z.string().url().max(500),
   portal_url: z.string().url().max(500).optional().or(z.literal("")).default(""),
   supabase_url: z.string().url().max(500).optional().or(z.literal("")).default(""),
@@ -46,6 +46,10 @@ const InputSchema = z.object({
   slots: z.record(z.string().min(1).max(60), z.string().max(20_000)).optional().default({}),
 });
 
+function cleanLandingDomain(d: string): string {
+  return String(d ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
 function applyPlaceholders(
   src: string,
   branding: z.infer<typeof BrandingSchema>,
@@ -57,6 +61,20 @@ function applyPlaceholders(
   }
   for (const [key, value] of Object.entries(slotValues)) {
     out = out.split(`{{${key}}}`).join(String(value ?? ""));
+  }
+  return out;
+}
+
+// Entfernt leere/kaputte Meta-Tags (og:image ohne Wert, Canonical/og:url ohne Domain).
+function cleanEmptyMetaTags(html: string, b: z.infer<typeof BrandingSchema>): string {
+  let out = html;
+  if (!b.seo_image) {
+    out = out.replace(/\s*<meta[^>]*property=["']og:image["'][^>]*content=["']["'][^>]*>\s*/gi, "\n");
+    out = out.replace(/\s*<meta[^>]*name=["']twitter:image["'][^>]*content=["']["'][^>]*>\s*/gi, "\n");
+  }
+  if (!b.landing_domain) {
+    out = out.replace(/\s*<link[^>]*rel=["']canonical["'][^>]*href=["']https?:\/\/\/[^"']*["'][^>]*>\s*/gi, "\n");
+    out = out.replace(/\s*<meta[^>]*property=["']og:url["'][^>]*content=["']https?:\/\/\/[^"']*["'][^>]*>\s*/gi, "\n");
   }
   return out;
 }

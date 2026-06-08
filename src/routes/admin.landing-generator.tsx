@@ -148,6 +148,14 @@ function LandingGeneratorPage() {
     };
     let html = replace(theme.html);
     const css = replace(theme.css);
+    // Leere/kaputte Meta-Tags auch im Preview entfernen
+    if (!branding.seo_image) {
+      html = html.replace(/\s*<meta[^>]*property=["']og:image["'][^>]*content=["']["'][^>]*>\s*/gi, "\n");
+    }
+    if (!branding.landing_domain) {
+      html = html.replace(/\s*<link[^>]*rel=["']canonical["'][^>]*href=["']https?:\/\/\/[^"']*["'][^>]*>\s*/gi, "\n");
+      html = html.replace(/\s*<meta[^>]*property=["']og:url["'][^>]*content=["']https?:\/\/\/[^"']*["'][^>]*>\s*/gi, "\n");
+    }
     // <link rel="stylesheet" href="style.css"> durch inline <style> ersetzen
     // + Override für Scroll-Animationen (data-animate ist im Theme initial opacity:0,
     //   wird normal per IntersectionObserver in script.js eingeblendet – im Preview

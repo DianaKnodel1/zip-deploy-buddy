@@ -226,3 +226,43 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+// SMTP-Verify mit Smart-Pause (3 Fails → tenants.emails_paused = true).
+// Migration: 20260608110000_tenant_smtp_health.sql
+async function verifyOrPause(admin: any, tenant: any, transporter: any): Promise<{ ok: boolean; reason?: string; paused?: boolean }> {
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_r, rej) => setTimeout(() => rej(new Error("verify timeout 8s")), 8000)),
+    ]);
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: 0,
+      last_verify_at: new Date().toISOString(), last_verify_ok: true, updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    const reason = String(e?.message ?? e);
+    const { data: h } = await admin.from("tenant_smtp_health").select("consecutive_fails").eq("tenant_id", tenant.id).maybeSingle();
+    const fails = (h?.consecutive_fails ?? 0) + 1;
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: fails,
+      last_fail_at: new Date().toISOString(), last_fail_error: reason,
+      last_verify_at: new Date().toISOString(), last_verify_ok: false, updated_at: new Date().toISOString(),
+    });
+    let paused = false;
+    if (fails >= 3 && !tenant.emails_paused) {
+      await admin.from("tenants").update({
+        emails_paused: true,
+        emails_paused_at: new Date().toISOString(),
+        emails_paused_reason: `SMTP-Verify ${fails}x fehlgeschlagen: ${reason}`,
+        emails_paused_by: "auto:smtp_verify",
+      }).eq("id", tenant.id);
+      await admin.from("activity_log").insert({
+        action: "emails_auto_pausiert", entity_type: "tenant", entity_id: tenant.id,
+        comment: `SMTP-Versand auto-pausiert nach ${fails} Verify-Fails: ${reason}`,
+      }).then(() => {}, () => {});
+      paused = true;
+    }
+    return { ok: false, reason, paused };
+  }
+}

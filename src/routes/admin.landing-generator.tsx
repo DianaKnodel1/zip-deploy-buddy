@@ -196,23 +196,17 @@ document.addEventListener('click', function(e){
   if(b){ var item = b.closest('.faq-item'); if(item) item.classList.toggle('open'); }
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
-var __PORTAL = ${JSON.stringify(branding.portal_url || "")};
+var __WA = ${JSON.stringify((branding.whatsapp_number || "").replace(/[^0-9]/g, ""))};
 document.addEventListener('submit', function(e){
   var f = e.target && e.target.id === 'application-form' ? e.target : null;
   if(!f) return;
   e.preventDefault();
   var status = document.getElementById('form-status');
-  var isFast = __FLOW === 'fast';
-  if(status){
-    status.className = 'status success';
-    if(isFast){
-      status.textContent = 'Vielen Dank für die Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal weitergeleitet und müssen sich registrieren um fortzufahren. [Vorschau: keine echte Weiterleitung' + (__PORTAL ? ' → ' + __PORTAL : '') + ']';
-    } else {
-      status.textContent = 'Vielen Dank, wir haben Ihre Bewerbung erhalten und melden uns i.d.R. binnen 10 Tagen bei Ihnen. [Vorschau-Modus, keine echte Speicherung]';
-    }
-  }
+  if(status){ status.className = 'status success'; status.textContent = 'Bewerbung erfolgreich gesendet. [Vorschau-Modus]'; }
   try { f.reset(); } catch(_){}
-  try { status && status.scrollIntoView({behavior:'smooth', block:'center'}); } catch(_){}
+  if(typeof showApplicationModal === 'function'){
+    showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA });
+  }
 }, true);
 <\/script>`;
     html = html.replace(/<\/body>/i, previewScript + "</body>");
@@ -418,9 +412,9 @@ document.addEventListener('submit', function(e){
                         : "border-border hover:border-primary/40",
                     )}
                   >
-                    <div className="font-semibold mb-1">⚡ Fast-Track</div>
+                    <div className="font-semibold mb-1">⚡ Fast-Track (WhatsApp)</div>
                     <p className="text-muted-foreground text-[11px]">
-                      Bewerbung wird sofort als <code>akzeptiert</code> markiert. Bewerber wird direkt zu <code>/register</code> weitergeleitet — kein Admin-Schritt nötig.
+                      Nach dem Absenden öffnet sich ein Pop-up mit <strong>WhatsApp-Direkt-Kontakt</strong> (Nummer aus „WhatsApp-Nummer"). Bewerbung wird sofort <code>akzeptiert</code>.
                     </p>
                   </button>
                 </div>

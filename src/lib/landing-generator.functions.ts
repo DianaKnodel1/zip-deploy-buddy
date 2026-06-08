@@ -6,6 +6,21 @@ import { getTheme } from "./landing-themes";
 
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Ungültige Hex-Farbe");
 
+// Akzeptiert "example.com", "www.example.com" oder volle URLs.
+// Wird vor der URL-Validierung normalisiert (https:// prepended, trailing slash entfernt).
+const normalizeUrl = (v: unknown) => {
+  if (typeof v !== "string") return v;
+  const trimmed = v.trim();
+  if (!trimmed) return trimmed;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withScheme.replace(/\/+$/, "");
+};
+const UrlLike = z.preprocess(normalizeUrl, z.string().url().max(500));
+const OptionalUrlLike = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? "" : normalizeUrl(v)),
+  z.union([z.string().url().max(500), z.literal("")]),
+);
+
 const BrandingSchema = z.object({
   firmenname: z.string().min(1).max(120),
   primary_color: HexColor,
@@ -24,11 +39,12 @@ const BrandingSchema = z.object({
   geschaeftsfuehrer: z.string().max(120).default(""),
   impressum: z.string().max(5000).default(""),
   landing_domain: z.string().min(1, "Landing-Domain ist Pflicht (für SEO/Canonical)").max(255),
-  api_endpoint: z.string().url().max(500),
-  portal_url: z.string().url().max(500).optional().or(z.literal("")).default(""),
-  supabase_url: z.string().url().max(500).optional().or(z.literal("")).default(""),
+  api_endpoint: UrlLike,
+  portal_url: OptionalUrlLike.default(""),
+  supabase_url: OptionalUrlLike.default(""),
   supabase_anon_key: z.string().max(2000).optional().or(z.literal("")).default(""),
   tenant_id: z.string().max(120).optional().or(z.literal("")).default(""),
+
   flow_type: z.enum(["classic", "fast"]).default("classic"),
   // SEO / Browser-Tab
   seo_title: z.string().max(160).default(""),

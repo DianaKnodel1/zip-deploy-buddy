@@ -201,14 +201,19 @@ serve(async (req) => {
     const senderName = tenant.sender_name ?? tenant.name;
     const senderEmail = tenant.sender_email;
     try {
-      await transporter.sendMail({
-        from: `"${senderName}" <${senderEmail}>`,
-        to: email,
-        replyTo: tenant.reply_to_email ?? senderEmail,
-        subject,
-        html,
-      });
-      await logEmail(admin, tenant, email, subject, html, "sent");
+      const verifyRes = await verifyOrPause(admin, tenant, transporter);
+      if (!verifyRes.ok) {
+        await logEmail(admin, tenant, email, subject, html, "failed", `verify_failed: ${verifyRes.reason}${verifyRes.paused ? " (tenant auto-paused)" : ""}`);
+      } else {
+        await transporter.sendMail({
+          from: `"${senderName}" <${senderEmail}>`,
+          to: email,
+          replyTo: tenant.reply_to_email ?? senderEmail,
+          subject,
+          html,
+        });
+        await logEmail(admin, tenant, email, subject, html, "sent");
+      }
     } catch (err: any) {
       console.error("send-password-reset SMTP failed", err);
       await logEmail(admin, tenant, email, subject, html, "failed", String(err?.message ?? err));

@@ -1004,6 +1004,25 @@ function AdminTenantsPage() {
     reload();
   };
 
+  const resumeEmails = async (t: Tenant) => {
+    const { error } = await supabase.from("tenants").update({
+      emails_paused: false,
+      emails_paused_at: null,
+      emails_paused_reason: null,
+      emails_paused_by: null,
+    }).eq("id", t.id);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Counter zurücksetzen
+    await supabase.from("tenant_smtp_health" as any).upsert({
+      tenant_id: t.id, consecutive_fails: 0, last_verify_ok: null, updated_at: new Date().toISOString(),
+    });
+    toast({ title: "Versand fortgesetzt", description: `Mail-Versand für ${t.name} ist wieder aktiv.` });
+    reload();
+  };
+
   const deleteTenant = async (id: string) => {
     const { error } = await supabase.from("tenants").delete().eq("id", id);
     if (error) {

@@ -117,6 +117,11 @@ serve(async (req) => {
 
     const tenant: any = await resolveTenant(admin, host);
     if (!tenant) return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (tenant.emails_paused) {
+      // Generic OK (keine Enumeration), aber loggen
+      await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", `skipped: tenant paused (${tenant.emails_paused_reason ?? "n/a"})`);
+      return new Response(JSON.stringify({ ok: true, warn: "paused" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Bounce-Suppression: Empfänger mit email_status != 'active' überspringen.
     // Schützt Sender-Reputation. Antwort bleibt ok (keine Enumeration).

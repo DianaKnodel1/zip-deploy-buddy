@@ -62,7 +62,7 @@ async function resolveTenant(admin: any, host: string | null) {
   const norm = normalizeDomain(host);
   const { data: tenants } = await admin
     .from("tenants")
-    .select("id,name,domain,primary_domain,domain_aliases,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reset_email_subject,reset_email_body,is_active")
+    .select("id,name,domain,primary_domain,domain_aliases,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reset_email_subject,reset_email_body,is_active,emails_paused,emails_paused_reason")
     .eq("is_active", true);
   if (!tenants || tenants.length === 0) return null;
   if (!norm) return tenants[0];

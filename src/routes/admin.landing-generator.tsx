@@ -368,7 +368,7 @@ document.addEventListener('submit', function(e){
                 <Field label="Steuernummer"><Input value={branding.steuernummer} onChange={set("steuernummer")} /></Field>
                 <Field label="Geschäftsführer"><Input value={branding.geschaeftsfuehrer} onChange={set("geschaeftsfuehrer")} /></Field>
                 <Field label="Telefon 2 (optional)"><Input value={branding.telefon_2} onChange={set("telefon_2")} /></Field>
-                <Field label="Landing-Domain (für SEO/Canonical)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="kunde-x.de" /></Field>
+                <Field label="Landing-Domain (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="kunde-x.de" /></Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
                 </Field>
@@ -425,6 +425,45 @@ document.addEventListener('submit', function(e){
                   </button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Step 2c: SEO / Browser-Tab */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">2c. SEO & Browser-Tab</CardTitle>
+              <CardDescription>
+                Browser-Tab-Titel, Google-Beschreibung und Social-Sharing-Vorschau (WhatsApp, LinkedIn, Facebook). Leer lassen = Auto-Werte aus Firmenname.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Field label="Seitentitel (Browser-Tab, max. 60 Zeichen)">
+                <Input
+                  value={branding.seo_title}
+                  onChange={set("seo_title")}
+                  placeholder={branding.firmenname ? `${branding.firmenname} — Beratung & Karriere` : "z.B. Mustermann GmbH — Beratung"}
+                  maxLength={160}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">{branding.seo_title.length}/60 empfohlen · erscheint im Browser-Tab und bei Google</p>
+              </Field>
+              <Field label="Meta-Beschreibung (Google-Suchergebnis, max. 160 Zeichen)">
+                <Textarea
+                  rows={2}
+                  value={branding.seo_description}
+                  onChange={set("seo_description")}
+                  placeholder="1–2 Sätze, die Besucher zum Klicken bewegen. Wird in Google angezeigt."
+                  maxLength={320}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">{branding.seo_description.length}/160 empfohlen</p>
+              </Field>
+              <Field label="OG-Bild URL (optional, Vorschaubild für WhatsApp/LinkedIn/Facebook)">
+                <Input
+                  value={branding.seo_image}
+                  onChange={set("seo_image")}
+                  placeholder="https://kunde-x.de/og-image.jpg (1200×630 px)"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Leer = kein Vorschaubild. Empfohlen 1200×630 px.</p>
+              </Field>
             </CardContent>
           </Card>
 

@@ -39,12 +39,15 @@ serve(async (req) => {
     // Tenant + SMTP laden
     const { data: tenant, error: tErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password")
+      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, emails_paused, emails_paused_reason")
       .eq("id", tenant_id)
       .maybeSingle();
     if (tErr || !tenant) return json({ error: "Tenant nicht gefunden" }, 404);
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
+    }
+    if (tenant.emails_paused) {
+      return json({ error: `E-Mail-Versand für diesen Mandanten ist pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}.` }, 503);
     }
 
     // User per E-Mail finden. WICHTIG: Niemals unterscheiden, ob die Adresse

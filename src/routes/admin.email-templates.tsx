@@ -44,6 +44,10 @@ const REMINDER_DEFAULTS = {
     subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
     body: `Hallo {{first_name}},\n\nschön, dass du dabei bist! Unser Portal hat eine neue Adresse – bitte schließe deine Registrierung bei {{tenant_name}} ab sofort über den folgenden Link ab:\n\n{{cta:Jetzt registrieren|{{portal_link}}}}\n\nFalls der Button nicht funktioniert, kopiere diesen Link:\n{{portal_link}}\n\nWir freuen uns auf dich!\nDein {{tenant_name}}-Team`,
   },
+  appointment_30min: {
+    subject: "Erinnerung: Dein Termin in 30 Minuten",
+    body: `Hallo {{first_name}},\n\nkurze Erinnerung: dein Termin startet in 30 Minuten ({{appointment_time}} Uhr am {{appointment_date}}).\n\nBitte sei rechtzeitig bereit.\n\n{{cta:Zum Portal|{{portal_link}}}}\n\nViele Grüße\n{{tenant_name}}`,
+  },
 
 };
 
@@ -79,6 +83,8 @@ interface TenantEmail {
   reminder_recovery_body: string | null;
   reminder_recovery_bewerber_subject: string | null;
   reminder_recovery_bewerber_body: string | null;
+  reminder_appointment_subject: string | null;
+  reminder_appointment_body: string | null;
 }
 
 const PLACEHOLDERS = [
@@ -310,12 +316,14 @@ function AdminEmailTemplatesPage() {
   const [rRecoveryMaBody, setRRecoveryMaBody] = useState("");
   const [rRecoveryBewSubject, setRRecoveryBewSubject] = useState("");
   const [rRecoveryBewBody, setRRecoveryBewBody] = useState("");
+  const [rAppointmentSubject, setRAppointmentSubject] = useState("");
+  const [rAppointmentBody, setRAppointmentBody] = useState("");
 
   const loadTenants = async () => {
     setLoading(true);
     const { data } = await (supabase as any)
       .from("tenants")
-      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body")
+      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body, reminder_appointment_subject, reminder_appointment_body")
       .order("name");
     const rows = (data as TenantEmail[] | null) ?? [];
     setTenants(rows);
@@ -352,6 +360,8 @@ function AdminEmailTemplatesPage() {
     setRRecoveryMaBody(t.reminder_recovery_body || REMINDER_DEFAULTS.recovery_mitarbeiter.body);
     setRRecoveryBewSubject(t.reminder_recovery_bewerber_subject || REMINDER_DEFAULTS.recovery_bewerber.subject);
     setRRecoveryBewBody(t.reminder_recovery_bewerber_body || REMINDER_DEFAULTS.recovery_bewerber.body);
+    setRAppointmentSubject(t.reminder_appointment_subject || REMINDER_DEFAULTS.appointment_30min.subject);
+    setRAppointmentBody(t.reminder_appointment_body || REMINDER_DEFAULTS.appointment_30min.body);
   };
 
   useEffect(() => {
@@ -396,6 +406,8 @@ function AdminEmailTemplatesPage() {
         reminder_recovery_body: rRecoveryMaBody,
         reminder_recovery_bewerber_subject: rRecoveryBewSubject,
         reminder_recovery_bewerber_body: rRecoveryBewBody,
+        reminder_appointment_subject: rAppointmentSubject,
+        reminder_appointment_body: rAppointmentBody,
       } as any)
       .eq("id", selectedTenantId);
     setSaving(false);
@@ -580,6 +592,7 @@ function AdminEmailTemplatesPage() {
                 <TabsTrigger value="completion" className="text-xs">Registrierung abschließen</TabsTrigger>
                 <TabsTrigger value="no_booking" className="text-xs">Keine Buchung (7 Tage)</TabsTrigger>
                 <TabsTrigger value="recovery" className="text-xs">Domain-Wechsel</TabsTrigger>
+                <TabsTrigger value="appointment" className="text-xs">30 Min vor Termin</TabsTrigger>
               </TabsList>
               <TabsContent value="invite">
                 <TemplateEditor
@@ -625,6 +638,18 @@ function AdminEmailTemplatesPage() {
                   label="Domain-Wechsel – Mitarbeiter"
                   subject={rRecoveryMaSubject} onSubjectChange={setRRecoveryMaSubject}
                   body={rRecoveryMaBody} onBodyChange={setRRecoveryMaBody}
+                  signature={signature} onSignatureChange={setSignature}
+                  tenant={selectedTenant}
+                />
+              </TabsContent>
+              <TabsContent value="appointment">
+                <div className="rounded-md border border-sky-300 bg-sky-50 dark:bg-sky-950/30 dark:border-sky-700 px-3 py-2 mb-3 text-[11px] text-sky-900 dark:text-sky-200">
+                  Wird automatisch <strong>30 Minuten vor dem gebuchten Termin</strong> an den Mitarbeiter gesendet (Cron alle 10 Min, Toleranzfenster 25–40 Min). Pro Buchung max. 1 Reminder. Platzhalter: <code>{"{{appointment_date}}"}</code>, <code>{"{{appointment_time}}"}</code>.
+                </div>
+                <TemplateEditor
+                  label="30-Min-Termin-Reminder"
+                  subject={rAppointmentSubject} onSubjectChange={setRAppointmentSubject}
+                  body={rAppointmentBody} onBodyChange={setRAppointmentBody}
                   signature={signature} onSignatureChange={setSignature}
                   tenant={selectedTenant}
                 />

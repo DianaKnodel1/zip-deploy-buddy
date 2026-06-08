@@ -3,12 +3,20 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>{{firmenname}} — Strategische Unternehmensberatung</title>
-<meta name="description" content="{{firmenname}} — Strategische Beratung, die Unternehmen transformiert. Mutig, durchdacht und mit messbaren Ergebnissen." />
+<title>{{seo_title}}</title>
+<meta name="description" content="{{seo_description}}" />
+<meta property="og:title" content="{{seo_title}}" />
+<meta property="og:description" content="{{seo_description}}" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://{{landing_domain}}/" />
+<meta property="og:image" content="{{seo_image}}" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="canonical" href="https://{{landing_domain}}/" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <link rel="icon" href="assets/favicon.png" />
+<link rel="apple-touch-icon" href="assets/favicon.png" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -35,11 +43,12 @@
 <section id="start" class="hero">
   <div class="hero-inner" data-animate>
     <div class="hero-rule"></div>
-    <h1>Wir denken<br/>voraus<span class="dot">.</span></h1>
-    <p class="lead">Strategische Beratung, die Unternehmen transformiert. Mutig, durchdacht und mit messbaren Ergebnissen.</p>
+    <span class="eyebrow">{{hero_kicker}}</span>
+    <h1>{{hero_title}}</h1>
+    <p class="lead">{{hero_subtitle}}</p>
     <div class="hero-ctas">
-      <a href="#expertise" class="btn btn-accent btn-lg">Mehr über uns →</a>
-      <a href="#cta" class="btn btn-ghost btn-lg">Kontakt aufnehmen</a>
+      <a href="#expertise" class="btn btn-accent btn-lg">{{hero_cta_primary}}</a>
+      <a href="#cta" class="btn btn-ghost btn-lg">{{hero_cta_secondary}}</a>
     </div>
   </div>
 </section>

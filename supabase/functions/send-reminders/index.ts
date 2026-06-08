@@ -181,11 +181,15 @@ serve(async (req) => {
     // Tenants vorladen
     const { data: tList, error: tErr } = await admin
       .from("tenants")
-      .select("id,name,domain,primary_domain,primary_domain_changed_at,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body");
+      .select("id,name,domain,primary_domain,primary_domain_changed_at,emails_paused,emails_paused_reason,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reminder_invite_subject,reminder_invite_body,reminder_confirm_subject,reminder_confirm_body,reminder_completion_subject,reminder_completion_body,reminder_no_booking_subject,reminder_no_booking_body,reminder_recovery_subject,reminder_recovery_body");
     if (tErr) return json({ error: tErr.message }, 500);
 
     const tenants = new Map<string, TenantRow>();
-    (tList ?? []).forEach((t: any) => tenants.set(t.id, t as TenantRow));
+    (tList ?? []).forEach((t: any) => {
+      // Pausierte Tenants komplett überspringen — kein Versand, kein Reminder, kein Recovery.
+      if (t.emails_paused) return;
+      tenants.set(t.id, t as TenantRow);
+    });
 
     const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), sentCountByTenant12h: new Map(), recoveryStats: new Map() };
 

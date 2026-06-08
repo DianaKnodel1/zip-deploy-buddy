@@ -64,12 +64,19 @@ export const checkDomainsHealth = createServerFn({ method: "POST" })
     const sb = supabaseAdmin as any;
     const { data: tenants, error } = await sb
       .from("tenants")
-      .select("id,name,domain,domain_aliases,primary_domain")
+      .select("id,name,domain,domain_aliases,primary_domain,emails_paused,emails_paused_at,emails_paused_reason,emails_paused_by")
       .eq("is_active", true);
     if (error) throw new Error(error.message);
 
     const checks: Promise<DomainHealth>[] = [];
+    const pauseStateByTenant = new Map<string, { paused: boolean; at: string | null; reason: string | null; by: string | null }>();
     for (const t of tenants ?? []) {
+      pauseStateByTenant.set(t.id, {
+        paused: !!t.emails_paused,
+        at: t.emails_paused_at ?? null,
+        reason: t.emails_paused_reason ?? null,
+        by: t.emails_paused_by ?? null,
+      });
       const aliases: string[] = Array.isArray(t.domain_aliases) ? t.domain_aliases : [];
       const all = Array.from(new Set([t.domain, ...aliases].filter(Boolean).map((d: string) => normalizeDomain(d))));
       const primary = t.primary_domain ? normalizeDomain(t.primary_domain) : normalizeDomain(t.domain);
@@ -87,7 +94,55 @@ export const checkDomainsHealth = createServerFn({ method: "POST" })
       }
     }
     const results = await Promise.all(checks);
-    return { domains: results, checked_at: new Date().toISOString() };
+    const pause_state = Object.fromEntries(pauseStateByTenant);
+    return { domains: results, checked_at: new Date().toISOString(), pause_state };
+  });
+
+// ============================================================
+// Email-Pause pro Tenant (manuell oder auto durch Health-Cron)
+// ============================================================
+
+export const setTenantEmailsPaused = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({
+      tenant_id: z.string().uuid(),
+      paused: z.boolean(),
+      reason: z.string().trim().max(500).optional().nullable(),
+    }).parse(input)
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const sb = supabaseAdmin as any;
+    const patch: Record<string, any> = data.paused
+      ? {
+          emails_paused: true,
+          emails_paused_at: new Date().toISOString(),
+          emails_paused_reason: data.reason ?? "Manuell pausiert",
+          emails_paused_by: context.userId,
+        }
+      : {
+          emails_paused: false,
+          emails_paused_at: null,
+          emails_paused_reason: null,
+          emails_paused_by: null,
+        };
+    const { error } = await sb.from("tenants").update(patch).eq("id", data.tenant_id);
+    if (error) throw new Error(error.message);
+
+    try {
+      await sb.from("activity_log").insert({
+        action: data.paused ? "emails_pausiert" : "emails_reaktiviert",
+        entity_type: "tenant",
+        entity_id: data.tenant_id,
+        actor_id: context.userId,
+        comment: data.paused
+          ? `Mail-Versand manuell pausiert. Grund: ${data.reason ?? "—"}`
+          : "Mail-Versand wieder aktiviert.",
+      });
+    } catch {}
+
+    return { ok: true, paused: data.paused };
   });
 
 // ============================================================

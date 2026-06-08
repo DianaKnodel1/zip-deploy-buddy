@@ -220,6 +220,16 @@ document.addEventListener('submit', function(e){
     return html;
   })();
 
+  const withSeoDefaults = (b: Branding): Branding => ({
+    ...b,
+    seo_title: b.seo_title || (b.firmenname ? `${b.firmenname} — Karriere & Beratung` : ""),
+    seo_description:
+      b.seo_description ||
+      (b.firmenname
+        ? `${b.firmenname} — Jetzt bewerben und Teil unseres Teams werden. Strategische Beratung mit messbaren Ergebnissen.`
+        : ""),
+  });
+
   const handleGenerate = async () => {
     if (!branding.firmenname || !branding.email || !branding.api_endpoint) {
       toast({ title: "Fehlende Felder", description: "Firmenname, E-Mail und API-Endpoint sind Pflicht.", variant: "destructive" });
@@ -227,7 +237,7 @@ document.addEventListener('submit', function(e){
     }
     setLoading(true);
     try {
-      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl, slots: slotValues } });
+      const res = await generate({ data: { themeId, branding: withSeoDefaults(branding), logoDataUrl, faviconDataUrl, slots: slotValues } });
       // Base64 → Blob → Download
       const bin = atob(res.zipBase64);
       const bytes = new Uint8Array(bin.length);

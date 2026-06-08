@@ -40,21 +40,24 @@ export const Route = createFileRoute("/api/public/domain-health-cron")({
         const sb = supabaseAdmin as any;
         const { data: tenants, error } = await sb
           .from("tenants")
-          .select("id,name,domain,domain_aliases,primary_domain")
+          .select("id,name,domain,domain_aliases,primary_domain,emails_paused")
           .eq("is_active", true);
         if (error) return Response.json({ error: error.message }, { status: 500 });
 
         const results: any[] = [];
+        const autoPaused: string[] = [];
         for (const t of tenants ?? []) {
           const aliases: string[] = Array.isArray(t.domain_aliases) ? t.domain_aliases : [];
           const all = Array.from(new Set([t.domain, ...aliases].filter(Boolean).map(normalizeDomain)));
           const primary = t.primary_domain ? normalizeDomain(t.primary_domain) : (t.domain ? normalizeDomain(t.domain) : null);
 
+          let downCount = 0;
           for (const d of all) {
             const r = await pingDomain(`portal.${d}`);
             results.push({ tenant_id: t.id, tenant_name: t.name, domain: d, is_primary: d === primary, ...r });
 
             if (r.status === "down") {
+              downCount++;
               try {
                 await sb.from("activity_log").insert({
                   action: "domain_down_alert",
@@ -65,9 +68,29 @@ export const Route = createFileRoute("/api/public/domain-health-cron")({
               } catch {}
             }
           }
+
+          // Auto-Pause: alle Domains down UND noch nicht pausiert → Mail-Versand stoppen.
+          // Bewusst KEIN Auto-Resume — Admin muss manuell freigeben, sonst Mail-Flut nach Restore.
+          if (all.length > 0 && downCount === all.length && !t.emails_paused) {
+            try {
+              await sb.from("tenants").update({
+                emails_paused: true,
+                emails_paused_at: new Date().toISOString(),
+                emails_paused_reason: `Alle ${all.length} Domain(s) down — automatisch pausiert.`,
+                emails_paused_by: "auto:domain_down",
+              }).eq("id", t.id);
+              await sb.from("activity_log").insert({
+                action: "emails_auto_pausiert",
+                entity_type: "tenant",
+                entity_id: t.id,
+                comment: `Mail-Versand automatisch gestoppt: alle ${all.length} Domain(s) nicht erreichbar. Admin muss manuell reaktivieren.`,
+              });
+              autoPaused.push(t.id);
+            } catch {}
+          }
         }
 
-        return Response.json({ ok: true, checked_at: new Date().toISOString(), domains: results });
+        return Response.json({ ok: true, checked_at: new Date().toISOString(), domains: results, auto_paused: autoPaused });
       },
     },
   },

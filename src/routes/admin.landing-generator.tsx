@@ -239,6 +239,10 @@ document.addEventListener('submit', function(e){
       toast({ title: "Fehlende Felder", description: "Firmenname, E-Mail und API-Endpoint sind Pflicht.", variant: "destructive" });
       return;
     }
+    if (!branding.landing_domain.trim()) {
+      toast({ title: "Landing-Domain fehlt", description: "Trage die öffentliche Domain ein (z.B. easy-gmbh.de) — wird für Canonical/SEO benötigt.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
       const res = await generate({ data: { themeId, branding: withSeoDefaults(branding), logoDataUrl, faviconDataUrl, slots: slotValues } });
@@ -264,9 +268,7 @@ document.addEventListener('submit', function(e){
     }
   };
 
-  const apiPlaceholder = branding.landing_domain
-    ? `https://${branding.landing_domain.replace(/^https?:\/\//, "")}/api/public/applications`
-    : "https://portal.deine-domain.de/api/public/applications";
+  const apiPlaceholder = "https://api.mb-portal.com/api/public/applications";
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
@@ -382,12 +384,13 @@ document.addEventListener('submit', function(e){
                 <Field label="Steuernummer"><Input value={branding.steuernummer} onChange={set("steuernummer")} /></Field>
                 <Field label="Geschäftsführer"><Input value={branding.geschaeftsfuehrer} onChange={set("geschaeftsfuehrer")} /></Field>
                 <Field label="Telefon 2 (optional)"><Input value={branding.telefon_2} onChange={set("telefon_2")} /></Field>
-                <Field label="Landing-Domain (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="kunde-x.de" /></Field>
+                <Field label="Landing-Domain * (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="easy-gmbh.de" /></Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
+                  <p className="text-[10px] text-muted-foreground mt-1">Zentrales Backend für alle Kunden: <code>https://api.mb-portal.com/api/public/applications</code></p>
                 </Field>
                 <Field label="Mitarbeiter-Portal URL (Redirect nach Bewerbung)">
-                  <Input value={branding.portal_url} onChange={set("portal_url")} placeholder="https://portal.deine-domain.de" />
+                  <Input value={branding.portal_url} onChange={set("portal_url")} placeholder="https://portal.easy-gmbh.de" />
                 </Field>
                 <Field label="Supabase URL (Backend, falls direkter Insert)">
                   <Input value={branding.supabase_url} onChange={set("supabase_url")} placeholder="https://db.deine-domain.de" />

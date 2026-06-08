@@ -312,6 +312,22 @@ function AdminDomainsPage() {
                   <Users className="h-3.5 w-3.5 mr-1" />
                   {openTenantId === t.id ? "Empfänger ausblenden" : "Betroffene Empfänger anzeigen"}
                 </Button>
+                <Button
+                  size="sm"
+                  variant={paused ? "default" : "outline"}
+                  onClick={() => handleTogglePause(t.id, paused)}
+                  disabled={togglingPause === t.id}
+                  className={paused ? "" : "text-amber-700 dark:text-amber-400 border-amber-500/50 hover:bg-amber-50 dark:hover:bg-amber-950/30"}
+                >
+                  {togglingPause === t.id ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : paused ? (
+                    <MailCheck className="h-3.5 w-3.5 mr-1" />
+                  ) : (
+                    <MailX className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  {paused ? "Mail-Versand reaktivieren" : "Mail-Versand pausieren"}
+                </Button>
                 {openTenantId === t.id && (affected[t.id]?.length ?? 0) > 0 && (
                   <Button size="sm" variant="outline" onClick={() => exportCsv(t.id, t.name, primary)}>
                     <Download className="h-3.5 w-3.5 mr-1" />

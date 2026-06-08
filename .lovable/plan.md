@@ -1,98 +1,109 @@
-# Landing-Modul + Härtung — Plan
+# Plan: Browser-Tab-Titel & Theme-Vereinheitlichung
 
-## 1. Theme-Bereinigung & neue Vorlagen
+## Teil 1 — Was heißt „alle 3 Themes vereinheitlichen"?
 
-**Behalten:** `theme-10` (Design Studio Core — Gold Executive)
-
-**Löschen:** theme-02, 03, 04, 05, 06, 07, 08, 09 (Ordner + Imports in `src/lib/landing-themes.ts`)
-
-**Neu hinzufügen (je Ordner mit `meta.json`, `template.html`, `style.css`, `script.js`):**
-
-- **`theme-tts-consultant`** — Replica von TTS Consultant (klassischer Beratungs-Look: Navy/Weiß, Hero mit Berater-Portrait rechts, Trust-Logos-Strip, 4-Spalten-Leistungen, Prozess-Timeline, Testimonials, FAQ-Accordion, vollständiger Footer mit Impressum-Block).
-- **`theme-privacy-guardian`** — Replica von Privacy Guardian (Datenschutz-/Compliance-Vibe: weißer Hero mit grünem/blauem Akzent, Schild-Icon-Hero, Feature-Cards mit Häkchen-Listen, "So funktioniert's"-Steps, Pricing-Tabelle optional, DSGVO-Trust-Section, Footer).
-
-Jedes Theme bekommt im `meta.json` ein vollständiges `slots`-Array (siehe Punkt 2) mit allen sichtbaren Textbausteinen — Hero-Titel, -Subtitel, Chips, CTAs, jede Section-Headline + Body, Footer-Claims, FAQ-Fragen/Antworten.
-
-## 2. Theme-Editor mit Textbausteinen (Slots-System)
-
-Aktuell existiert `meta.json.slots` bereits (siehe theme-02), wird aber im UI nicht editierbar dargestellt. Ausbau:
-
-- **Alle 3 Themes** bekommen vollständige Slot-Definitionen für jeden sichtbaren Text (nicht nur Hero). Slot-Typen: `text`, `longtext` (Textarea), `image` (Data-URL), `color`.
-- **In `src/routes/admin.landing-generator.tsx`:** Nach Theme-Auswahl rechts neben dem Branding-Formular einen Tab "Texte bearbeiten" einblenden. Pro Slot ein Eingabefeld (gruppiert nach Section: Hero / Leistungen / Prozess / FAQ / Footer). Default-Werte aus `meta.json.slots[].default` vorausgefüllt; Reset-Button pro Slot.
-- **Live-Vorschau:** der vorhandene `<iframe>`-Preview rendert bei jeder Slot-Änderung neu (debounce 400 ms) — slots werden in den `generateLandingZip`-Call mitgegeben (Server-Function akzeptiert sie bereits).
-- **Speichern pro Tenant** (optional Stage 2): JSON-Snapshot in `tenants.landing_slots` jsonb-Spalte, damit Änderungen über Sessions hinweg persistieren.
-
-## 3. Tenant-Isolation Audit (E-Mails)
-
-Code-Review-Aufgabe, kein neues Feature — nur Verifikation + Fixes wo nötig:
-
-- **send-reminders/index.ts**: Empfänger werden aus `applications` / `profiles` geladen, jeder Datensatz hat `tenant_id`. Tenant wird daraus aufgelöst → SMTP, Sender, Portal-Link stammen aus dem **eigenen** Tenant. ✔ Bereits korrekt (siehe Code).
-- **send-password-reset / send-signup-confirmation**: prüfen, dass `tenant_id` aus dem User-Record gezogen wird (nicht aus Request-Body, der manipulierbar wäre).
-- **Recovery-Mail Portal-Link**: in `reminder_recovery_body` muss `{{portal_link}}` zwingend aus `tenant.primary_domain` oder `tenant.domain` des **gleichen** Tenants gebaut werden — niemals Cross-Tenant-Fallback. Audit + ggf. Hard-Assertion + Log.
-- **Banner im Admin-UI**: in `/admin/tenants` Edit-Dialog ein Hinweis, wenn `sender_email`-Domain nicht zu `domain` / `primary_domain` / `domain_aliases` passt (verhindert versehentliche Cross-Tenant-Konfiguration).
-
-## 4. Bounce/Soft-Fail Auto-Suppression
-
-Neue Migration `supabase/manual-migrations/20260608000000_bounce_suppression.sql`:
+Aktuell hat jedes Theme einen eigenen Stand. Beispiel:
 
 ```text
-- ALTER TABLE suppressed_emails: stelle sicher (tenant_id, email) UNIQUE
-- Trigger auf email_send_log AFTER INSERT:
-    wenn NEW.status IN ('bounced','failed') mit SMTP-Code >= 500:
-      count = (select count(*) from email_send_log
-               where recipient_email = NEW.recipient_email
-                 and status in ('bounced','failed')
-                 and created_at > now() - interval '30 days')
-      wenn count >= 3:
-        INSERT INTO suppressed_emails (tenant_id, email, reason, source)
-        VALUES (..., NEW.recipient_email, 'auto:3x_bounce', 'trigger')
-        ON CONFLICT DO NOTHING
+                       theme-10     theme-tts    theme-privacy
+Firmenname             ✅           ✅           ✅
+Logo / Farben          ✅           ✅           ✅
+Login-URL (portal_url) ✅           ✅           ✅
+Telefon im Footer      teilweise    ✅           teilweise
+E-Mail im Footer       teilweise    ✅           teilweise
+Adresse im Footer      ❌           ✅           ❌
+Impressum (HRB,USt-ID) ❌           ✅           ❌
+Hero-Titel editierbar  ❌ hart      ✅ Slot      ✅ Slot
+Hero-CTAs editierbar   ❌ hart      ✅ Slot      ✅ Slot
+Browser-Tab-Titel      hart codiert hart codiert hart codiert
+Meta-Description       hart codiert hart codiert hart codiert
 ```
 
-**Send-Pfad-Härtung** (send-reminders, send-password-reset, send-signup-confirmation): vor jedem Versand `select 1 from suppressed_emails where email = ? and tenant_id = ?` — wenn vorhanden, skip + log `suppressed`.
+„Vereinheitlichen" heißt: **gleiche Platzhalter in allen 3 Templates**, damit
+jeder Branding-Wert immer überall ankommt — egal welches Theme gewählt wird.
 
-**Admin-UI** (`admin.email-logs.tsx`): existierender `BounceSuppressionPanel` zeigt bereits Liste + Unblock. Ergänzen: Spalte „Auto-gesperrt nach 3 Bounces" (Quelle = `auto:3x_bounce`).
+## Teil 2 — Was wird geändert
 
-## 5. Domain-Wechsel-Wizard
+### A) Browser-Tab-Titel + Meta (NEU im Admin-Tool)
 
-**Heutiger Stand (umständlich):** Admin geht in `/admin/tenants` → Edit-Dialog → fügt neue Domain in `domain_aliases` array ein → setzt `primary_domain` auf neue Domain → speichert. Dabei muss er `domain_aliases` als JSON-Array korrekt pflegen und darf die alte Domain nicht löschen. Fehleranfällig.
+Drei neue Felder im Admin-Generator, die für ALLE Themes gelten:
 
-**Wizard (3 Klicks):** neuer Button „Domain wechseln" in `/admin/tenants` öffnet Modal:
+- **Seitentitel (Browser-Tab)** — z.B. „DGI GmbH — Beratung & Datenschutz"
+- **Meta-Beschreibung** — 1–2 Sätze für Google-Suchergebnis
+- **OG-Bild URL** (optional) — Vorschaubild für WhatsApp/LinkedIn/Facebook
 
-1. **Schritt 1 — Neue Domain eingeben:** Input für neue Domain (z. B. `digital-dgigmbh.com`). Live-Check: ist die Domain im Tenant-Workspace bereits aktiv (DNS-Validierung optional)?
-2. **Schritt 2 — Bestätigung:** Zeigt Vorher/Nachher:
-   - `primary_domain`: `digital-dgigmbh.de` → **`digital-dgigmbh.com`**
-   - `domain_aliases`: `[]` → **`["digital-dgigmbh.de"]`** (alte automatisch als Alias)
-   - Hinweis: „Alte Mails an `…@digital-dgigmbh.de` werden weiterhin akzeptiert, neue Mails kommen von `…@digital-dgigmbh.com`. Recovery-Mail wird an akzeptierte Bewerber/Mitarbeiter versendet."
-3. **Schritt 3 — Aktivieren:** Button „Wechsel durchführen" → 1 Server-Function `switchPrimaryDomain({tenantId, newDomain})` macht atomar:
-   - `primary_domain = newDomain`
-   - `domain_aliases = array_append(domain_aliases, alte_primary)` (deduped)
-   - `primary_domain_changed_at = now()`
-   - triggert Recovery-Mail-Lauf (`send-reminders` mode=`domain_recovery`)
+Diese Werte werden als `{{seo_title}}`, `{{seo_description}}`, `{{seo_image}}`
+in den `<head>` aller 3 Templates eingesetzt:
 
-**Vereinfachung:** Admin muss `domain_aliases` JSON nie wieder manuell editieren. Die manuelle Bearbeitung bleibt im erweiterten Edit-Dialog für Edge-Cases verfügbar.
+```html
+<title>{{seo_title}}</title>
+<meta name="description" content="{{seo_description}}" />
+<meta property="og:title" content="{{seo_title}}" />
+<meta property="og:description" content="{{seo_description}}" />
+<meta property="og:image" content="{{seo_image}}" />
+<link rel="canonical" href="https://{{landing_domain}}/" />
+```
 
-## Reihenfolge
+Default-Werte werden automatisch aus Firmenname + Theme-Typ vorbelegt
+(„{{firmenname}} — Strategische Beratung" etc.), können aber überschrieben werden.
 
-1. Themes bereinigen + TTS + Privacy Guardian bauen (mit vollen Slots)
-2. Theme-Editor-UI (Slot-Felder + Live-Preview-Update)
-3. Bounce-Suppression Migration + Send-Pfad-Checks
-4. Tenant-Isolation Audit + Banner-Verschärfung
-5. Domain-Wechsel-Wizard
+### B) Branding-Felder überall ausgeben
 
-## Geänderte/neue Dateien
+In allen 3 Templates wird der Footer auf den gleichen Block vereinheitlicht
+mit folgenden Platzhaltern:
 
-- `src/landing-themes/theme-02..09/` — **gelöscht**
-- `src/landing-themes/theme-tts-consultant/` — **neu** (4 Dateien)
-- `src/landing-themes/theme-privacy-guardian/` — **neu** (4 Dateien)
-- `src/landing-themes/theme-10/meta.json` — slots erweitern
-- `src/lib/landing-themes.ts` — Imports anpassen
-- `src/routes/admin.landing-generator.tsx` — Slot-Editor + Live-Preview-Wiring
-- `supabase/manual-migrations/20260608000000_bounce_suppression.sql` — **neu**
-- `supabase/functions/send-reminders/index.ts` — Suppression-Check vor Send
-- `supabase/functions/send-password-reset/index.ts` — Tenant-Lookup absichern
-- `supabase/functions/send-signup-confirmation/index.ts` — dito
-- `src/routes/admin.tenants.tsx` — Wizard-Button + Modal + Sender-Domain-Banner
-- `src/lib/tenant-domains.functions.ts` — neue `switchPrimaryDomain` server fn
+```text
+{{firmenname}}            Telefon: {{telefon}}
+{{strasse}}               E-Mail:  {{email}}
+{{plz}} {{stadt}}         WhatsApp: {{whatsapp_number}}
 
-Soll ich loslegen?
+Impressum:
+Geschäftsführer: {{geschaeftsfuehrer}}
+HRB {{hrb}}, {{registergericht}}
+USt-ID: {{ust_id}} · Steuernummer: {{steuernummer}}
+```
+
+So sind Kontakt + Impressum in jedem Theme identisch befüllt.
+
+### C) theme-10 bekommt Inhalts-Slots wie die anderen
+
+theme-10 hat aktuell hart codierte Hero-Texte. Wir fügen die gleichen Slot-Keys
+hinzu wie bei theme-tts-consultant, damit das Admin-Tool den Theme-Editor
+auch hier zeigt:
+
+- `hero_kicker`, `hero_title`, `hero_subtitle`
+- `hero_cta_primary`, `hero_cta_secondary`
+- `nav_label_*` (optional, falls Navi-Labels änderbar sein sollen)
+
+## Teil 3 — Was bleibt unverändert
+
+- Theme-spezifische Strukturen (Pakete, Steps, Trust-Badges) bleiben
+  individuell — nicht alle Themes brauchen die gleichen Sektionen.
+- Farben, Logo, Favicon, Bewerbungsflow (Klassisch/Fast-Track),
+  Portal-Login — funktionieren bereits einheitlich.
+
+## Teil 4 — Technische Details (für später)
+
+Dateien, die angepasst werden:
+
+1. `src/lib/landing-generator.functions.ts`
+   - `BrandingSchema` erweitern: `seo_title`, `seo_description`, `seo_image`
+2. `src/lib/landing-themes.ts` — keine Änderung an der Struktur
+3. `src/landing-themes/theme-10/`
+   - `meta.json`: Slots-Array hinzufügen (Hero + CTA)
+   - `template.html`: `<title>`, Meta-Tags, Hero, Footer auf Platzhalter umstellen
+4. `src/landing-themes/theme-tts-consultant/template.html`
+   - `<head>`-Meta-Tags auf `{{seo_*}}` umstellen
+5. `src/landing-themes/theme-privacy-guardian/template.html`
+   - `<head>`-Meta-Tags + Footer auf gemeinsamen Block
+   - Impressum-Felder ergänzen
+6. `src/routes/admin.landing-generator.tsx`
+   - 3 neue Eingabefelder (Seitentitel, Beschreibung, OG-Bild)
+   - Auto-Vorbelegung aus Firmenname
+
+## Ergebnis
+
+- ✅ Browser-Tab-Titel pro Landing-Page individuell setzbar
+- ✅ Google-Suchergebnis + Social-Sharing-Vorschau steuerbar
+- ✅ Alle Kontakt- & Impressum-Daten in jedem Theme automatisch
+- ✅ theme-10 bekommt den gleichen Inhalts-Editor wie die anderen

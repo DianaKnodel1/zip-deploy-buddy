@@ -30,6 +30,10 @@ const BrandingSchema = z.object({
   supabase_anon_key: z.string().max(2000).optional().or(z.literal("")).default(""),
   tenant_id: z.string().max(120).optional().or(z.literal("")).default(""),
   flow_type: z.enum(["classic", "fast"]).default("classic"),
+  // SEO / Browser-Tab
+  seo_title: z.string().max(160).default(""),
+  seo_description: z.string().max(320).default(""),
+  seo_image: z.string().max(500).default(""),
 });
 
 const InputSchema = z.object({

@@ -40,6 +40,9 @@ type Branding = {
   supabase_anon_key: string;
   tenant_id: string;
   flow_type: "classic" | "fast";
+  seo_title: string;
+  seo_description: string;
+  seo_image: string;
 };
 
 const EMPTY: Branding = {
@@ -66,6 +69,9 @@ const EMPTY: Branding = {
   supabase_anon_key: "",
   tenant_id: "",
   flow_type: "classic",
+  seo_title: "",
+  seo_description: "",
+  seo_image: "",
 };
 
 function LandingGeneratorPage() {
@@ -128,7 +134,11 @@ function LandingGeneratorPage() {
     if (!theme) return "";
     const replace = (src: string) => {
       let out = src;
-      for (const [k, v] of Object.entries(branding)) {
+      // Auto-Defaults für SEO, damit Preview den Tab-Titel anzeigt
+      const seoTitle = branding.seo_title || (branding.firmenname ? `${branding.firmenname} — Karriere & Beratung` : "Landing-Page");
+      const seoDesc = branding.seo_description || (branding.firmenname ? `${branding.firmenname} — Jetzt bewerben.` : "");
+      const previewBranding = { ...branding, seo_title: seoTitle, seo_description: seoDesc };
+      for (const [k, v] of Object.entries(previewBranding)) {
         out = out.split(`{{${k}}}`).join(String(v ?? ""));
       }
       for (const [k, v] of Object.entries(slotValues)) {
@@ -214,6 +224,16 @@ document.addEventListener('submit', function(e){
     return html;
   })();
 
+  const withSeoDefaults = (b: Branding): Branding => ({
+    ...b,
+    seo_title: b.seo_title || (b.firmenname ? `${b.firmenname} — Karriere & Beratung` : ""),
+    seo_description:
+      b.seo_description ||
+      (b.firmenname
+        ? `${b.firmenname} — Jetzt bewerben und Teil unseres Teams werden. Strategische Beratung mit messbaren Ergebnissen.`
+        : ""),
+  });
+
   const handleGenerate = async () => {
     if (!branding.firmenname || !branding.email || !branding.api_endpoint) {
       toast({ title: "Fehlende Felder", description: "Firmenname, E-Mail und API-Endpoint sind Pflicht.", variant: "destructive" });
@@ -221,7 +241,7 @@ document.addEventListener('submit', function(e){
     }
     setLoading(true);
     try {
-      const res = await generate({ data: { themeId, branding, logoDataUrl, faviconDataUrl, slots: slotValues } });
+      const res = await generate({ data: { themeId, branding: withSeoDefaults(branding), logoDataUrl, faviconDataUrl, slots: slotValues } });
       // Base64 → Blob → Download
       const bin = atob(res.zipBase64);
       const bytes = new Uint8Array(bin.length);
@@ -362,7 +382,7 @@ document.addEventListener('submit', function(e){
                 <Field label="Steuernummer"><Input value={branding.steuernummer} onChange={set("steuernummer")} /></Field>
                 <Field label="Geschäftsführer"><Input value={branding.geschaeftsfuehrer} onChange={set("geschaeftsfuehrer")} /></Field>
                 <Field label="Telefon 2 (optional)"><Input value={branding.telefon_2} onChange={set("telefon_2")} /></Field>
-                <Field label="Landing-Domain (für SEO/Canonical)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="kunde-x.de" /></Field>
+                <Field label="Landing-Domain (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="kunde-x.de" /></Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
                 </Field>
@@ -419,6 +439,45 @@ document.addEventListener('submit', function(e){
                   </button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Step 2c: SEO / Browser-Tab */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">2c. SEO & Browser-Tab</CardTitle>
+              <CardDescription>
+                Browser-Tab-Titel, Google-Beschreibung und Social-Sharing-Vorschau (WhatsApp, LinkedIn, Facebook). Leer lassen = Auto-Werte aus Firmenname.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Field label="Seitentitel (Browser-Tab, max. 60 Zeichen)">
+                <Input
+                  value={branding.seo_title}
+                  onChange={set("seo_title")}
+                  placeholder={branding.firmenname ? `${branding.firmenname} — Beratung & Karriere` : "z.B. Mustermann GmbH — Beratung"}
+                  maxLength={160}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">{branding.seo_title.length}/60 empfohlen · erscheint im Browser-Tab und bei Google</p>
+              </Field>
+              <Field label="Meta-Beschreibung (Google-Suchergebnis, max. 160 Zeichen)">
+                <Textarea
+                  rows={2}
+                  value={branding.seo_description}
+                  onChange={set("seo_description")}
+                  placeholder="1–2 Sätze, die Besucher zum Klicken bewegen. Wird in Google angezeigt."
+                  maxLength={320}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">{branding.seo_description.length}/160 empfohlen</p>
+              </Field>
+              <Field label="OG-Bild URL (optional, Vorschaubild für WhatsApp/LinkedIn/Facebook)">
+                <Input
+                  value={branding.seo_image}
+                  onChange={set("seo_image")}
+                  placeholder="https://kunde-x.de/og-image.jpg (1200×630 px)"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Leer = kein Vorschaubild. Empfohlen 1200×630 px.</p>
+              </Field>
             </CardContent>
           </Card>
 

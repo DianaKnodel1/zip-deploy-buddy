@@ -1023,6 +1023,23 @@ function AdminTenantsPage() {
     reload();
   };
 
+  const pauseEmails = async (t: Tenant) => {
+    const reason = window.prompt(`Mail-Versand für "${t.name}" pausieren.\nGrund (optional):`, "Manuell pausiert");
+    if (reason === null) return; // Abbruch
+    const { error } = await supabase.from("tenants").update({
+      emails_paused: true,
+      emails_paused_at: new Date().toISOString(),
+      emails_paused_reason: reason || "Manuell pausiert",
+      emails_paused_by: "manual:admin",
+    }).eq("id", t.id);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Versand pausiert", description: `Für ${t.name} werden keine Mails mehr versendet.` });
+    reload();
+  };
+
   const deleteTenant = async (id: string) => {
     const { error } = await supabase.from("tenants").delete().eq("id", id);
     if (error) {
@@ -1092,9 +1109,13 @@ function AdminTenantsPage() {
                     <span className="truncate max-w-[120px]">{t.team_leader_name}</span>
                   </div>
                   <div className="flex gap-1">
-                    {(t as any).emails_paused && (
+                    {(t as any).emails_paused ? (
                       <Button variant="default" size="sm" onClick={() => resumeEmails(t)} className="text-xs" title={(t as any).emails_paused_reason ?? ""}>
                         Versand fortsetzen
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => pauseEmails(t)} className="text-xs" title="Mail-Versand für diese Domain pausieren">
+                        ⏸ Mails pausieren
                       </Button>
                     )}
                     <Button variant="ghost" size="sm" onClick={() => toggleActive(t)} className="text-xs">

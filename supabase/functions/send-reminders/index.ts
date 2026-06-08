@@ -810,6 +810,10 @@ async function maybeMarkBounced(admin: any, email: string, err: any) {
 
 
 // ───── Mailversand ─────
+// Cache: pro Tenant-ID merken wir, ob verify() bereits OK war oder hart pausiert.
+// Verhindert n× verify pro Cron-Lauf bei großen Batches.
+const _verifyCache = new Map<string, { ok: boolean; reason?: string }>();
+
 async function sendMail(tenant: TenantRow, to: string, subject: string, html: string) {
   const transporter = nodemailer.createTransport({
     host: tenant.smtp_host!,
@@ -817,6 +821,17 @@ async function sendMail(tenant: TenantRow, to: string, subject: string, html: st
     secure: tenant.smtp_port === 465,
     auth: { user: tenant.smtp_username!, pass: tenant.smtp_password! },
   });
+
+  let cached = _verifyCache.get(tenant.id);
+  if (!cached) {
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { autoRefreshToken: false, persistSession: false } });
+    cached = await verifyOrPause(admin, tenant, transporter);
+    _verifyCache.set(tenant.id, cached);
+  }
+  if (!cached.ok) {
+    throw new Error(`SMTP-Verify fehlgeschlagen: ${cached.reason ?? "unknown"}`);
+  }
+
   const senderName = tenant.sender_name ?? tenant.name;
   const senderEmail = tenant.sender_email ?? tenant.smtp_username!;
   await transporter.sendMail({
@@ -826,6 +841,44 @@ async function sendMail(tenant: TenantRow, to: string, subject: string, html: st
     subject,
     html,
   });
+}
+
+async function verifyOrPause(admin: any, tenant: any, transporter: any): Promise<{ ok: boolean; reason?: string; paused?: boolean }> {
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_r, rej) => setTimeout(() => rej(new Error("verify timeout 8s")), 8000)),
+    ]);
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: 0,
+      last_verify_at: new Date().toISOString(), last_verify_ok: true, updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    const reason = String(e?.message ?? e);
+    const { data: h } = await admin.from("tenant_smtp_health").select("consecutive_fails").eq("tenant_id", tenant.id).maybeSingle();
+    const fails = (h?.consecutive_fails ?? 0) + 1;
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: fails,
+      last_fail_at: new Date().toISOString(), last_fail_error: reason,
+      last_verify_at: new Date().toISOString(), last_verify_ok: false, updated_at: new Date().toISOString(),
+    });
+    let paused = false;
+    if (fails >= 3 && !tenant.emails_paused) {
+      await admin.from("tenants").update({
+        emails_paused: true,
+        emails_paused_at: new Date().toISOString(),
+        emails_paused_reason: `SMTP-Verify ${fails}x fehlgeschlagen: ${reason}`,
+        emails_paused_by: "auto:smtp_verify",
+      }).eq("id", tenant.id);
+      await admin.from("activity_log").insert({
+        action: "emails_auto_pausiert", entity_type: "tenant", entity_id: tenant.id,
+        comment: `SMTP-Versand auto-pausiert nach ${fails} Verify-Fails: ${reason}`,
+      }).then(() => {}, () => {});
+      paused = true;
+    }
+    return { ok: false, reason, paused };
+  }
 }
 
 // ───── Templates ─────

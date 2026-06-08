@@ -1004,6 +1004,25 @@ function AdminTenantsPage() {
     reload();
   };
 
+  const resumeEmails = async (t: Tenant) => {
+    const { error } = await supabase.from("tenants").update({
+      emails_paused: false,
+      emails_paused_at: null,
+      emails_paused_reason: null,
+      emails_paused_by: null,
+    }).eq("id", t.id);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Counter zurücksetzen
+    await supabase.from("tenant_smtp_health" as any).upsert({
+      tenant_id: t.id, consecutive_fails: 0, last_verify_ok: null, updated_at: new Date().toISOString(),
+    });
+    toast({ title: "Versand fortgesetzt", description: `Mail-Versand für ${t.name} ist wieder aktiv.` });
+    reload();
+  };
+
   const deleteTenant = async (id: string) => {
     const { error } = await supabase.from("tenants").delete().eq("id", id);
     if (error) {
@@ -1054,6 +1073,11 @@ function AdminTenantsPage() {
                   <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
+                  {(t as any).emails_paused && (
+                    <Badge variant="destructive" className="text-[10px]" title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}>
+                      ⏸ Mails pausiert
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -1068,6 +1092,11 @@ function AdminTenantsPage() {
                     <span className="truncate max-w-[120px]">{t.team_leader_name}</span>
                   </div>
                   <div className="flex gap-1">
+                    {(t as any).emails_paused && (
+                      <Button variant="default" size="sm" onClick={() => resumeEmails(t)} className="text-xs" title={(t as any).emails_paused_reason ?? ""}>
+                        Versand fortsetzen
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => toggleActive(t)} className="text-xs">
                       {t.is_active ? "Deaktivieren" : "Aktivieren"}
                     </Button>

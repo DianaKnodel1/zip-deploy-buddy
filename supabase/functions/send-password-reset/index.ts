@@ -62,7 +62,7 @@ async function resolveTenant(admin: any, host: string | null) {
   const norm = normalizeDomain(host);
   const { data: tenants } = await admin
     .from("tenants")
-    .select("id,name,domain,primary_domain,domain_aliases,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reset_email_subject,reset_email_body,is_active")
+    .select("id,name,domain,primary_domain,domain_aliases,logo_url,primary_color,sender_email,sender_name,reply_to_email,smtp_host,smtp_port,smtp_username,smtp_password,reset_email_subject,reset_email_body,is_active,emails_paused,emails_paused_reason")
     .eq("is_active", true);
   if (!tenants || tenants.length === 0) return null;
   if (!norm) return tenants[0];
@@ -117,6 +117,11 @@ serve(async (req) => {
 
     const tenant: any = await resolveTenant(admin, host);
     if (!tenant) return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (tenant.emails_paused) {
+      // Generic OK (keine Enumeration), aber loggen
+      await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", `skipped: tenant paused (${tenant.emails_paused_reason ?? "n/a"})`);
+      return new Response(JSON.stringify({ ok: true, warn: "paused" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Bounce-Suppression: Empfänger mit email_status != 'active' überspringen.
     // Schützt Sender-Reputation. Antwort bleibt ok (keine Enumeration).
@@ -196,14 +201,19 @@ serve(async (req) => {
     const senderName = tenant.sender_name ?? tenant.name;
     const senderEmail = tenant.sender_email;
     try {
-      await transporter.sendMail({
-        from: `"${senderName}" <${senderEmail}>`,
-        to: email,
-        replyTo: tenant.reply_to_email ?? senderEmail,
-        subject,
-        html,
-      });
-      await logEmail(admin, tenant, email, subject, html, "sent");
+      const verifyRes = await verifyOrPause(admin, tenant, transporter);
+      if (!verifyRes.ok) {
+        await logEmail(admin, tenant, email, subject, html, "failed", `verify_failed: ${verifyRes.reason}${verifyRes.paused ? " (tenant auto-paused)" : ""}`);
+      } else {
+        await transporter.sendMail({
+          from: `"${senderName}" <${senderEmail}>`,
+          to: email,
+          replyTo: tenant.reply_to_email ?? senderEmail,
+          subject,
+          html,
+        });
+        await logEmail(admin, tenant, email, subject, html, "sent");
+      }
     } catch (err: any) {
       console.error("send-password-reset SMTP failed", err);
       await logEmail(admin, tenant, email, subject, html, "failed", String(err?.message ?? err));
@@ -216,3 +226,43 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+// SMTP-Verify mit Smart-Pause (3 Fails → tenants.emails_paused = true).
+// Migration: 20260608110000_tenant_smtp_health.sql
+async function verifyOrPause(admin: any, tenant: any, transporter: any): Promise<{ ok: boolean; reason?: string; paused?: boolean }> {
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_r, rej) => setTimeout(() => rej(new Error("verify timeout 8s")), 8000)),
+    ]);
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: 0,
+      last_verify_at: new Date().toISOString(), last_verify_ok: true, updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    const reason = String(e?.message ?? e);
+    const { data: h } = await admin.from("tenant_smtp_health").select("consecutive_fails").eq("tenant_id", tenant.id).maybeSingle();
+    const fails = (h?.consecutive_fails ?? 0) + 1;
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: fails,
+      last_fail_at: new Date().toISOString(), last_fail_error: reason,
+      last_verify_at: new Date().toISOString(), last_verify_ok: false, updated_at: new Date().toISOString(),
+    });
+    let paused = false;
+    if (fails >= 3 && !tenant.emails_paused) {
+      await admin.from("tenants").update({
+        emails_paused: true,
+        emails_paused_at: new Date().toISOString(),
+        emails_paused_reason: `SMTP-Verify ${fails}x fehlgeschlagen: ${reason}`,
+        emails_paused_by: "auto:smtp_verify",
+      }).eq("id", tenant.id);
+      await admin.from("activity_log").insert({
+        action: "emails_auto_pausiert", entity_type: "tenant", entity_id: tenant.id,
+        comment: `SMTP-Versand auto-pausiert nach ${fails} Verify-Fails: ${reason}`,
+      }).then(() => {}, () => {});
+      paused = true;
+    }
+    return { ok: false, reason, paused };
+  }
+}

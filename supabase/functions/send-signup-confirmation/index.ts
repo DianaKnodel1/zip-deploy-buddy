@@ -53,13 +53,16 @@ serve(async (req) => {
     // 1. Tenant + SMTP laden
     const { data: tenant, error: tErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password")
+      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, emails_paused, emails_paused_reason")
       .eq("id", tenant_id)
       .maybeSingle();
 
     if (tErr || !tenant) return json({ error: "Tenant nicht gefunden" }, 404);
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
+    }
+    if (tenant.emails_paused) {
+      return json({ error: `E-Mail-Versand für diesen Mandanten ist pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}. Bitte Admin kontaktieren.` }, 503);
     }
 
     // Bounce-Suppression: bekanntermaßen tote Adressen nicht erneut anschreiben.
@@ -157,13 +160,18 @@ Diese E-Mail wurde an ${escapeHtml(email)} gesendet. Wenn du keinen Account ange
 </td></tr></table>
 </body></html>`;
 
-      // 5. SMTP senden
+      // 5. SMTP senden — vorher verify() (Auto-Pause bei wiederholtem Fail)
       const transporter = nodemailer.createTransport({
         host: tenant.smtp_host,
         port: tenant.smtp_port,
         secure: tenant.smtp_port === 465,
         auth: { user: tenant.smtp_username, pass: tenant.smtp_password },
       });
+
+      const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
+      if (!verifyRes.ok) {
+        throw new Error(`SMTP-Verify fehlgeschlagen: ${verifyRes.reason}${verifyRes.paused ? " — Mandant wurde automatisch pausiert." : ""}`);
+      }
 
       await transporter.sendMail({
         from: `"${senderName}" <${senderEmail}>`,
@@ -205,3 +213,45 @@ function json(body: unknown, status: number) {
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
+
+// SMTP-Verify mit Smart-Pause: erst nach 3 aufeinander folgenden Fails wird
+// der Tenant via tenants.emails_paused = true automatisch pausiert. Erfolg
+// setzt den Counter zurück. Siehe migration 20260608110000_tenant_smtp_health.sql.
+async function verifyOrPause(admin: any, tenant: any, transporter: any): Promise<{ ok: boolean; reason?: string; paused?: boolean }> {
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_r, rej) => setTimeout(() => rej(new Error("verify timeout 8s")), 8000)),
+    ]);
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: 0,
+      last_verify_at: new Date().toISOString(), last_verify_ok: true, updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  } catch (e: any) {
+    const reason = String(e?.message ?? e);
+    const { data: h } = await admin.from("tenant_smtp_health").select("consecutive_fails").eq("tenant_id", tenant.id).maybeSingle();
+    const fails = (h?.consecutive_fails ?? 0) + 1;
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id, consecutive_fails: fails,
+      last_fail_at: new Date().toISOString(), last_fail_error: reason,
+      last_verify_at: new Date().toISOString(), last_verify_ok: false, updated_at: new Date().toISOString(),
+    });
+    let paused = false;
+    if (fails >= 3 && !tenant.emails_paused) {
+      await admin.from("tenants").update({
+        emails_paused: true,
+        emails_paused_at: new Date().toISOString(),
+        emails_paused_reason: `SMTP-Verify ${fails}x fehlgeschlagen: ${reason}`,
+        emails_paused_by: "auto:smtp_verify",
+      }).eq("id", tenant.id);
+      await admin.from("activity_log").insert({
+        action: "emails_auto_pausiert", entity_type: "tenant", entity_id: tenant.id,
+        comment: `SMTP-Versand auto-pausiert nach ${fails} Verify-Fails: ${reason}`,
+      }).then(() => {}, () => {});
+      paused = true;
+    }
+    return { ok: false, reason, paused };
+  }
+}
+

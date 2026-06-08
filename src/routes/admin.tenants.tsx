@@ -1073,6 +1073,11 @@ function AdminTenantsPage() {
                   <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
+                  {(t as any).emails_paused && (
+                    <Badge variant="destructive" className="text-[10px]" title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}>
+                      ⏸ Mails pausiert
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -1087,6 +1092,11 @@ function AdminTenantsPage() {
                     <span className="truncate max-w-[120px]">{t.team_leader_name}</span>
                   </div>
                   <div className="flex gap-1">
+                    {(t as any).emails_paused && (
+                      <Button variant="default" size="sm" onClick={() => resumeEmails(t)} className="text-xs" title={(t as any).emails_paused_reason ?? ""}>
+                        Versand fortsetzen
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => toggleActive(t)} className="text-xs">
                       {t.is_active ? "Deaktivieren" : "Aktivieren"}
                     </Button>

@@ -114,6 +114,11 @@ Diese E-Mail wurde an ${escapeHtml(email)} gesendet. Wenn du das nicht warst, ka
       auth: { user: tenant.smtp_username, pass: tenant.smtp_password },
     });
 
+    const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
+    if (!verifyRes.ok) {
+      return json({ success: true }, 200); // generic OK, kein Enumeration-Hint
+    }
+
     await transporter.sendMail({
       from: `"${senderName}" <${senderEmail}>`,
       to: email,

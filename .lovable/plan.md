@@ -1,132 +1,92 @@
-# SMTP Auto-Pause pro Tenant
+# 30-Minuten-Termin-Reminder
 
-## Grundprinzip
+Sendet 30 Min vor einem gebuchten Termin (`bookings.booking_date + booking_time`) automatisch eine Mail an den Mitarbeiter. Nutzt das SMTP des jeweiligen Tenants, respektiert `emails_paused` und läuft alle 10 Min per pg_cron.
 
-Jeder Tenant hat seine eigene Domain + sein eigenes SMTP. Wenn Tenant A's SMTP fehlschlägt, wird **nur** Tenant A pausiert. Tenant B, C, D laufen normal weiter. Kein Auto-Resume — du reaktivierst manuell im Admin, sobald du Domain/SMTP gewechselt hast.
+## 1. Datenbank-Migration
 
-Das ergänzt den bereits existierenden `domain-health-cron` (der bei kompletter Domain-Down-Phase pausiert) um die SMTP-Auth-Ebene: Domain antwortet, aber SMTP-Login tot → ebenfalls pausieren.
+Neue Datei `supabase/manual-migrations/20260608120000_appointment_reminder.sql`:
 
-## Was passiert konkret
+- **`tenants`**: 2 neue Spalten
+  - `reminder_appointment_subject text`
+  - `reminder_appointment_body text`
+- **Neue Tabelle `appointment_reminder_log`**
+  - `booking_id uuid PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE`
+  - `tenant_id uuid NOT NULL`
+  - `sent_at timestamptz NOT NULL DEFAULT now()`
+  - `recipient_email text NOT NULL`
+  - GRANT + RLS (nur service_role schreibt, authenticated liest eigenen Tenant)
+  - Garantiert Idempotenz: pro Booking maximal 1 Reminder
 
-### 1. Vor jedem Mail-Versand: `transporter.verify()`
+## 2. Default-Template (im Code, src/lib/reminder-defaults.ts oder direkt in admin.email-templates.tsx)
 
-Eingefügt in alle vier Edge Functions, die SMTP nutzen:
-- `send-signup-confirmation`
-- `resend-signup-confirmation`
-- `send-password-reset`
-- `send-reminders`
+```
+Subject: Erinnerung: Dein Termin in 30 Minuten
+Body:
+Hallo {{employee_name}},
 
-Ablauf pro Send:
-1. Tenant laden → SMTP-Felder vorhanden? Wenn nicht: Skip.
-2. **Wenn `tenant.emails_paused === true`**: sofort skip, kein Verify, kein Send. (Schützt vor "Wake-up-Spam" nach Restore.)
-3. `transporter.verify()` mit 8s Timeout.
-   - **Erfolg** → `sendMail()` wie bisher.
-   - **Fehler** (Auth/Connection/TLS) → Tenant pausieren + `activity_log` + `email_logs` mit `status='failed'`. Kein Send.
+kurze Erinnerung: dein Termin startet in 30 Minuten ({{appointment_time}} Uhr).
 
-### 2. Smart-Pause-Logik (gegen False Positives)
+Bitte sei rechtzeitig bereit.
 
-Ein einzelner `verify()`-Fehler kann auch ein Netzwerk-Hickup sein. Deshalb:
-- Neue Tabelle `tenant_smtp_health` mit Counter `consecutive_fails`.
-- **Pause erst nach 3 aufeinander folgenden Fails innerhalb 15 Min** — danach: `emails_paused = true`, `emails_paused_by = 'auto:smtp_verify'`, `emails_paused_reason = 'SMTP-Verify schlug 3x fehl: <error>'`.
-- Erster erfolgreicher `verify()` setzt den Counter zurück.
+Viele Grüße
+{{tenant_name}}
+```
 
-### 3. Manuelles Resume (kein Auto-Resume)
+Platzhalter: `{{employee_name}}`, `{{appointment_time}}`, `{{appointment_date}}`, `{{tenant_name}}`, `{{portal_url}}`.
 
-Genau wie beim Domain-Down-Cron: Du gehst in `/admin/tenants`, siehst Badge "SMTP pausiert" mit Grund, korrigierst SMTP-Daten und klickst "Versand fortsetzen". Setzt `emails_paused = false` und löscht den Counter.
+## 3. UI-Editor (`src/routes/admin.email-templates.tsx`)
 
-### 4. Admin-UI in `/admin/tenants`
+- Type-Erweiterung um `reminder_appointment_subject/body`
+- Defaults in `REMINDER_DEFAULTS` (neuer Key `appointment_30min`)
+- Neuer Tab/Card „30 Min vor Termin" im Reminder-Bereich, identisches Pattern wie die bestehenden Reminder-Editoren
+- Select-Query um die zwei Spalten erweitern
+- Save-Payload um die zwei Spalten erweitern
 
-- Pro Tenant-Zeile: Badge "✅ SMTP ok" / "⏸ Pausiert (Grund)" / "⚠ 2/3 Fails"
-- Button "SMTP jetzt prüfen" → ruft neue Server-Function, die `verify()` ausführt und Status anzeigt
-- Button "Versand fortsetzen" (nur sichtbar wenn pausiert)
+## 4. Neue Edge Function `supabase/functions/send-appointment-reminders/index.ts`
 
-## Was sich an bestehenden Sachen NICHT ändert
+Eigenständig (nicht in `send-reminders` reinpacken — andere Cadence, anderes Anti-Spam-Profil).
 
-- Reminder/Recovery-Cron läuft weiter wie gehabt — er respektiert `emails_paused` schon (für andere Tenants).
-- `domain-health-cron` bleibt unverändert (pingt Domain, pausiert wenn alle Domains down).
-- Welcome- und Password-Reset-Mails laufen weiter, **außer** bei pausiertem Tenant — dann werfen sie einen klaren Fehler ("E-Mail-Versand für diesen Mandanten ist pausiert. Bitte Admin kontaktieren.") an die UI.
+Logik pro Lauf:
+1. Lade alle `bookings` mit Status ∈ {`booked`, `confirmed`} (oder analoger Default-Status), bei denen `booking_date + booking_time` zwischen `now + 25 Min` und `now + 40 Min` liegt (Toleranzfenster ±5 Min um die 30 Min).
+2. Skippe Bookings, deren `id` bereits in `appointment_reminder_log` steht (Idempotenz).
+3. Lade je Booking: `profiles.email`, `profiles.full_name`, `tenants` via `profiles.tenant_id`.
+4. Skippe Tenant wenn `emails_paused = true` oder `hasValidSmtp(tenant) === false`.
+5. Rendere Template, sende via Tenant-SMTP (`nodemailer`, gleiches Pattern wie `send-reminders`).
+6. Logge in `appointment_reminder_log` (success) bzw. `email_send_log` (failure).
+7. Dry-Run-Modus: `POST { dry_run: true }` zählt nur, sendet nicht.
 
-## Was passiert in deinem aktuellen digital-dgigmbh-Fall
+KEINE Quiet-Hours-Sperre (Termin-Reminder müssen auch früh/spät rausgehen, wenn der Termin dann ist). KEIN Min-Days-Between-Gate.
 
-Sobald deployed:
-1. Nächste Mail an digital-dgigmbh läuft in `verify()`-Fail (SMTP-Passwort tot).
-2. 3 Versuche → Tenant wird auto-pausiert.
-3. Du siehst in `/admin/tenants` rotes Badge mit Grund.
-4. Du korrigierst SMTP-Daten (neues Passwort oder Hoster-Wechsel) → klickst "Versand fortsetzen".
-5. Andere Tenants merken nichts davon.
+## 5. Cron
 
-## Technische Änderungen
+In derselben Migration:
 
-### Neue Migration
-`supabase/manual-migrations/20260608110000_tenant_smtp_health.sql`
 ```sql
-CREATE TABLE public.tenant_smtp_health (
-  tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
-  consecutive_fails int NOT NULL DEFAULT 0,
-  last_fail_at timestamptz,
-  last_fail_error text,
-  last_verify_at timestamptz,
-  last_verify_ok boolean
+SELECT cron.schedule(
+  'send-appointment-reminders',
+  '*/10 * * * *',
+  $$ SELECT net.http_post(
+       url := 'https://<project>.functions.supabase.co/send-appointment-reminders',
+       headers := jsonb_build_object('Authorization', 'Bearer <service-role>')
+     ); $$
 );
-GRANT SELECT ON public.tenant_smtp_health TO authenticated;
-GRANT ALL ON public.tenant_smtp_health TO service_role;
-ALTER TABLE public.tenant_smtp_health ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins read smtp_health" ON public.tenant_smtp_health
-  FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'admin'));
 ```
 
-### Shared Helper (in jede Edge Function inline kopiert — Deno hat kein Cross-Import-Sharing)
-```ts
-async function verifyOrPause(tenant, supabase, transporter): Promise<{ok: boolean, reason?: string}> {
-  if (tenant.emails_paused) return {ok: false, reason: 'paused'};
-  try {
-    await Promise.race([
-      transporter.verify(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('verify timeout 8s')), 8000))
-    ]);
-    await supabase.from('tenant_smtp_health').upsert({
-      tenant_id: tenant.id, consecutive_fails: 0,
-      last_verify_at: new Date().toISOString(), last_verify_ok: true
-    });
-    return {ok: true};
-  } catch (e) {
-    const {data: h} = await supabase.from('tenant_smtp_health')
-      .select('consecutive_fails').eq('tenant_id', tenant.id).maybeSingle();
-    const fails = (h?.consecutive_fails ?? 0) + 1;
-    await supabase.from('tenant_smtp_health').upsert({
-      tenant_id: tenant.id, consecutive_fails: fails,
-      last_fail_at: new Date().toISOString(), last_fail_error: String(e.message),
-      last_verify_at: new Date().toISOString(), last_verify_ok: false
-    });
-    if (fails >= 3) {
-      await supabase.from('tenants').update({
-        emails_paused: true,
-        emails_paused_at: new Date().toISOString(),
-        emails_paused_reason: `SMTP-Verify ${fails}x fehlgeschlagen: ${e.message}`,
-        emails_paused_by: 'auto:smtp_verify',
-      }).eq('id', tenant.id);
-      await supabase.from('activity_log').insert({
-        action: 'emails_auto_pausiert', entity_type: 'tenant', entity_id: tenant.id,
-        comment: `SMTP-Versand auto-pausiert nach ${fails} Verify-Fails: ${e.message}`
-      });
-    }
-    return {ok: false, reason: e.message};
-  }
-}
-```
+## 6. Admin-UI Trigger (optional, klein)
 
-### Geänderte Dateien
-- `supabase/functions/send-signup-confirmation/index.ts` — Verify vor Send
-- `supabase/functions/resend-signup-confirmation/index.ts` — Verify vor Send
-- `supabase/functions/send-password-reset/index.ts` — Verify vor Send
-- `supabase/functions/send-reminders/index.ts` — Verify pro Tenant einmal (vor Batch)
-- `src/routes/admin.tenants.tsx` — Badge + Resume-Button
-- `src/lib/admin-tenants.functions.ts` (neu oder bestehend) — `verifyTenantSmtp`, `resumeTenantEmails` Server-Functions
+In `/admin/reminders` analog zu bestehenden Buttons: „Termin-Reminder jetzt prüfen (Dry-Run)" + „Jetzt senden".
 
-## Frage an dich
+## Technische Hinweise
 
-**Schwellenwert: 3 Fails (mein Vorschlag) oder direkt nach 1 Fail pausieren?**
-- 3 Fails: Robuster gegen Netzwerk-Hickups, ~1 Min Verzögerung bei echtem Ausfall.
-- 1 Fail: Sofortige Pause, aber gelegentlich falscher Alarm bei Provider-Timeouts.
+- Edge Function NICHT als TanStack-Server-Function — bestehender Reminder-Stack läuft auf Supabase Edge Functions, Konsistenz wichtig.
+- Tenant-Isolation: SMTP wird strikt aus `profiles.tenant_id → tenants` gezogen, nie cross-tenant.
+- Bei Booking-Cancellation (`status` != aktiv) wird automatisch nicht mehr gesendet (Step 1 filtert).
+- Bei nachträglicher Terminverschiebung: `appointment_reminder_log.booking_id` ist UNIQUE → wenn der Reminder bereits raus ist, kommt keine neue Erinnerung. Optional erweiterbar auf `(booking_id, booking_date, booking_time)` als Composite Key — bitte vorher bestätigen, ob das gewünscht ist.
 
-Ich empfehle 3. Sag Bescheid, dann implementiere ich alles in einem Rutsch.
+## Reihenfolge der Umsetzung
+
+1. SQL-Migration schreiben (Tabelle + Spalten + Cron)
+2. Edge Function erstellen
+3. Template-UI erweitern
+4. Admin-Trigger-Button (optional)
+5. User testet via Dry-Run, dann scharf schalten

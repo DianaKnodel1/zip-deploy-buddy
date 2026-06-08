@@ -98,17 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then((res) => {
           form.reset();
+          status.className = 'status success';
+          status.textContent = 'Bewerbung erfolgreich gesendet.';
           var isFast = (window.FLOW_TYPE || 'classic') === 'fast';
-          if (isFast) {
-            status.className = 'status success';
-            status.textContent = 'Vielen Dank für die Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal weitergeleitet und müssen sich registrieren um fortzufahren.';
-            if (res && res.redirect_url) {
-              setTimeout(function () { window.location.href = res.redirect_url; }, 2500);
-            }
-          } else {
-            status.className = 'status success';
-            status.textContent = 'Vielen Dank, wir haben Ihre Bewerbung erhalten und melden uns i.d.R. binnen 10 Tagen bei Ihnen.';
-          }
+          showApplicationModal({ fast: isFast, whatsapp: window.WHATSAPP_NUMBER || '' });
         })
         .catch(() => {
           status.className = 'status error';

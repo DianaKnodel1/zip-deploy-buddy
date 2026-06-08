@@ -134,7 +134,11 @@ function LandingGeneratorPage() {
     if (!theme) return "";
     const replace = (src: string) => {
       let out = src;
-      for (const [k, v] of Object.entries(branding)) {
+      // Auto-Defaults für SEO, damit Preview den Tab-Titel anzeigt
+      const seoTitle = branding.seo_title || (branding.firmenname ? `${branding.firmenname} — Karriere & Beratung` : "Landing-Page");
+      const seoDesc = branding.seo_description || (branding.firmenname ? `${branding.firmenname} — Jetzt bewerben.` : "");
+      const previewBranding = { ...branding, seo_title: seoTitle, seo_description: seoDesc };
+      for (const [k, v] of Object.entries(previewBranding)) {
         out = out.split(`{{${k}}}`).join(String(v ?? ""));
       }
       for (const [k, v] of Object.entries(slotValues)) {

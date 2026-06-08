@@ -212,22 +212,46 @@ function AdminDomainsPage() {
       {grouped.map((t) => {
         const primary = t.domains.find((d) => d.is_primary)?.domain ?? t.domains[0]?.domain ?? "";
         const anyDown = t.domains.some((d) => d.status === "down");
+        const ps = pauseState[t.id];
+        const paused = !!ps?.paused;
         return (
-          <Card key={t.id} className={anyDown ? "border-destructive/40" : ""}>
+          <Card key={t.id} className={paused ? "border-amber-500/50" : anyDown ? "border-destructive/40" : ""}>
             <CardContent className="pt-4 pb-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <h2 className="text-base font-semibold">{t.name}</h2>
+                  <h2 className="text-base font-semibold flex items-center gap-2 flex-wrap">
+                    {t.name}
+                    {paused && (
+                      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 dark:text-amber-400">
+                        <MailX className="h-3 w-3" /> MAILS PAUSIERT
+                      </Badge>
+                    )}
+                  </h2>
                   <p className="text-xs text-muted-foreground">
                     Aktive Versand-Domain: <code className="bg-muted px-1.5 py-0.5 rounded">portal.{primary}</code>
                   </p>
                 </div>
-                {anyDown && (
+                {anyDown && !paused && (
                   <Badge variant="destructive" className="gap-1">
                     <AlertCircle className="h-3 w-3" /> Mindestens eine Domain down
                   </Badge>
                 )}
               </div>
+
+              {paused && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-1">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    Reminder-, Recovery- und Onboarding-Mails sind für diesen Tenant gestoppt.
+                  </p>
+                  <p className="text-amber-800 dark:text-amber-300">
+                    {ps?.by === "auto:domain_down"
+                      ? "Automatisch pausiert weil alle Domains down waren."
+                      : "Manuell pausiert."}
+                    {ps?.reason && <> · Grund: {ps.reason}</>}
+                    {ps?.at && <> · Seit {new Date(ps.at).toLocaleString("de-DE")}</>}
+                  </p>
+                </div>
+              )}
 
               <div className="border rounded-lg divide-y">
                 {t.domains.map((d) => (

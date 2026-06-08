@@ -323,7 +323,7 @@ function AdminEmailTemplatesPage() {
     setLoading(true);
     const { data } = await (supabase as any)
       .from("tenants")
-      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body")
+      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body, reminder_appointment_subject, reminder_appointment_body")
       .order("name");
     const rows = (data as TenantEmail[] | null) ?? [];
     setTenants(rows);
@@ -360,6 +360,8 @@ function AdminEmailTemplatesPage() {
     setRRecoveryMaBody(t.reminder_recovery_body || REMINDER_DEFAULTS.recovery_mitarbeiter.body);
     setRRecoveryBewSubject(t.reminder_recovery_bewerber_subject || REMINDER_DEFAULTS.recovery_bewerber.subject);
     setRRecoveryBewBody(t.reminder_recovery_bewerber_body || REMINDER_DEFAULTS.recovery_bewerber.body);
+    setRAppointmentSubject(t.reminder_appointment_subject || REMINDER_DEFAULTS.appointment_30min.subject);
+    setRAppointmentBody(t.reminder_appointment_body || REMINDER_DEFAULTS.appointment_30min.body);
   };
 
   useEffect(() => {
@@ -404,6 +406,8 @@ function AdminEmailTemplatesPage() {
         reminder_recovery_body: rRecoveryMaBody,
         reminder_recovery_bewerber_subject: rRecoveryBewSubject,
         reminder_recovery_bewerber_body: rRecoveryBewBody,
+        reminder_appointment_subject: rAppointmentSubject,
+        reminder_appointment_body: rAppointmentBody,
       } as any)
       .eq("id", selectedTenantId);
     setSaving(false);

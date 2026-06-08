@@ -44,6 +44,10 @@ const REMINDER_DEFAULTS = {
     subject: "Wir sind umgezogen – schließe deine Registrierung bei {{tenant_name}} ab",
     body: `Hallo {{first_name}},\n\nschön, dass du dabei bist! Unser Portal hat eine neue Adresse – bitte schließe deine Registrierung bei {{tenant_name}} ab sofort über den folgenden Link ab:\n\n{{cta:Jetzt registrieren|{{portal_link}}}}\n\nFalls der Button nicht funktioniert, kopiere diesen Link:\n{{portal_link}}\n\nWir freuen uns auf dich!\nDein {{tenant_name}}-Team`,
   },
+  appointment_30min: {
+    subject: "Erinnerung: Dein Termin in 30 Minuten",
+    body: `Hallo {{first_name}},\n\nkurze Erinnerung: dein Termin startet in 30 Minuten ({{appointment_time}} Uhr am {{appointment_date}}).\n\nBitte sei rechtzeitig bereit.\n\n{{cta:Zum Portal|{{portal_link}}}}\n\nViele Grüße\n{{tenant_name}}`,
+  },
 
 };
 
@@ -79,6 +83,8 @@ interface TenantEmail {
   reminder_recovery_body: string | null;
   reminder_recovery_bewerber_subject: string | null;
   reminder_recovery_bewerber_body: string | null;
+  reminder_appointment_subject: string | null;
+  reminder_appointment_body: string | null;
 }
 
 const PLACEHOLDERS = [
@@ -310,6 +316,8 @@ function AdminEmailTemplatesPage() {
   const [rRecoveryMaBody, setRRecoveryMaBody] = useState("");
   const [rRecoveryBewSubject, setRRecoveryBewSubject] = useState("");
   const [rRecoveryBewBody, setRRecoveryBewBody] = useState("");
+  const [rAppointmentSubject, setRAppointmentSubject] = useState("");
+  const [rAppointmentBody, setRAppointmentBody] = useState("");
 
   const loadTenants = async () => {
     setLoading(true);

@@ -160,13 +160,18 @@ Diese E-Mail wurde an ${escapeHtml(email)} gesendet. Wenn du keinen Account ange
 </td></tr></table>
 </body></html>`;
 
-      // 5. SMTP senden
+      // 5. SMTP senden — vorher verify() (Auto-Pause bei wiederholtem Fail)
       const transporter = nodemailer.createTransport({
         host: tenant.smtp_host,
         port: tenant.smtp_port,
         secure: tenant.smtp_port === 465,
         auth: { user: tenant.smtp_username, pass: tenant.smtp_password },
       });
+
+      const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
+      if (!verifyRes.ok) {
+        throw new Error(`SMTP-Verify fehlgeschlagen: ${verifyRes.reason}${verifyRes.paused ? " — Mandant wurde automatisch pausiert." : ""}`);
+      }
 
       await transporter.sendMail({
         from: `"${senderName}" <${senderEmail}>`,

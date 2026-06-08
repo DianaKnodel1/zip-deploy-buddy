@@ -9,9 +9,10 @@ import {
   checkDomainsHealth,
   setPrimaryDomain,
   getAffectedRecipients,
+  setTenantEmailsPaused,
   type AffectedRecipient,
 } from "@/lib/tenant-domains.functions";
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Users, Star, ExternalLink, Download } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Users, Star, ExternalLink, Download, MailX, MailCheck } from "lucide-react";
 
 export const Route = createFileRoute("/admin/domains")({
   component: AdminDomainsPage,

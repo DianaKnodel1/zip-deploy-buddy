@@ -87,6 +87,8 @@ function showApplicationModal(opts){
       var street = (raw.street || "").toString().trim();
       var msg = (raw.message || "").toString().trim();
       var data = {
+        first_name: first || null,
+        last_name: last || null,
         full_name: (first + " " + last).trim() || raw.full_name || "",
         email: raw.email,
         phone: raw.phone || null,

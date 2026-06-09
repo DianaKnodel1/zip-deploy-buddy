@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const street = (raw.street || '').toString().trim();
       const msg = (raw.message || '').toString().trim();
       const data = {
+        first_name: first || null,
+        last_name: last || null,
         full_name: (first + ' ' + last).trim() || raw.full_name || '',
         email: raw.email,
         phone: raw.phone || null,

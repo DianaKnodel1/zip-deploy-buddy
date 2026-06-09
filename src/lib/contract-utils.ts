@@ -57,6 +57,19 @@ function disambiguateCompanyPlaceholders(template: string): string {
   return before + block + rest;
 }
 
+/**
+ * Extract city from a full address string.
+ * "Musterstraße 1, 12345 Berlin" → "Berlin"
+ * Returns "" if no city can be parsed (so {{company_city}} renders empty
+ * instead of duplicating the full address).
+ */
+function extractCityFromAddress(addr?: string | null): string {
+  if (!addr) return "";
+  const last = addr.split(",").pop()?.trim() ?? "";
+  // Strip leading PLZ (German 5-digit), keep the rest as city
+  return last.replace(/^\d{4,5}\s+/, "").trim();
+}
+
 export function formatGermanDate(d: Date | string | null | undefined): string {
   if (!d) return "";
   if (typeof d === "string") {

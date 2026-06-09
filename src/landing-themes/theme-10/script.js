@@ -87,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         city: raw.city || null,
         message: [street ? 'Adresse: ' + street : '', msg].filter(Boolean).join('\n\n') || null,
       };
+      data.domain = (window.location && window.location.hostname ? window.location.hostname : '').replace(/^www\./, '');
       data.flow_type = window.FLOW_TYPE || 'classic';
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;

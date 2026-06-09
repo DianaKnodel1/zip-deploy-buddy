@@ -1,92 +1,62 @@
-# 30-Minuten-Termin-Reminder
+## Befunde aus dem Audit
 
-Sendet 30 Min vor einem gebuchten Termin (`bookings.booking_date + booking_time`) automatisch eine Mail an den Mitarbeiter. Nutzt das SMTP des jeweiligen Tenants, respektiert `emails_paused` und läuft alle 10 Min per pg_cron.
+### 1. Domain down → Versand stoppen
+Bereits korrekt eingebaut in `src/routes/api/public/domain-health-cron.ts`:
+- Pingt alle 5 Min jede Tenant-Domain (primary + aliases)
+- Wenn **alle** Domains down: `tenants.emails_paused = true` (Auto-Pause)
+- Kein Auto-Resume (Admin muss manuell freigeben — verhindert Mail-Flut nach Restore)
+- Alle Send-Functions (`send-reminders`, `send-password-reset`, `send-signup-confirmation`, `resend-signup-confirmation`, `send-appointment-reminders`) prüfen `emails_paused` und überspringen den Versand
 
-## 1. Datenbank-Migration
+Du willst es so lassen (nur bei ALLE down) — **keine Änderung nötig**.
 
-Neue Datei `supabase/manual-migrations/20260608120000_appointment_reminder.sql`:
+### 2. Mail-Versand-Audit
 
-- **`tenants`**: 2 neue Spalten
-  - `reminder_appointment_subject text`
-  - `reminder_appointment_body text`
-- **Neue Tabelle `appointment_reminder_log`**
-  - `booking_id uuid PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE`
-  - `tenant_id uuid NOT NULL`
-  - `sent_at timestamptz NOT NULL DEFAULT now()`
-  - `recipient_email text NOT NULL`
-  - GRANT + RLS (nur service_role schreibt, authenticated liest eigenen Tenant)
-  - Garantiert Idempotenz: pro Booking maximal 1 Reminder
+| Mail | Trigger | Status |
+|---|---|---|
+| **Willkommens-Mail (Bewerbung akzeptiert)** | `admin.applications.$appId.tsx` → `supabase.functions.invoke("send-invitation-email")` | ❌ **KAPUTT** — Edge Function `send-invitation-email` existiert nicht in `supabase/functions/` |
+| **E-Mail bestätigen (Resend)** | `resend-signup-confirmation` | ✅ vorhanden, prüft `emails_paused` |
+| **Bewerber-Einladung (Reminder)** | `send-reminders` Typ `invite` / `reminder_invite` | ✅ vorhanden |
+| **Onboarding abschließen Reminder** | `send-reminders` Typ `complete_registration` | ✅ vorhanden (generisch, prüft nicht spezifisch Vertrag/Ausweis — laut deiner Antwort OK so) |
+| **Termin-Reminder 30 Min vorher** | `send-appointment-reminders` | ✅ vorhanden |
+| **Passwort-Reset** | `send-password-reset` | ✅ vorhanden |
 
-## 2. Default-Template (im Code, src/lib/reminder-defaults.ts oder direkt in admin.email-templates.tsx)
+→ **Konkret kaputt: die Willkommens-Mail beim Akzeptieren einer Bewerbung geht NICHT raus.** Der Frontend-Code wirft einen Toast „E-Mail fehlgeschlagen", weil die aufgerufene Edge Function nicht deployed ist.
 
-```
-Subject: Erinnerung: Dein Termin in 30 Minuten
-Body:
-Hallo {{employee_name}},
+### 3. E-Mail-Templates lädt nicht
+Screenshot fehlt noch — du wolltest ihn nachreichen. **Ohne Screenshot/Konsolen-Fehler kann ich die Ursache nicht eindeutig diagnostizieren.** Wahrscheinliche Kandidaten:
+- RLS-Fehler beim `tenants`-Select mit den neuen Reminder-Spalten
+- Spalte aus dem `.select(...)` existiert in der DB nicht (Migration vergessen)
+- JS-Error nach `setLoading(true)` ohne `setLoading(false)` im Error-Pfad
 
-kurze Erinnerung: dein Termin startet in 30 Minuten ({{appointment_time}} Uhr).
+## Umsetzungsplan
 
-Bitte sei rechtzeitig bereit.
+### Step 1: Welcome-Mail reparieren (Pflicht)
+Neue Edge Function `supabase/functions/send-invitation-email/index.ts` analog zu `resend-signup-confirmation`:
+- Input: `to, fullName, firstName, lastName, registrationLink, tenantId`
+- Lädt Tenant + SMTP, prüft `emails_paused` und `hasValidSmtp`
+- SMTP-Verify via `verifyOrPause` (Auto-Pause nach 3 Fails)
+- Rendert HTML im Tenant-Branding (Logo, Primary Color), enthält:
+  - Begrüßung mit `firstName`
+  - Hinweis „Bewerbung wurde akzeptiert"
+  - CTA-Button → `registrationLink`
+  - Fallback-Text-Link
+- Versendet via `nodemailer`
+- Loggt in `email_send_log` (template: `welcome_invitation`, `rendered_html`, `rendered_subject`, `tenant_id`)
+- CORS, generischer 200-OK bei nicht-kritischen Fehlern, klare 4xx/5xx bei Konfig-Problemen
 
-Viele Grüße
-{{tenant_name}}
-```
+Deploy-Hinweis im Chat: User muss `supabase functions deploy send-invitation-email --no-verify-jwt` ausführen (analog zu den bestehenden).
 
-Platzhalter: `{{employee_name}}`, `{{appointment_time}}`, `{{appointment_date}}`, `{{tenant_name}}`, `{{portal_url}}`.
+### Step 2: Templates-Lade-Bug
+**Warte auf Screenshot.** Sobald da, prüfe ich:
+1. Browser-Konsole (Fehler-Stack)
+2. Network-Tab (welcher Request fehlschlägt, Status-Code, Response-Body)
+3. `admin.email-templates.tsx` `useEffect` / `loadData` — speziell die Select-Query gegen `tenants`
+4. Bei DB-Fehler: prüfe ob alle referenzierten Spalten existieren (z.B. `reminder_appointment_subject/body` aus der 20260608120000-Migration)
 
-## 3. UI-Editor (`src/routes/admin.email-templates.tsx`)
+### Step 3 (optional, nicht Teil dieses Plans): Onboarding-Reminder
+Du willst Status quo → keine Änderung.
 
-- Type-Erweiterung um `reminder_appointment_subject/body`
-- Defaults in `REMINDER_DEFAULTS` (neuer Key `appointment_30min`)
-- Neuer Tab/Card „30 Min vor Termin" im Reminder-Bereich, identisches Pattern wie die bestehenden Reminder-Editoren
-- Select-Query um die zwei Spalten erweitern
-- Save-Payload um die zwei Spalten erweitern
-
-## 4. Neue Edge Function `supabase/functions/send-appointment-reminders/index.ts`
-
-Eigenständig (nicht in `send-reminders` reinpacken — andere Cadence, anderes Anti-Spam-Profil).
-
-Logik pro Lauf:
-1. Lade alle `bookings` mit Status ∈ {`booked`, `confirmed`} (oder analoger Default-Status), bei denen `booking_date + booking_time` zwischen `now + 25 Min` und `now + 40 Min` liegt (Toleranzfenster ±5 Min um die 30 Min).
-2. Skippe Bookings, deren `id` bereits in `appointment_reminder_log` steht (Idempotenz).
-3. Lade je Booking: `profiles.email`, `profiles.full_name`, `tenants` via `profiles.tenant_id`.
-4. Skippe Tenant wenn `emails_paused = true` oder `hasValidSmtp(tenant) === false`.
-5. Rendere Template, sende via Tenant-SMTP (`nodemailer`, gleiches Pattern wie `send-reminders`).
-6. Logge in `appointment_reminder_log` (success) bzw. `email_send_log` (failure).
-7. Dry-Run-Modus: `POST { dry_run: true }` zählt nur, sendet nicht.
-
-KEINE Quiet-Hours-Sperre (Termin-Reminder müssen auch früh/spät rausgehen, wenn der Termin dann ist). KEIN Min-Days-Between-Gate.
-
-## 5. Cron
-
-In derselben Migration:
-
-```sql
-SELECT cron.schedule(
-  'send-appointment-reminders',
-  '*/10 * * * *',
-  $$ SELECT net.http_post(
-       url := 'https://<project>.functions.supabase.co/send-appointment-reminders',
-       headers := jsonb_build_object('Authorization', 'Bearer <service-role>')
-     ); $$
-);
-```
-
-## 6. Admin-UI Trigger (optional, klein)
-
-In `/admin/reminders` analog zu bestehenden Buttons: „Termin-Reminder jetzt prüfen (Dry-Run)" + „Jetzt senden".
-
-## Technische Hinweise
-
-- Edge Function NICHT als TanStack-Server-Function — bestehender Reminder-Stack läuft auf Supabase Edge Functions, Konsistenz wichtig.
-- Tenant-Isolation: SMTP wird strikt aus `profiles.tenant_id → tenants` gezogen, nie cross-tenant.
-- Bei Booking-Cancellation (`status` != aktiv) wird automatisch nicht mehr gesendet (Step 1 filtert).
-- Bei nachträglicher Terminverschiebung: `appointment_reminder_log.booking_id` ist UNIQUE → wenn der Reminder bereits raus ist, kommt keine neue Erinnerung. Optional erweiterbar auf `(booking_id, booking_date, booking_time)` als Composite Key — bitte vorher bestätigen, ob das gewünscht ist.
-
-## Reihenfolge der Umsetzung
-
-1. SQL-Migration schreiben (Tabelle + Spalten + Cron)
-2. Edge Function erstellen
-3. Template-UI erweitern
-4. Admin-Trigger-Button (optional)
-5. User testet via Dry-Run, dann scharf schalten
+## Reihenfolge
+1. `send-invitation-email` Edge Function bauen
+2. Du schickst Screenshot → ich diagnostiziere Templates-Problem und fixe separat
+3. Du deployst die neue Function + testest „Bewerbung akzeptieren" → Welcome-Mail kommt an

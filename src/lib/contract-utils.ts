@@ -171,7 +171,7 @@ export function replacePlaceholders(template: string, data: ContractData): strin
   const startDate = data.startDate || today;
   const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
   const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
-  const companyCity = data.companyCity || data.companyAddress || "";
+  const companyCity = data.companyCity || extractCityFromAddress(data.companyAddress) || "";
   const resolved = disambiguateCompanyPlaceholders(template)
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)

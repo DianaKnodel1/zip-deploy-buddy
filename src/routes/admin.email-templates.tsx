@@ -321,10 +321,33 @@ function AdminEmailTemplatesPage() {
 
   const loadTenants = async () => {
     setLoading(true);
-    const { data } = await (supabase as any)
-      .from("tenants")
-      .select("id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body, reminder_appointment_subject, reminder_appointment_body")
-      .order("name");
+    const FULL_COLS = "id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body, reminder_recovery_bewerber_subject, reminder_recovery_bewerber_body, reminder_appointment_subject, reminder_appointment_body";
+    // Fallback: ohne neue Reminder-Spalten (Migrationen 20260606200000 + 20260608120000), falls noch nicht angewandt.
+    const FALLBACK_COLS = "id, name, domain, primary_color, logo_url, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, welcome_email_subject, welcome_email_body, reset_email_subject, reset_email_body, email_signature, team_leader_name, reminder_invite_subject, reminder_invite_body, reminder_confirm_subject, reminder_confirm_body, reminder_completion_subject, reminder_completion_body, reminder_no_booking_subject, reminder_no_booking_body, reminder_recovery_subject, reminder_recovery_body";
+
+    let { data, error } = await (supabase as any).from("tenants").select(FULL_COLS).order("name");
+
+    if (error) {
+      console.warn("[email-templates] Full select fehlgeschlagen, Fallback wird versucht:", error.message);
+      const retry = await (supabase as any).from("tenants").select(FALLBACK_COLS).order("name");
+      data = retry.data;
+      if (retry.error) {
+        toast({
+          title: "Tenants konnten nicht geladen werden",
+          description: retry.error.message,
+          variant: "destructive",
+        });
+        setTenants([]);
+        setLoading(false);
+        return;
+      }
+      toast({
+        title: "Einige neue Template-Felder fehlen",
+        description: "Bitte Migrationen anwenden: 20260606200000_recovery_template_split.sql und 20260608120000_appointment_reminder.sql",
+        variant: "destructive",
+      });
+    }
+
     const rows = (data as TenantEmail[] | null) ?? [];
     setTenants(rows);
     if (rows.length > 0 && !selectedTenantId) {

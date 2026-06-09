@@ -1,62 +1,60 @@
-## Befunde aus dem Audit
+## Befunde
 
-### 1. Domain down → Versand stoppen
-Bereits korrekt eingebaut in `src/routes/api/public/domain-health-cron.ts`:
-- Pingt alle 5 Min jede Tenant-Domain (primary + aliases)
-- Wenn **alle** Domains down: `tenants.emails_paused = true` (Auto-Pause)
-- Kein Auto-Resume (Admin muss manuell freigeben — verhindert Mail-Flut nach Restore)
-- Alle Send-Functions (`send-reminders`, `send-password-reset`, `send-signup-confirmation`, `resend-signup-confirmation`, `send-appointment-reminders`) prüfen `emails_paused` und überspringen den Versand
+### 1. „E-Mail Templates" leer
+Im Screenshot ist nur „Tenant wählen…" zu sehen, das Dropdown bleibt leer. Du hast aber unter `/admin/tenants` 2 Tenants (Digital DGI GmbH, Kadermarketing Agentur) → Daten existieren, also liegt es nicht an RLS für die ganze Tabelle.
 
-Du willst es so lassen (nur bei ALLE down) — **keine Änderung nötig**.
+Ursache mit hoher Wahrscheinlichkeit: Der SELECT-Query in `admin.email-templates.tsx` (Zeile 326) fordert u.a. diese Spalten an:
+- `reminder_recovery_bewerber_subject/body` (Migration `20260606200000_recovery_template_split.sql`)
+- `reminder_appointment_subject/body` (Migration `20260608120000_appointment_reminder.sql`)
 
-### 2. Mail-Versand-Audit
+Wenn eine dieser Migrationen in deiner DB **noch nicht angewendet** ist, schlägt der ganze SELECT mit „column does not exist" fehl. Der Code ignoriert den Fehler (`const { data } = ...` ohne Error-Handling) → `data = null` → `tenants = []` → Dropdown leer, kein sichtbarer Fehler.
 
-| Mail | Trigger | Status |
+### 2. Bewerber-Einladung — geht die raus?
+Zwei Stufen, beide untersucht:
+
+| Stufe | Function | Status |
 |---|---|---|
-| **Willkommens-Mail (Bewerbung akzeptiert)** | `admin.applications.$appId.tsx` → `supabase.functions.invoke("send-invitation-email")` | ❌ **KAPUTT** — Edge Function `send-invitation-email` existiert nicht in `supabase/functions/` |
-| **E-Mail bestätigen (Resend)** | `resend-signup-confirmation` | ✅ vorhanden, prüft `emails_paused` |
-| **Bewerber-Einladung (Reminder)** | `send-reminders` Typ `invite` / `reminder_invite` | ✅ vorhanden |
-| **Onboarding abschließen Reminder** | `send-reminders` Typ `complete_registration` | ✅ vorhanden (generisch, prüft nicht spezifisch Vertrag/Ausweis — laut deiner Antwort OK so) |
-| **Termin-Reminder 30 Min vorher** | `send-appointment-reminders` | ✅ vorhanden |
-| **Passwort-Reset** | `send-password-reset` | ✅ vorhanden |
+| Initial bei „Bewerbung akzeptieren" | `send-invitation-email` | ✅ Code letzte Runde geschrieben — **muss noch von dir deployed werden** (`supabase functions deploy send-invitation-email --no-verify-jwt`). Solange nicht deployed: Toast „E-Mail fehlgeschlagen". |
+| Erinnerung nach 3 Tagen (Bewerber hat sich nicht registriert) | `send-reminders` → `runInvites` | ✅ Funktioniert: filtert `applications.status='akzeptiert'`, `updated_at` älter als 3 Tage, ohne Auth-Account. Nutzt `reminder_invite_subject/body`. |
 
-→ **Konkret kaputt: die Willkommens-Mail beim Akzeptieren einer Bewerbung geht NICHT raus.** Der Frontend-Code wirft einen Toast „E-Mail fehlgeschlagen", weil die aufgerufene Edge Function nicht deployed ist.
+### 3. Wie wird Mail-Versand pausiert? Übersicht aller Stop-Mechanismen
 
-### 3. E-Mail-Templates lädt nicht
-Screenshot fehlt noch — du wolltest ihn nachreichen. **Ohne Screenshot/Konsolen-Fehler kann ich die Ursache nicht eindeutig diagnostizieren.** Wahrscheinliche Kandidaten:
-- RLS-Fehler beim `tenants`-Select mit den neuen Reminder-Spalten
-- Spalte aus dem `.select(...)` existiert in der DB nicht (Migration vergessen)
-- JS-Error nach `setLoading(true)` ohne `setLoading(false)` im Error-Pfad
+| Mechanismus | Wo gesetzt | Wirkung |
+|---|---|---|
+| **Mails pausieren-Button** (`tenants.emails_paused=true`) | Admin > Domains, manuell oder Auto | Alle Reminder/Welcome/Reset für diesen Tenant gestoppt |
+| **Auto-Pause: alle Domains down** | Domain-Health-Cron alle 5 Min | Setzt `emails_paused=true` wenn primary + alle Aliases nicht erreichbar |
+| **Auto-Pause: SMTP-Verify 3x fehlgeschlagen** | `verifyOrPause` in Send-Functions | Setzt `emails_paused=true` nach 3 konsekutiven SMTP-Fails |
+| **Tenant deaktivieren** (`tenants.is_active=false`) | Admin > Domains Button „Deaktivieren" | Domain-Cron pingt nicht mehr; **send-reminders filtert NICHT nach `is_active`** → Mails gehen trotzdem raus! ⚠️ |
+| **SMTP nicht vollständig konfiguriert** | `hasValidSmtp(tenant)` Check | Skip mit Reason `no_tenant_smtp` |
+| **Bounce-Suppression** (`profiles.email_status != 'active'` oder `applications.email_status='bounced'`) | Automatisch bei Bounce | Einzelner Empfänger übersprungen |
+| **Suppression-Liste** (`suppressed_emails`) | Bounce/Complaint-Handler | Einzelner Empfänger übersprungen |
+| **Quiet Hours + Min-Days-Between** | `canSend()` in send-reminders | Reminder-Mails gedrosselt (gilt nicht für Welcome/Reset) |
+| **Mitarbeiter-Status `deaktiviert`/`abgelehnt`** | RLS-Filter in send-reminders | Person bekommt keine Reminder |
+| **pg_cron-Job aus** | DB-seitig | Reminder-Funktionen werden nicht mehr getriggert |
+
+→ **Antwort kurz:** Nein, „Mails pausieren" ist nicht der einzige Schalter. Praktisch relevant für dich sind:
+- „Mails pausieren" pro Tenant (Haupt-Kill-Switch)
+- Auto-Pause (Domain-Down, SMTP-Fail)
+- Empfänger-bezogen: Bounce-Suppression
+- ⚠️ **Inkonsistenz: „Tenant deaktivieren" stoppt den Versand nicht** — das sollte es eigentlich
 
 ## Umsetzungsplan
 
-### Step 1: Welcome-Mail reparieren (Pflicht)
-Neue Edge Function `supabase/functions/send-invitation-email/index.ts` analog zu `resend-signup-confirmation`:
-- Input: `to, fullName, firstName, lastName, registrationLink, tenantId`
-- Lädt Tenant + SMTP, prüft `emails_paused` und `hasValidSmtp`
-- SMTP-Verify via `verifyOrPause` (Auto-Pause nach 3 Fails)
-- Rendert HTML im Tenant-Branding (Logo, Primary Color), enthält:
-  - Begrüßung mit `firstName`
-  - Hinweis „Bewerbung wurde akzeptiert"
-  - CTA-Button → `registrationLink`
-  - Fallback-Text-Link
-- Versendet via `nodemailer`
-- Loggt in `email_send_log` (template: `welcome_invitation`, `rendered_html`, `rendered_subject`, `tenant_id`)
-- CORS, generischer 200-OK bei nicht-kritischen Fehlern, klare 4xx/5xx bei Konfig-Problemen
+### Step 1: Templates-Seite resilient machen
+`src/routes/admin.email-templates.tsx` `loadTenants()`:
+- Error vom Select abfangen (`const { data, error }`).
+- Bei Fehler: Toast mit Original-Fehlermeldung + Hinweis „Migrationen anwenden" anzeigen, `loading=false`, leere Liste bleibt mit klarer Meldung statt stiller weißer Fläche.
+- Reihenfolge des Selects so umstellen, dass die kritischen Spalten am Ende stehen — und zusätzlich ein Fallback-Retry **ohne** die neuen Reminder-Spalten (`reminder_appointment_*`, `reminder_recovery_bewerber_*`), damit die Seite auch ohne angewandte Migration nutzbar bleibt; in dem Fall kleines Banner „Einige neue Felder fehlen — Migration anwenden".
 
-Deploy-Hinweis im Chat: User muss `supabase functions deploy send-invitation-email --no-verify-jwt` ausführen (analog zu den bestehenden).
+### Step 2: „Tenant deaktivieren" konsistent machen
+In `send-reminders/index.ts` und neuer `send-invitation-email`: Tenants-Load um `is_active` erweitern und `hasValidSmtp` so erweitern, dass `is_active=false` denselben Skip-Pfad wie `emails_paused` nimmt (Reason `tenant_inactive`).
 
-### Step 2: Templates-Lade-Bug
-**Warte auf Screenshot.** Sobald da, prüfe ich:
-1. Browser-Konsole (Fehler-Stack)
-2. Network-Tab (welcher Request fehlschlägt, Status-Code, Response-Body)
-3. `admin.email-templates.tsx` `useEffect` / `loadData` — speziell die Select-Query gegen `tenants`
-4. Bei DB-Fehler: prüfe ob alle referenzierten Spalten existieren (z.B. `reminder_appointment_subject/body` aus der 20260608120000-Migration)
+Gleichermaßen in `send-password-reset`, `send-signup-confirmation`, `resend-signup-confirmation`, `send-appointment-reminders` — überall denselben Guard. Damit wirkt „Tenant deaktivieren" tatsächlich als globaler Off-Schalter.
 
-### Step 3 (optional, nicht Teil dieses Plans): Onboarding-Reminder
-Du willst Status quo → keine Änderung.
+### Step 3: User-Hinweis (kein Code)
+Im Chat zwei Schritte für dich:
+1. Migrationen `20260606200000_recovery_template_split.sql` und `20260608120000_appointment_reminder.sql` per `bash scripts/migrate.sh` einspielen.
+2. Edge Functions deployen: `send-invitation-email` (neu) + `send-reminders` / `send-password-reset` / `send-signup-confirmation` / `resend-signup-confirmation` / `send-appointment-reminders` (wegen `is_active`-Guard).
 
-## Reihenfolge
-1. `send-invitation-email` Edge Function bauen
-2. Du schickst Screenshot → ich diagnostiziere Templates-Problem und fixe separat
-3. Du deployst die neue Function + testest „Bewerbung akzeptieren" → Welcome-Mail kommt an
+### Step 4 (kein Code, nur Doku im Chat)
+Kurze Pause-Mechanismen-Übersicht (siehe Tabelle oben), damit du jederzeit weißt, wie du den Versand stoppst.

@@ -57,6 +57,19 @@ function disambiguateCompanyPlaceholders(template: string): string {
   return before + block + rest;
 }
 
+/**
+ * Extract city from a full address string.
+ * "Musterstraße 1, 12345 Berlin" → "Berlin"
+ * Returns "" if no city can be parsed (so {{company_city}} renders empty
+ * instead of duplicating the full address).
+ */
+function extractCityFromAddress(addr?: string | null): string {
+  if (!addr) return "";
+  const last = addr.split(",").pop()?.trim() ?? "";
+  // Strip leading PLZ (German 5-digit), keep the rest as city
+  return last.replace(/^\d{4,5}\s+/, "").trim();
+}
+
 export function formatGermanDate(d: Date | string | null | undefined): string {
   if (!d) return "";
   if (typeof d === "string") {
@@ -144,9 +157,9 @@ export function resolveContractPlaceholders(
     companyadress: data.companyAddress ?? "",
     company_adress: data.companyAddress ?? "",
     firmenadresse: data.companyAddress ?? "",
-    company_city: data.companyCity ?? data.companyAddress ?? "",
-    companycity: data.companyCity ?? data.companyAddress ?? "",
-    firmenstadt: data.companyCity ?? data.companyAddress ?? "",
+    company_city: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
+    companycity: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
+    firmenstadt: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
     start_date: data.startDate || today,
     startdate: data.startDate || today,
     startdatum: data.startDate || today,
@@ -171,7 +184,7 @@ export function replacePlaceholders(template: string, data: ContractData): strin
   const startDate = data.startDate || today;
   const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
   const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
-  const companyCity = data.companyCity || data.companyAddress || "";
+  const companyCity = data.companyCity || extractCityFromAddress(data.companyAddress) || "";
   const resolved = disambiguateCompanyPlaceholders(template)
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)

@@ -276,7 +276,7 @@ document.addEventListener('submit', function(e){
     }
   };
 
-  const apiPlaceholder = "https://api.mb-portal.com/api/public/applications";
+  const apiPlaceholder = "https://api.mb-portal.com/functions/v1/public-apply";
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">

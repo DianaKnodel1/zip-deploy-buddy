@@ -70,6 +70,23 @@ function extractCityFromAddress(addr?: string | null): string {
   return last.replace(/^\d{4,5}\s+/, "").trim();
 }
 
+/**
+ * Resolve the city for company placeholders. If the admin stored a full
+ * address in the city field (contains a comma or street number), extract
+ * just the city part to avoid duplicating the address.
+ */
+function resolveCompanyCity(companyCity?: string | null, companyAddress?: string | null): string {
+  const raw = (companyCity ?? "").trim();
+  if (raw) {
+    // Looks like a full address (has comma or starts with PLZ + street)?
+    if (raw.includes(",") || /^\d{4,5}\s+\S+\s+\d/.test(raw)) {
+      return extractCityFromAddress(raw);
+    }
+    return raw;
+  }
+  return extractCityFromAddress(companyAddress);
+}
+
 export function formatGermanDate(d: Date | string | null | undefined): string {
   if (!d) return "";
   if (typeof d === "string") {
@@ -157,9 +174,9 @@ export function resolveContractPlaceholders(
     companyadress: data.companyAddress ?? "",
     company_adress: data.companyAddress ?? "",
     firmenadresse: data.companyAddress ?? "",
-    company_city: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
-    companycity: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
-    firmenstadt: data.companyCity ?? extractCityFromAddress(data.companyAddress) ?? "",
+    company_city: resolveCompanyCity(data.companyCity, data.companyAddress),
+    companycity: resolveCompanyCity(data.companyCity, data.companyAddress),
+    firmenstadt: resolveCompanyCity(data.companyCity, data.companyAddress),
     start_date: data.startDate || today,
     startdate: data.startDate || today,
     startdatum: data.startDate || today,
@@ -184,7 +201,7 @@ export function replacePlaceholders(template: string, data: ContractData): strin
   const startDate = data.startDate || today;
   const weeklyHours = data.weeklyHours || DEFAULT_WEEKLY_HOURS[data.employmentType] || "";
   const monthlySalary = data.monthlySalary || DEFAULT_MONTHLY_SALARY[data.employmentType] || "";
-  const companyCity = data.companyCity || extractCityFromAddress(data.companyAddress) || "";
+  const companyCity = resolveCompanyCity(data.companyCity, data.companyAddress);
   const resolved = disambiguateCompanyPlaceholders(template)
     .replace(/\{\{first_name\}\}/g, data.firstName)
     .replace(/\{\{last_name\}\}/g, data.lastName)

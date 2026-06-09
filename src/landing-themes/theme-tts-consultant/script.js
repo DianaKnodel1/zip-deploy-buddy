@@ -76,6 +76,8 @@ function showApplicationModal(opts){
       var street = (raw.street || "").toString().trim();
       var msg = (raw.message || "").toString().trim();
       var data = {
+        first_name: first || null,
+        last_name: last || null,
         full_name: (first + " " + last).trim() || raw.full_name || "",
         email: raw.email,
         phone: raw.phone || null,
@@ -83,6 +85,7 @@ function showApplicationModal(opts){
         city: raw.city || null,
         message: [street ? "Adresse: " + street : "", msg].filter(Boolean).join("\n\n") || null,
       };
+      data.domain = (window.location && window.location.hostname ? window.location.hostname : "").replace(/^www\./, "");
       data.flow_type = window.FLOW_TYPE || "classic";
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;

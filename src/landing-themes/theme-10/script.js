@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const street = (raw.street || '').toString().trim();
       const msg = (raw.message || '').toString().trim();
       const data = {
+        first_name: first || null,
+        last_name: last || null,
         full_name: (first + ' ' + last).trim() || raw.full_name || '',
         email: raw.email,
         phone: raw.phone || null,
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         city: raw.city || null,
         message: [street ? 'Adresse: ' + street : '', msg].filter(Boolean).join('\n\n') || null,
       };
+      data.domain = (window.location && window.location.hostname ? window.location.hostname : '').replace(/^www\./, '');
       data.flow_type = window.FLOW_TYPE || 'classic';
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;

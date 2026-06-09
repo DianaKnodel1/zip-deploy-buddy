@@ -395,7 +395,7 @@ document.addEventListener('submit', function(e){
                 <Field label="Landing-Domain * (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="easy-gmbh.de" /></Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
-                  <p className="text-[10px] text-muted-foreground mt-1">Zentrales Backend für alle Kunden: <code>https://api.mb-portal.com/api/public/applications</code></p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Zentrales Backend für alle Kunden: <code>https://api.mb-portal.com/functions/v1/public-apply</code></p>
                 </Field>
                 <Field label="Mitarbeiter-Portal URL (Redirect nach Bewerbung)">
                   <Input value={branding.portal_url} onChange={set("portal_url")} placeholder="https://portal.easy-gmbh.de" />

@@ -46,10 +46,13 @@ serve(async (req) => {
 
     const { data: tenant, error: tErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, emails_paused, emails_paused_reason")
+      .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, is_active, emails_paused, emails_paused_reason")
       .eq("id", tenantId)
       .maybeSingle();
     if (tErr || !tenant) return json({ error: "Tenant nicht gefunden" }, 404);
+    if (tenant.is_active === false) {
+      return json({ error: "Tenant ist deaktiviert — kein E-Mail-Versand.", inactive: true }, 503);
+    }
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
     }

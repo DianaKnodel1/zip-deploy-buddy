@@ -46,7 +46,7 @@ const ls = {
 function RegisterPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const { tenant } = useTenant();
+  const { tenant, loading: tenantLoading } = useTenant();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -110,11 +110,17 @@ function RegisterPage() {
   // Portal "kleben" bleibt → falsches Vertrags-Template, falsche tenant_id.
   useEffect(() => {
     if (tenantFromInvitation) return; // Invitation hat Vorrang
+    if (tenantLoading) return;        // WICHTIG: warten bis useTenant() fertig ist
     if (tenant?.id) {
       setTenantId(tenant.id);
       ss.setItem(STORAGE_TENANT, tenant.id);
-    } else if (tenant === null) {
-      // useTenant() ist fertig, hat aber nichts gefunden (Preview/Localhost ohne Match)
+    } else if (typeof window !== "undefined" &&
+               (window.location.hostname === "localhost" ||
+                window.location.hostname === "127.0.0.1" ||
+                window.location.hostname.includes("lovable.app") ||
+                window.location.hostname.includes("lovableproject.com"))) {
+      // Fallback NUR auf Preview/Localhost — niemals auf produktiver Domain,
+      // sonst landet man beim "ersten aktiven Tenant" statt beim richtigen.
       (supabase.rpc as any)("get_first_active_public_tenant").then(({ data }: any) => {
         const row = Array.isArray(data) ? data[0] : data;
         if (row?.id) {
@@ -123,7 +129,7 @@ function RegisterPage() {
         }
       });
     }
-  }, [tenant, tenantFromInvitation]);
+  }, [tenant, tenantLoading, tenantFromInvitation]);
 
   // Prefill E-Mail + Tenant aus Invitation-Token (Landing-Page → /register?token=…)
   useEffect(() => {

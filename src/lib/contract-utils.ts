@@ -70,6 +70,23 @@ function extractCityFromAddress(addr?: string | null): string {
   return last.replace(/^\d{4,5}\s+/, "").trim();
 }
 
+/**
+ * Resolve the city for company placeholders. If the admin stored a full
+ * address in the city field (contains a comma or street number), extract
+ * just the city part to avoid duplicating the address.
+ */
+function resolveCompanyCity(companyCity?: string | null, companyAddress?: string | null): string {
+  const raw = (companyCity ?? "").trim();
+  if (raw) {
+    // Looks like a full address (has comma or starts with PLZ + street)?
+    if (raw.includes(",") || /^\d{4,5}\s+\S+\s+\d/.test(raw)) {
+      return extractCityFromAddress(raw);
+    }
+    return raw;
+  }
+  return extractCityFromAddress(companyAddress);
+}
+
 export function formatGermanDate(d: Date | string | null | undefined): string {
   if (!d) return "";
   if (typeof d === "string") {

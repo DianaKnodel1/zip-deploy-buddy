@@ -102,10 +102,9 @@ function AdminChatPage() {
   }, [user]);
 
   const loadConversations = async () => {
-    // 1 Query statt N*2: alle Nachrichten in/aus Admin-Postfach holen und client-seitig aggregieren.
     const [profilesRes, convsRes, msgsRes, tenantsRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, tenant_id"),
-      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at"),
+      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at, admin_unread, admin_note"),
       supabase
         .from("chat_messages")
         .select("sender_id, receiver_id, message, read, created_at")
@@ -121,14 +120,20 @@ function AdminChatPage() {
     const profileMap = new Map(profiles.map((p: any) => [p.user_id, { name: p.full_name as string, tenant_id: p.tenant_id as string | null }]));
     const convMap = new Map<string, any>((convsRes.data ?? []).map((c: any) => [c.user_id, c]));
 
-    type Agg = { lastMessage: string; lastAt: string; unread: number };
+    type Agg = { lastMessage: string; lastAt: string; unread: number; lastFromEmployeeAt: string | null };
     const agg = new Map<string, Agg>();
+    // msgs are ordered DESC → first entry per partner is the newest
     for (const m of (msgsRes.data ?? []) as any[]) {
       const partnerId = m.sender_id === user!.id ? m.receiver_id : m.sender_id;
       if (!profileMap.has(partnerId)) continue;
       let entry = agg.get(partnerId);
       if (!entry) {
-        entry = { lastMessage: m.message, lastAt: m.created_at, unread: 0 };
+        entry = {
+          lastMessage: m.message,
+          lastAt: m.created_at,
+          unread: 0,
+          lastFromEmployeeAt: m.sender_id === partnerId ? m.created_at : null,
+        };
         agg.set(partnerId, entry);
       }
       if (m.sender_id === partnerId && !m.read) entry.unread += 1;
@@ -137,7 +142,6 @@ function AdminChatPage() {
     const list: Conversation[] = [];
     for (const [partnerId, a] of agg) {
       const conv = convMap.get(partnerId);
-      // Vom Admin versteckte Chats nicht in die Liste aufnehmen.
       if (conv?.admin_hidden_at) continue;
       const prof = profileMap.get(partnerId);
       list.push({
@@ -150,21 +154,24 @@ function AdminChatPage() {
         lastAt: a.lastAt,
         tenantId: prof?.tenant_id ?? null,
         tenantName: prof?.tenant_id ? tenantMap.get(prof.tenant_id) ?? null : null,
+        adminUnread: !!conv?.admin_unread,
+        adminNote: conv?.admin_note ?? null,
+        lastFromEmployeeAt: a.lastFromEmployeeAt,
       });
     }
 
     list.sort((a, b) => {
       if (a.status === "escalated" && b.status !== "escalated") return -1;
       if (a.status !== "escalated" && b.status === "escalated") return 1;
-      if (a.unread && !b.unread) return -1;
-      if (!a.unread && b.unread) return 1;
+      const aFlag = a.unread || a.adminUnread ? 1 : 0;
+      const bFlag = b.unread || b.adminUnread ? 1 : 0;
+      if (aFlag !== bFlag) return bFlag - aFlag;
       return (b.lastAt ?? "").localeCompare(a.lastAt ?? "");
     });
 
     setConversations(list);
     setLoading(false);
 
-    // Letzten Login pro Mitarbeiter nachladen (Admin-RPC)
     if (list.length > 0) {
       try {
         const map = await getLastSignIns({ data: { user_ids: list.map((c) => c.user_id) } });

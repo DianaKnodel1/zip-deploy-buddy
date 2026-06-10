@@ -340,11 +340,10 @@ function AdminChatPage() {
             if (existing) {
               return prev.map((c) =>
                 c.user_id === partnerId
-                  ? { ...c, unread: c.user_id === selectedUserId ? 0 : c.unread + 1, lastMessage: msg.message, lastAt: msg.created_at }
+                  ? { ...c, unread: c.user_id === selectedUserId ? 0 : c.unread + 1, lastMessage: msg.message, lastAt: msg.created_at, lastFromEmployeeAt: msg.created_at }
                   : c
               );
             }
-            // Neuer Chat → Profil nachladen und einfügen
             return prev;
           });
 

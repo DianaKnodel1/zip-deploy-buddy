@@ -374,10 +374,10 @@ function AdminChatPage() {
             notifyChat({ body: msg.message, senderName: partnerName });
           }
         } else {
-          // Eigene Nachricht → lastMessage in Liste updaten
+          // Eigene Nachricht → lastMessage in Liste updaten + Unanswered-Flag löschen
           setConversations((prev) => prev.map((c) =>
             c.user_id === msg.receiver_id
-              ? { ...c, lastMessage: msg.message, lastAt: msg.created_at }
+              ? { ...c, lastMessage: msg.message, lastAt: msg.created_at, lastFromEmployeeAt: null }
               : c
           ));
         }

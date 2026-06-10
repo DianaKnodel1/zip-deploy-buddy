@@ -59,9 +59,8 @@ const navGroups: NavGroup[] = [
       { title: "Chat", url: "/admin/chat", icon: MessageCircle, badgeKey: "unreadChat" },
       { title: "SMS", url: "/admin/sms", icon: Phone },
       { title: "Post", url: "/admin/post", icon: Mailbox },
-      { title: "E-Mail-Logs", url: "/admin/email-logs", icon: Mail },
-      { title: "Erinnerungen", url: "/admin/reminders", icon: Mail },
-      { title: "Recovery", url: "/admin/recovery", icon: Mail },
+      { title: "E-Mail-Center", url: "/admin/email-center", icon: Mail },
+
     ],
   },
   {

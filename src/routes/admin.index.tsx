@@ -65,21 +65,25 @@ function EmailMonitorWidget() {
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">E-Mail System</p>
-              <p className="text-[10px] text-muted-foreground">Letzte 24 Stunden</p>
+              <p className="text-[10px] text-muted-foreground">Letzte 24 h · {stats.total} eindeutige Mails</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate("/admin/email-logs")}>
-            Details <ArrowRight className="h-3 w-3" />
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate("/admin/email-center")}>
+            E-Mail-Center <ArrowRight className="h-3 w-3" />
           </Button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <div className="text-center p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
             <div className="flex items-center justify-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{stats.sent}</p>
             </div>
             <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 font-medium">Gesendet</p>
+          </div>
+          <div className={`text-center p-3 rounded-lg border ${stats.pending > 0 ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40" : "bg-muted/60 border-border"}`}>
+            <p className={`text-lg font-bold ${stats.pending > 0 ? "text-amber-700 dark:text-amber-300" : "text-foreground"}`}>{stats.pending}</p>
+            <p className={`text-[10px] font-medium ${stats.pending > 0 ? "text-amber-700/80 dark:text-amber-300/80" : "text-muted-foreground"}`}>In Warteschlange</p>
           </div>
           <div className={`text-center p-3 rounded-lg border ${stats.failed > 0 ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40" : "bg-muted/60 border-border"}`}>
             <div className="flex items-center justify-center gap-1">
@@ -93,6 +97,7 @@ function EmailMonitorWidget() {
             <p className={`text-[10px] font-medium ${stats.successRate >= 95 ? "text-emerald-700/80 dark:text-emerald-300/80" : "text-rose-700/80 dark:text-rose-300/80"}`}>Erfolg</p>
           </div>
         </div>
+
 
         {stats.actionRequired && (
           <div className="mt-3 flex items-center gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-900/50">

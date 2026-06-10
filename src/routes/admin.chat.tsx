@@ -211,8 +211,51 @@ function AdminChatPage() {
       .from("chat_messages").update({ read: true } as any)
       .eq("sender_id", userId).eq("receiver_id", user!.id).eq("read", false);
 
-    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, unread: 0 } : c));
+    // Beim Öffnen: ungelesen-Flag zurücksetzen
+    await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_unread: false, updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, unread: 0, adminUnread: false } : c));
+    setNoteDraft(conversations.find((c) => c.user_id === userId)?.adminNote ?? "");
   };
+
+  const markUnread = async (userId: string) => {
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_unread: true, updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, adminUnread: true } : c));
+    if (selectedUserId === userId) setSelectedUserId(null);
+    toast({ title: "Als ungelesen markiert" });
+  };
+
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const saveNote = async (userId: string) => {
+    setSavingNote(true);
+    const value = noteDraft.trim() || null;
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({
+        user_id: userId,
+        admin_note: value,
+        admin_note_updated_at: new Date().toISOString(),
+        admin_note_updated_by: user!.id,
+        updated_at: new Date().toISOString(),
+      } as any, { onConflict: "user_id" });
+    setSavingNote(false);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, adminNote: value } : c));
+    toast({ title: "Notiz gespeichert" });
+  };
+
 
   const takeOver = async (userId: string) => {
     await supabase

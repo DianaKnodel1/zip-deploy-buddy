@@ -34,7 +34,15 @@ interface Conversation {
   lastSeenAt?: string | null;
   tenantName?: string | null;
   tenantId?: string | null;
+  adminUnread?: boolean;
+  adminNote?: string | null;
+  lastFromEmployeeAt?: string | null;
 }
+
+const UNANSWERED_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4h
+const isUnanswered = (c: Conversation) =>
+  !!c.lastFromEmployeeAt &&
+  Date.now() - new Date(c.lastFromEmployeeAt).getTime() > UNANSWERED_THRESHOLD_MS;
 
 interface ChatMessage {
   id: string;

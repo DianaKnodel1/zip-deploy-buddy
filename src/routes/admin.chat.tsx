@@ -644,6 +644,15 @@ function AdminChatPage() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  onClick={() => markUnread(selectedUserId!)}
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  title="Als ungelesen markieren – Chat erscheint wieder mit Badge"
+                >
+                  <MailOpen className="h-3.5 w-3.5 mr-1" /> Ungelesen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => hideConversation(selectedUserId!)}
                   disabled={hiding}
                   className="text-xs text-muted-foreground hover:text-destructive"
@@ -653,6 +662,35 @@ function AdminChatPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Admin-Notiz */}
+            <div className="border-b border-border bg-amber-50/30 dark:bg-amber-950/10 px-5 py-2 shrink-0">
+              <div className="flex items-start gap-2">
+                <StickyNote className="h-3.5 w-3.5 text-amber-600 mt-2 shrink-0" />
+                <Textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder="Admin-Notiz (z. B. 'geghosted', 'wartet auf Vertrag', …) – nur für Admins sichtbar"
+                  rows={1}
+                  className="flex-1 min-h-[32px] py-1 text-xs resize-none bg-transparent border-amber-200/50 dark:border-amber-800/30"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => saveNote(selectedUserId!)}
+                  disabled={savingNote || (noteDraft.trim() === (selectedConv?.adminNote ?? ""))}
+                  className="text-xs h-8"
+                >
+                  Speichern
+                </Button>
+              </div>
+              {isUnanswered(selectedConv!) && !selectedConv?.adminNote && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1 ml-5">
+                  <AlertCircle className="h-3 w-3" /> Unbeantwortet seit über 4 Stunden – ggf. Notiz hinzufügen, falls geghosted.
+                </p>
+              )}
+            </div>
+
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">

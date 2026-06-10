@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useOnlineUsers } from "@/hooks/use-presence";
@@ -34,7 +34,15 @@ interface Conversation {
   lastSeenAt?: string | null;
   tenantName?: string | null;
   tenantId?: string | null;
+  adminUnread?: boolean;
+  adminNote?: string | null;
+  lastFromEmployeeAt?: string | null;
 }
+
+const UNANSWERED_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4h
+const isUnanswered = (c: Conversation) =>
+  !!c.lastFromEmployeeAt &&
+  Date.now() - new Date(c.lastFromEmployeeAt).getTime() > UNANSWERED_THRESHOLD_MS;
 
 interface ChatMessage {
   id: string;
@@ -94,10 +102,9 @@ function AdminChatPage() {
   }, [user]);
 
   const loadConversations = async () => {
-    // 1 Query statt N*2: alle Nachrichten in/aus Admin-Postfach holen und client-seitig aggregieren.
     const [profilesRes, convsRes, msgsRes, tenantsRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, tenant_id"),
-      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at"),
+      supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at, admin_unread, admin_note"),
       supabase
         .from("chat_messages")
         .select("sender_id, receiver_id, message, read, created_at")
@@ -113,14 +120,20 @@ function AdminChatPage() {
     const profileMap = new Map(profiles.map((p: any) => [p.user_id, { name: p.full_name as string, tenant_id: p.tenant_id as string | null }]));
     const convMap = new Map<string, any>((convsRes.data ?? []).map((c: any) => [c.user_id, c]));
 
-    type Agg = { lastMessage: string; lastAt: string; unread: number };
+    type Agg = { lastMessage: string; lastAt: string; unread: number; lastFromEmployeeAt: string | null };
     const agg = new Map<string, Agg>();
+    // msgs are ordered DESC → first entry per partner is the newest
     for (const m of (msgsRes.data ?? []) as any[]) {
       const partnerId = m.sender_id === user!.id ? m.receiver_id : m.sender_id;
       if (!profileMap.has(partnerId)) continue;
       let entry = agg.get(partnerId);
       if (!entry) {
-        entry = { lastMessage: m.message, lastAt: m.created_at, unread: 0 };
+        entry = {
+          lastMessage: m.message,
+          lastAt: m.created_at,
+          unread: 0,
+          lastFromEmployeeAt: m.sender_id === partnerId ? m.created_at : null,
+        };
         agg.set(partnerId, entry);
       }
       if (m.sender_id === partnerId && !m.read) entry.unread += 1;
@@ -129,7 +142,6 @@ function AdminChatPage() {
     const list: Conversation[] = [];
     for (const [partnerId, a] of agg) {
       const conv = convMap.get(partnerId);
-      // Vom Admin versteckte Chats nicht in die Liste aufnehmen.
       if (conv?.admin_hidden_at) continue;
       const prof = profileMap.get(partnerId);
       list.push({
@@ -142,21 +154,24 @@ function AdminChatPage() {
         lastAt: a.lastAt,
         tenantId: prof?.tenant_id ?? null,
         tenantName: prof?.tenant_id ? tenantMap.get(prof.tenant_id) ?? null : null,
+        adminUnread: !!conv?.admin_unread,
+        adminNote: conv?.admin_note ?? null,
+        lastFromEmployeeAt: a.lastFromEmployeeAt,
       });
     }
 
     list.sort((a, b) => {
       if (a.status === "escalated" && b.status !== "escalated") return -1;
       if (a.status !== "escalated" && b.status === "escalated") return 1;
-      if (a.unread && !b.unread) return -1;
-      if (!a.unread && b.unread) return 1;
+      const aFlag = a.unread || a.adminUnread ? 1 : 0;
+      const bFlag = b.unread || b.adminUnread ? 1 : 0;
+      if (aFlag !== bFlag) return bFlag - aFlag;
       return (b.lastAt ?? "").localeCompare(a.lastAt ?? "");
     });
 
     setConversations(list);
     setLoading(false);
 
-    // Letzten Login pro Mitarbeiter nachladen (Admin-RPC)
     if (list.length > 0) {
       try {
         const map = await getLastSignIns({ data: { user_ids: list.map((c) => c.user_id) } });
@@ -196,8 +211,51 @@ function AdminChatPage() {
       .from("chat_messages").update({ read: true } as any)
       .eq("sender_id", userId).eq("receiver_id", user!.id).eq("read", false);
 
-    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, unread: 0 } : c));
+    // Beim Öffnen: ungelesen-Flag zurücksetzen
+    await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_unread: false, updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, unread: 0, adminUnread: false } : c));
+    setNoteDraft(conversations.find((c) => c.user_id === userId)?.adminNote ?? "");
   };
+
+  const markUnread = async (userId: string) => {
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_unread: true, updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, adminUnread: true } : c));
+    if (selectedUserId === userId) setSelectedUserId(null);
+    toast({ title: "Als ungelesen markiert" });
+  };
+
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const saveNote = async (userId: string) => {
+    setSavingNote(true);
+    const value = noteDraft.trim() || null;
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({
+        user_id: userId,
+        admin_note: value,
+        admin_note_updated_at: new Date().toISOString(),
+        admin_note_updated_by: user!.id,
+        updated_at: new Date().toISOString(),
+      } as any, { onConflict: "user_id" });
+    setSavingNote(false);
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, adminNote: value } : c));
+    toast({ title: "Notiz gespeichert" });
+  };
+
 
   const takeOver = async (userId: string) => {
     await supabase
@@ -282,11 +340,10 @@ function AdminChatPage() {
             if (existing) {
               return prev.map((c) =>
                 c.user_id === partnerId
-                  ? { ...c, unread: c.user_id === selectedUserId ? 0 : c.unread + 1, lastMessage: msg.message, lastAt: msg.created_at }
+                  ? { ...c, unread: c.user_id === selectedUserId ? 0 : c.unread + 1, lastMessage: msg.message, lastAt: msg.created_at, lastFromEmployeeAt: msg.created_at }
                   : c
               );
             }
-            // Neuer Chat → Profil nachladen und einfügen
             return prev;
           });
 
@@ -317,10 +374,10 @@ function AdminChatPage() {
             notifyChat({ body: msg.message, senderName: partnerName });
           }
         } else {
-          // Eigene Nachricht → lastMessage in Liste updaten
+          // Eigene Nachricht → lastMessage in Liste updaten + Unanswered-Flag löschen
           setConversations((prev) => prev.map((c) =>
             c.user_id === msg.receiver_id
-              ? { ...c, lastMessage: msg.message, lastAt: msg.created_at }
+              ? { ...c, lastMessage: msg.message, lastAt: msg.created_at, lastFromEmployeeAt: null }
               : c
           ));
         }
@@ -490,6 +547,15 @@ function AdminChatPage() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground truncate">{conv.full_name}</p>
                     {statusBadge(conv.status)}
+                    {isUnanswered(conv) && !conv.adminNote && (
+                      <span
+                        title="Unbeantwortet seit > 4 h"
+                        className="h-2 w-2 rounded-full bg-red-500 shrink-0"
+                      />
+                    )}
+                    {conv.adminNote && (
+                      <StickyNote className="h-3 w-3 text-amber-500 shrink-0" aria-label="Admin-Notiz vorhanden" />
+                    )}
                   </div>
                   {conv.tenantName && (
                     <p className="text-[10px] text-primary/80 mt-0.5 flex items-center gap-1 truncate">
@@ -505,8 +571,10 @@ function AdminChatPage() {
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMessage}</p>
                   )}
                 </div>
-                {conv.unread > 0 && (
-                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px]">{conv.unread}</Badge>
+                {(conv.unread > 0 || conv.adminUnread) && (
+                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px]">
+                    {conv.unread > 0 ? conv.unread : "neu"}
+                  </Badge>
                 )}
               </button>
             );
@@ -576,6 +644,15 @@ function AdminChatPage() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  onClick={() => markUnread(selectedUserId!)}
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  title="Als ungelesen markieren – Chat erscheint wieder mit Badge"
+                >
+                  <MailOpen className="h-3.5 w-3.5 mr-1" /> Ungelesen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => hideConversation(selectedUserId!)}
                   disabled={hiding}
                   className="text-xs text-muted-foreground hover:text-destructive"
@@ -585,6 +662,35 @@ function AdminChatPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Admin-Notiz */}
+            <div className="border-b border-border bg-amber-50/30 dark:bg-amber-950/10 px-5 py-2 shrink-0">
+              <div className="flex items-start gap-2">
+                <StickyNote className="h-3.5 w-3.5 text-amber-600 mt-2 shrink-0" />
+                <Textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder="Admin-Notiz (z. B. 'geghosted', 'wartet auf Vertrag', …) – nur für Admins sichtbar"
+                  rows={1}
+                  className="flex-1 min-h-[32px] py-1 text-xs resize-none bg-transparent border-amber-200/50 dark:border-amber-800/30"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => saveNote(selectedUserId!)}
+                  disabled={savingNote || (noteDraft.trim() === (selectedConv?.adminNote ?? ""))}
+                  className="text-xs h-8"
+                >
+                  Speichern
+                </Button>
+              </div>
+              {isUnanswered(selectedConv!) && !selectedConv?.adminNote && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1 ml-5">
+                  <AlertCircle className="h-3 w-3" /> Unbeantwortet seit über 4 Stunden – ggf. Notiz hinzufügen, falls geghosted.
+                </p>
+              )}
+            </div>
+
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">

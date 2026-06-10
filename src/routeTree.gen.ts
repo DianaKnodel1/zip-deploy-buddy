@@ -34,6 +34,7 @@ import { Route as AdminLandingGeneratorRouteImport } from './routes/admin.landin
 import { Route as AdminKycRouteImport } from './routes/admin.kyc'
 import { Route as AdminEmailTemplatesRouteImport } from './routes/admin.email-templates'
 import { Route as AdminEmailLogsRouteImport } from './routes/admin.email-logs'
+import { Route as AdminEmailCenterRouteImport } from './routes/admin.email-center'
 import { Route as AdminDomainsRouteImport } from './routes/admin.domains'
 import { Route as AdminContractsRouteImport } from './routes/admin.contracts'
 import { Route as AdminChatRouteImport } from './routes/admin.chat'
@@ -187,6 +188,11 @@ const AdminEmailTemplatesRoute = AdminEmailTemplatesRouteImport.update({
 const AdminEmailLogsRoute = AdminEmailLogsRouteImport.update({
   id: '/email-logs',
   path: '/email-logs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEmailCenterRoute = AdminEmailCenterRouteImport.update({
+  id: '/email-center',
+  path: '/email-center',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminDomainsRoute = AdminDomainsRouteImport.update({
@@ -371,6 +377,7 @@ export interface FileRoutesByFullPath {
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
   '/admin/domains': typeof AdminDomainsRoute
+  '/admin/email-center': typeof AdminEmailCenterRoute
   '/admin/email-logs': typeof AdminEmailLogsRoute
   '/admin/email-templates': typeof AdminEmailTemplatesRoute
   '/admin/kyc': typeof AdminKycRoute
@@ -426,6 +433,7 @@ export interface FileRoutesByTo {
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
   '/admin/domains': typeof AdminDomainsRoute
+  '/admin/email-center': typeof AdminEmailCenterRoute
   '/admin/email-logs': typeof AdminEmailLogsRoute
   '/admin/email-templates': typeof AdminEmailTemplatesRoute
   '/admin/kyc': typeof AdminKycRoute
@@ -484,6 +492,7 @@ export interface FileRoutesById {
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
   '/admin/domains': typeof AdminDomainsRoute
+  '/admin/email-center': typeof AdminEmailCenterRoute
   '/admin/email-logs': typeof AdminEmailLogsRoute
   '/admin/email-templates': typeof AdminEmailTemplatesRoute
   '/admin/kyc': typeof AdminKycRoute
@@ -542,6 +551,7 @@ export interface FileRouteTypes {
     | '/admin/chat'
     | '/admin/contracts'
     | '/admin/domains'
+    | '/admin/email-center'
     | '/admin/email-logs'
     | '/admin/email-templates'
     | '/admin/kyc'
@@ -597,6 +607,7 @@ export interface FileRouteTypes {
     | '/admin/chat'
     | '/admin/contracts'
     | '/admin/domains'
+    | '/admin/email-center'
     | '/admin/email-logs'
     | '/admin/email-templates'
     | '/admin/kyc'
@@ -654,6 +665,7 @@ export interface FileRouteTypes {
     | '/admin/chat'
     | '/admin/contracts'
     | '/admin/domains'
+    | '/admin/email-center'
     | '/admin/email-logs'
     | '/admin/email-templates'
     | '/admin/kyc'
@@ -874,6 +886,13 @@ declare module '@tanstack/react-router' {
       path: '/email-logs'
       fullPath: '/admin/email-logs'
       preLoaderRoute: typeof AdminEmailLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/email-center': {
+      id: '/admin/email-center'
+      path: '/email-center'
+      fullPath: '/admin/email-center'
+      preLoaderRoute: typeof AdminEmailCenterRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/domains': {
@@ -1144,6 +1163,7 @@ interface AdminRouteChildren {
   AdminChatRoute: typeof AdminChatRoute
   AdminContractsRoute: typeof AdminContractsRoute
   AdminDomainsRoute: typeof AdminDomainsRoute
+  AdminEmailCenterRoute: typeof AdminEmailCenterRoute
   AdminEmailLogsRoute: typeof AdminEmailLogsRoute
   AdminEmailTemplatesRoute: typeof AdminEmailTemplatesRoute
   AdminKycRoute: typeof AdminKycRoute
@@ -1176,6 +1196,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminChatRoute: AdminChatRoute,
   AdminContractsRoute: AdminContractsRoute,
   AdminDomainsRoute: AdminDomainsRoute,
+  AdminEmailCenterRoute: AdminEmailCenterRoute,
   AdminEmailLogsRoute: AdminEmailLogsRoute,
   AdminEmailTemplatesRoute: AdminEmailTemplatesRoute,
   AdminKycRoute: AdminKycRoute,
@@ -1220,13 +1241,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

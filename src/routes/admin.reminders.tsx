@@ -35,7 +35,7 @@ const TYPE_LABELS: Record<string, string> = {
   no_recent_booking: "Keine Buchung (7+ Tage)",
 };
 
-function AdminRemindersPage() {
+export function AdminRemindersPage() {
   const { toast } = useToast();
   const healthFn = useServerFn(getReminderHealth);
   const [rows, setRows] = useState<ReminderRow[]>([]);

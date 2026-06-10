@@ -31,7 +31,7 @@ export const Route = createFileRoute("/admin/recovery")({
 
 interface Tenant { id: string; name: string; domain: string | null; primary_domain: string | null }
 
-function AdminRecoveryPage() {
+export function AdminRecoveryPage() {
   const { toast } = useToast();
   const sendFn = useServerFn(enqueueDomainRecoveryMails);
   const affectedFn = useServerFn(getAffectedRecipients);

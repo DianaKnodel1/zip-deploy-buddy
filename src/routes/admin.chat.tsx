@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useOnlineUsers } from "@/hooks/use-presence";

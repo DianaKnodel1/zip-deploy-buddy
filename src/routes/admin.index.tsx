@@ -18,25 +18,40 @@ import { supabase } from "@/integrations/supabase/client";
 import { computeEmailStats, type EmailLog } from "@/lib/email-stats";
 
 function EmailMonitorWidget() {
-  const [stats, setStats] = useState<{ sent: number; failed: number; total: number; successRate: number; actionRequired: boolean } | null>(null);
+  const [stats, setStats] = useState<{ sent: number; failed: number; pending: number; total: number; successRate: number; actionRequired: boolean } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     supabase
       .from("email_send_log")
-      .select("id, message_id, template_name, recipient_email, status, error_message, metadata, created_at")
-      .neq("status", "pending")
+      .select("id, message_id, template_name, recipient_email, status, error_message, metadata, created_at, acknowledged_at")
       .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(5000)
       .then(({ data }) => {
-        if (!data || data.length === 0) {
-          setStats({ sent: 0, failed: 0, total: 0, successRate: 100, actionRequired: false });
-          return;
+        const rows = (data ?? []) as EmailLog[];
+        // Dedup per message_id → latest row wins (sorted DESC, first seen).
+        // Rows ohne message_id zählen einzeln (id als Key).
+        const seen = new Map<string, EmailLog>();
+        for (const r of rows) {
+          const k = r.message_id || `__no_mid__${r.id}`;
+          if (!seen.has(k)) seen.set(k, r);
         }
-        const computed = computeEmailStats(data as EmailLog[]);
-        setStats({ sent: computed.sent, failed: computed.failed, total: computed.total, successRate: computed.successRate, actionRequired: computed.actionRequired });
+        const unique = Array.from(seen.values());
+        const pending = unique.filter(l => l.status === "pending").length;
+        const computed = computeEmailStats(unique);
+        setStats({
+          sent: computed.sent,
+          failed: computed.failed,
+          pending,
+          total: computed.total + pending,
+          successRate: computed.successRate,
+          actionRequired: computed.actionRequired,
+        });
       });
   }, []);
+
 
   if (!stats) return null;
 

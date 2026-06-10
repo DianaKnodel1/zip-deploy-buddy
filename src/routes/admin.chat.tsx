@@ -547,6 +547,15 @@ function AdminChatPage() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground truncate">{conv.full_name}</p>
                     {statusBadge(conv.status)}
+                    {isUnanswered(conv) && !conv.adminNote && (
+                      <span
+                        title="Unbeantwortet seit > 4 h"
+                        className="h-2 w-2 rounded-full bg-red-500 shrink-0"
+                      />
+                    )}
+                    {conv.adminNote && (
+                      <StickyNote className="h-3 w-3 text-amber-500 shrink-0" aria-label="Admin-Notiz vorhanden" />
+                    )}
                   </div>
                   {conv.tenantName && (
                     <p className="text-[10px] text-primary/80 mt-0.5 flex items-center gap-1 truncate">
@@ -562,8 +571,10 @@ function AdminChatPage() {
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMessage}</p>
                   )}
                 </div>
-                {conv.unread > 0 && (
-                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px]">{conv.unread}</Badge>
+                {(conv.unread > 0 || conv.adminUnread) && (
+                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px]">
+                    {conv.unread > 0 ? conv.unread : "neu"}
+                  </Badge>
                 )}
               </button>
             );

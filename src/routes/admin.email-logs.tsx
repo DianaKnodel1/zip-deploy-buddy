@@ -36,7 +36,7 @@ type EmailLogFull = EmailLog & {
   acknowledged_at?: string | null;
 };
 
-function AdminEmailLogsPage() {
+export function AdminEmailLogsPage() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<EmailLogFull[]>([]);
   const [loading, setLoading] = useState(true);

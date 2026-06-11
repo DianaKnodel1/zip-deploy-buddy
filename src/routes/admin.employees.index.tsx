@@ -300,13 +300,23 @@ function AdminEmployeesPage() {
           }))}
       />
 
-      <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>
-        <TabsList>
-          <TabsTrigger value="all">Alle ({profiles.length})</TabsTrigger>
-          <TabsTrigger value="active">Aktiv ({activeCount})</TabsTrigger>
-          <TabsTrigger value="inactive">Nicht aktiv ({inactiveCount})</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>
+          <TabsList>
+            <TabsTrigger value="all">Alle ({profiles.length})</TabsTrigger>
+            <TabsTrigger value="active">Aktiv ({activeCount})</TabsTrigger>
+            <TabsTrigger value="inactive">Nicht aktiv ({inactiveCount})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button
+          size="sm"
+          variant={overdueOnly ? "default" : "outline"}
+          className="h-8 text-xs gap-1.5"
+          onClick={() => { setOverdueOnly((v) => !v); setPage(1); }}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Nur überfällig &gt; 5 Tage
+        </Button>
+      </div>
 
       {selected.size > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">

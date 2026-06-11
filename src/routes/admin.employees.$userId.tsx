@@ -873,8 +873,10 @@ function PasswordResetButton({ email }: { email: string }) {
       return;
     }
     setSending(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    // Tenant-SMTP via Edge Function (gleicher Weg wie /forgot-password).
+    // Supabase-Auth-Default-SMTP ist nicht konfiguriert → würde "error sending recovery mail" liefern.
+    const { error } = await supabase.functions.invoke("send-password-reset", {
+      body: { email, host: window.location.hostname },
     });
     setSending(false);
     if (error) {

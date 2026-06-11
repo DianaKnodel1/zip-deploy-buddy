@@ -402,6 +402,18 @@ function AdminEmployeesPage() {
                     <span className="text-muted-foreground"> / </span>
                     <span className="text-foreground">{openCount} offen</span>
                   </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {(() => {
+                      const la = computeLastAction(profile);
+                      if (!la) return <span className="text-muted-foreground">–</span>;
+                      const overdue = la.days > 5;
+                      return (
+                        <span className={overdue ? "text-destructive font-medium" : "text-muted-foreground"}>
+                          {la.label} · {la.days === 0 ? "heute" : `seit ${la.days} Tag${la.days === 1 ? "" : "en"}`}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-5 py-3.5">
                     <Badge variant="secondary" className={`text-[10px] ${STATUS_CONFIG[profile.status]?.color ?? "bg-muted text-muted-foreground"}`}>
                       {STATUS_CONFIG[profile.status]?.label ?? profile.status}

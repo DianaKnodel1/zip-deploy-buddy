@@ -48,8 +48,14 @@ function showApplicationModal(opts){
     return card;
   }
   if(isFast){
-    p.textContent = 'Wir haben Ihre Unterlagen erhalten. Für eine besonders schnelle Rückmeldung kontaktieren Sie uns gerne direkt per WhatsApp.';
-    if(wa){ box.appendChild(__waCard()); }
+    p.textContent = 'Vielen Dank für Ihre Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal für die Registrierung weitergeleitet.';
+    if(opts.redirectUrl){
+      var redirInfo = document.createElement('p');
+      redirInfo.style.cssText='margin:0 0 16px;font-size:13px;color:#64748b;';
+      redirInfo.textContent='Weiterleitung in 3 Sekunden …';
+      box.appendChild(redirInfo);
+      setTimeout(function(){ window.location.href = opts.redirectUrl; }, 3000);
+    }
   } else {
     if(wa){
       p.textContent = 'Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';

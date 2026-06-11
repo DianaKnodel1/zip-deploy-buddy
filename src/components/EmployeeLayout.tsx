@@ -107,18 +107,20 @@ function EmployeeSidebar({
   kycPending,
   kycRejected,
   contractPending,
+  smsVisible,
 }: {
   employeeStatus: EmployeeStatus | null;
   kycPending: boolean;
   kycRejected: boolean;
   contractPending: boolean;
+  smsVisible: boolean;
 }) {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
   const { tenant } = useTenant();
   const isActive = hasFullAccess(employeeStatus);
-  const items = buildNavItems({ kycPending, kycRejected, contractPending });
+  const items = buildNavItems({ kycPending, kycRejected, contractPending, smsVisible });
 
   const brandName = "Mitarbeiter-Portal";
   const brandInitial = "M";

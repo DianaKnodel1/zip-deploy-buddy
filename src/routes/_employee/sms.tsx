@@ -100,15 +100,19 @@ function SmsPage() {
 
       setAssignedChannels(merged);
 
-      const { data: msgs, error: msgError } = await supabase
-        .from("sms_messages")
-        .select("id, from_number, to_number, body, direction, status, created_at")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (msgError) throw msgError;
-      setMessages((msgs as SmsMessage[]) ?? []);
+      const channelIds = merged.map((m) => m.channel.id);
+      let msgs: SmsMessage[] = [];
+      if (channelIds.length > 0) {
+        const { data, error: msgError } = await supabase
+          .from("sms_messages")
+          .select("id, from_number, to_number, body, direction, status, created_at")
+          .in("channel_id", channelIds)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (msgError) throw msgError;
+        msgs = (data as SmsMessage[]) ?? [];
+      }
+      setMessages(msgs);
     } catch (err) {
       console.error("[SmsPage] Laden fehlgeschlagen", err);
       setAssignedChannels([]);

@@ -71,6 +71,7 @@ function AdminChatPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterTab] = useState<"all" | "escalated" | "open">("all");
+  const [viewTab, setViewTab] = useState<"active" | "hidden">("active");
   const [tenantFilter, setTenantFilter] = useState<string>("all"); // tenant_id oder "all"
   const [hiding, setHiding] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);

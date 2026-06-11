@@ -289,6 +289,31 @@ function AdminChatPage() {
   };
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  const startEdit = (msg: ChatMessage) => {
+    setEditingId(msg.id);
+    setEditDraft(msg.message);
+  };
+  const cancelEdit = () => { setEditingId(null); setEditDraft(""); };
+  const saveEdit = async (msg: ChatMessage) => {
+    const next = editDraft.trim();
+    if (!next || next === msg.message) { cancelEdit(); return; }
+    const { error } = await supabase
+      .from("chat_messages")
+      .update({ message: next, edited_at: new Date().toISOString() } as any)
+      .eq("id", msg.id);
+    if (error) { toast({ title: "Fehler", description: error.message, variant: "destructive" }); return; }
+    setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, message: next } : m));
+    cancelEdit();
+  };
+  const deleteMessage = async (msg: ChatMessage) => {
+    if (!confirm("Nachricht wirklich löschen?")) return;
+    const { error } = await supabase.from("chat_messages").delete().eq("id", msg.id);
+    if (error) { toast({ title: "Fehler", description: error.message, variant: "destructive" }); return; }
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+  };
 
   const sendMessage = async () => {
     if ((!newMessage.trim() && !pendingAttachment) || !selectedUserId || !user) return;

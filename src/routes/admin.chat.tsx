@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, CheckCircle2, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle, Lock, Pencil, Trash2, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useOnlineUsers } from "@/hooks/use-presence";
@@ -266,14 +266,8 @@ function AdminChatPage() {
     toast({ title: "Chat übernommen" });
   };
 
-  const resolveChat = async (userId: string) => {
-    await supabase
-      .from("chat_conversations")
-      .update({ status: "resolved", updated_at: new Date().toISOString() } as any)
-      .eq("user_id", userId);
-    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, status: "resolved" } : c));
-    toast({ title: "Chat als gelöst markiert" });
-  };
+  // resolveChat entfernt – kein "Gelöst"-Status mehr, da KI-Eskalationen aktuell nicht aktiv sind.
+
 
   const hideConversation = async (userId: string) => {
     setHiding(true);
@@ -295,6 +289,31 @@ function AdminChatPage() {
   };
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  const startEdit = (msg: ChatMessage) => {
+    setEditingId(msg.id);
+    setEditDraft(msg.message);
+  };
+  const cancelEdit = () => { setEditingId(null); setEditDraft(""); };
+  const saveEdit = async (msg: ChatMessage) => {
+    const next = editDraft.trim();
+    if (!next || next === msg.message) { cancelEdit(); return; }
+    const { error } = await supabase
+      .from("chat_messages")
+      .update({ message: next, edited_at: new Date().toISOString() } as any)
+      .eq("id", msg.id);
+    if (error) { toast({ title: "Fehler", description: error.message, variant: "destructive" }); return; }
+    setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, message: next } : m));
+    cancelEdit();
+  };
+  const deleteMessage = async (msg: ChatMessage) => {
+    if (!confirm("Nachricht wirklich löschen?")) return;
+    const { error } = await supabase.from("chat_messages").delete().eq("id", msg.id);
+    if (error) { toast({ title: "Fehler", description: error.message, variant: "destructive" }); return; }
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+  };
 
   const sendMessage = async () => {
     if ((!newMessage.trim() && !pendingAttachment) || !selectedUserId || !user) return;
@@ -461,15 +480,7 @@ function AdminChatPage() {
 
   
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "ai": return <Badge variant="secondary" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />KI</Badge>;
-      case "escalated": return <Badge variant="destructive" className="text-[10px]">Eskaliert</Badge>;
-      case "human": return <Badge className="text-[10px] bg-accent text-accent-foreground"><UserCheck className="h-3 w-3 mr-1" />Admin</Badge>;
-      case "resolved": return <Badge variant="secondary" className="text-[10px] bg-accent/10 text-accent"><CheckCircle2 className="h-3 w-3 mr-1" />Gelöst</Badge>;
-      default: return null;
-    }
-  };
+  const statusBadge = (_status: string) => null;
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="animate-pulse text-muted-foreground">Laden…</div></div>;
@@ -631,16 +642,6 @@ function AdminChatPage() {
                 )}
               </button>
               <div className="flex gap-2">
-                {selectedConv?.status === "escalated" && (
-                  <Button size="sm" onClick={() => takeOver(selectedUserId!)} className="text-xs">
-                    <UserCheck className="h-3.5 w-3.5 mr-1" /> Übernehmen
-                  </Button>
-                )}
-                {selectedConv && selectedConv.status !== "resolved" && (
-                  <Button size="sm" variant="outline" onClick={() => resolveChat(selectedUserId!)} className="text-xs">
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Gelöst
-                  </Button>
-                )}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -663,30 +664,36 @@ function AdminChatPage() {
               </div>
             </div>
 
-            {/* Admin-Notiz */}
-            <div className="border-b border-border bg-amber-50/30 dark:bg-amber-950/10 px-5 py-2 shrink-0">
+            {/* Admin-Notiz – nur intern */}
+            <div className="border-b border-border bg-amber-50/60 dark:bg-amber-950/20 px-5 py-3 shrink-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <StickyNote className="h-4 w-4 text-amber-600" />
+                <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">Interne Notiz</span>
+                <span className="inline-flex items-center gap-1 text-[10px] text-amber-700/80 dark:text-amber-300/70 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
+                  <Lock className="h-2.5 w-2.5" /> Nur für Teamleiter / Admin sichtbar
+                </span>
+              </div>
               <div className="flex items-start gap-2">
-                <StickyNote className="h-3.5 w-3.5 text-amber-600 mt-2 shrink-0" />
                 <Textarea
                   value={noteDraft}
                   onChange={(e) => setNoteDraft(e.target.value)}
-                  placeholder="Admin-Notiz (z. B. 'geghosted', 'wartet auf Vertrag', …) – nur für Admins sichtbar"
-                  rows={1}
-                  className="flex-1 min-h-[32px] py-1 text-xs resize-none bg-transparent border-amber-200/50 dark:border-amber-800/30"
+                  placeholder="z. B. 'wartet auf Vertrag', 'hat angerufen', 'erreicht uns nicht' …"
+                  rows={3}
+                  className="flex-1 min-h-[72px] py-2 text-sm resize-y bg-background/60 border-amber-200 dark:border-amber-800/40"
                 />
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => saveNote(selectedUserId!)}
                   disabled={savingNote || (noteDraft.trim() === (selectedConv?.adminNote ?? ""))}
-                  className="text-xs h-8"
+                  className="text-xs h-9"
                 >
                   Speichern
                 </Button>
               </div>
               {isUnanswered(selectedConv!) && !selectedConv?.adminNote && (
-                <p className="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1 ml-5">
-                  <AlertCircle className="h-3 w-3" /> Unbeantwortet seit über 4 Stunden – ggf. Notiz hinzufügen, falls geghosted.
+                <p className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-2">
+                  <AlertCircle className="h-3 w-3" /> Seit über 4 Stunden unbeantwortet – kurz Notiz hinterlassen, falls du dranbleibst.
                 </p>
               )}
             </div>
@@ -709,26 +716,68 @@ function AdminChatPage() {
                       </div>
                     )}
                     <div className={cn(
-                      "max-w-[70%] rounded-2xl px-4 py-2.5 text-sm",
+                      "max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative group",
                       isMine
                         ? "bg-primary text-primary-foreground rounded-br-md"
                         : isAi
                           ? "bg-accent/10 text-foreground rounded-bl-md border border-accent/20"
                           : "bg-muted text-foreground rounded-bl-md"
                     )}>
-                      {msg.message && <p className="whitespace-pre-wrap">{msg.message}</p>}
-                      {msg.attachment_url && msg.attachment_type && (
-                        <AttachmentPreview
-                          url={msg.attachment_url}
-                          name={msg.attachment_name ?? "Anhang"}
-                          type={msg.attachment_type}
-                        />
+                      {editingId === msg.id ? (
+                        <div className="space-y-2 min-w-[240px]">
+                          <Textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={2}
+                            className="text-sm bg-background text-foreground"
+                          />
+                          <div className="flex gap-1 justify-end">
+                            <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-7 text-xs">
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" onClick={() => saveEdit(msg)} className="h-7 text-xs">
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {msg.message && <p className="whitespace-pre-wrap">{msg.message}</p>}
+                          {msg.attachment_url && msg.attachment_type && (
+                            <AttachmentPreview
+                              url={msg.attachment_url}
+                              name={msg.attachment_name ?? "Anhang"}
+                              type={msg.attachment_type}
+                            />
+                          )}
+                          <p className={cn("text-[10px] mt-1", isMine ? "text-primary-foreground/60" : "text-muted-foreground")}>
+                            {new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                            {(msg as any).edited_at && " · bearbeitet"}
+                            {isAi && " · 🤖 KI"}
+                            {isMine && " · 👤 Admin"}
+                          </p>
+                          {isMine && !isAi && (
+                            <div className="absolute -top-3 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(msg)}
+                                title="Bearbeiten"
+                                className="h-6 w-6 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-primary shadow-sm"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteMessage(msg)}
+                                title="Löschen"
+                                className="h-6 w-6 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-destructive shadow-sm"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
-                      <p className={cn("text-[10px] mt-1", isMine ? "text-primary-foreground/60" : "text-muted-foreground")}>
-                        {new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                        {isAi && " · 🤖 KI"}
-                        {isMine && " · 👤 Admin"}
-                      </p>
                     </div>
                   </div>
                 );

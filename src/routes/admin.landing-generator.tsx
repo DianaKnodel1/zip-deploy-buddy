@@ -276,7 +276,7 @@ document.addEventListener('submit', function(e){
     }
   };
 
-  const apiPlaceholder = "https://api.mb-portal.com/functions/v1/public-apply";
+  const apiPlaceholder = "https://portal.mb-portal.com/api/public/applications";
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
@@ -345,6 +345,33 @@ document.addEventListener('submit', function(e){
               <CardDescription>Änderungen erscheinen sofort in der Live-Vorschau rechts.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Setup-Vorlage / Pflichtfeld-Hilfe */}
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-2">
+                <div className="font-semibold text-primary">📋 Setup-Vorlage — was MUSS rein, damit es funktioniert</div>
+                <ul className="space-y-1.5 text-muted-foreground">
+                  <li><strong className="text-foreground">Firmenname *</strong> — z.B. <code>UWK Consulting GmbH</code></li>
+                  <li><strong className="text-foreground">Kontakt-E-Mail *</strong> — Reply-Adresse, z.B. <code>info@uwk-consulting.de</code></li>
+                  <li><strong className="text-foreground">Landing-Domain *</strong> — Domain der Landing (ohne <code>https://</code>), z.B. <code>uwk-consulting.de</code></li>
+                  <li>
+                    <strong className="text-foreground">API-Endpoint *</strong> — IMMER dein zentrales Portal-Backend:<br/>
+                    <code>https://portal.mb-portal.com/api/public/applications</code> (für alle Kunden gleich)
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Tenant-ID *</strong> — UUID aus Admin → Tenants → Spalte „ID" kopieren.<br/>
+                    Ohne Tenant-ID kommen Bewerbungen NICHT beim richtigen Kunden an (Reminder/Accept-Mail nutzen falschen SMTP).
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Mitarbeiter-Portal URL *</strong> (bei Fast-Track Pflicht) — Portal des Tenants,<br/>
+                    z.B. <code>https://portal.uwk-consulting.de</code>. Nach Bewerbung Auto-Redirect zur Registrierung.
+                  </li>
+                  <li><strong className="text-foreground">WhatsApp-Nummer</strong> (optional) — international ohne <code>+</code>, z.B. <code>491701234567</code>. Aktiviert Floating-Button + Kontakt-Card.</li>
+                  <li><strong className="text-foreground">Logo / Favicon / Farben</strong> — empfohlen, aber nicht Pflicht.</li>
+                </ul>
+                <div className="pt-1 text-[11px] text-muted-foreground">
+                  Felder unten ohne <span className="text-primary">*</span> sind optional (Impressum-Daten, SEO-Bild, Telefon-2, etc.).
+                </div>
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label="Firmenname *"><Input value={branding.firmenname} onChange={set("firmenname")} placeholder="Mustermann GmbH" /></Field>
                 <Field label="Logo (PNG/JPG/SVG, max 8 MB)">
@@ -395,20 +422,23 @@ document.addEventListener('submit', function(e){
                 <Field label="Landing-Domain * (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="easy-gmbh.de" /></Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
-                  <p className="text-[10px] text-muted-foreground mt-1">Zentrales Backend für alle Kunden: <code>https://api.mb-portal.com/functions/v1/public-apply</code></p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Immer das zentrale Portal-Backend: <code>https://portal.mb-portal.com/api/public/applications</code></p>
                 </Field>
-                <Field label="Mitarbeiter-Portal URL (Redirect nach Bewerbung)">
-                  <Input value={branding.portal_url} onChange={set("portal_url")} placeholder="https://portal.easy-gmbh.de" />
+                <Field label="Mitarbeiter-Portal URL * (Redirect nach Fast-Track-Bewerbung)">
+                  <Input value={branding.portal_url} onChange={set("portal_url")} placeholder="https://portal.uwk-consulting.de" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Tenant-eigenes Portal. Bei Fast-Track wird der Bewerber hierhin zu <code>/register</code> weitergeleitet.</p>
                 </Field>
-                <Field label="Supabase URL (Backend, falls direkter Insert)">
-                  <Input value={branding.supabase_url} onChange={set("supabase_url")} placeholder="https://db.deine-domain.de" />
+                <Field label="Supabase URL (optional — nur bei Direkt-Insert)">
+                  <Input value={branding.supabase_url} onChange={set("supabase_url")} placeholder="leer lassen" />
                 </Field>
-                <Field label="Supabase Anon Key">
-                  <Input value={branding.supabase_anon_key} onChange={set("supabase_anon_key")} placeholder="eyJhbGciOi..." />
+                <Field label="Supabase Anon Key (optional)">
+                  <Input value={branding.supabase_anon_key} onChange={set("supabase_anon_key")} placeholder="leer lassen" />
                 </Field>
-                <Field label="Tenant-ID (für Multi-Tenant-Filter)">
-                  <Input value={branding.tenant_id} onChange={set("tenant_id")} placeholder="uuid" />
+                <Field label="Tenant-ID * (UUID aus Admin → Tenants)">
+                  <Input value={branding.tenant_id} onChange={set("tenant_id")} placeholder="z.B. 6b9c1f2a-4d3e-…" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Pflicht! Ohne Tenant-ID landet die Bewerbung beim falschen Mandanten.</p>
                 </Field>
+
               </div>
               <Field label="Impressum-Text">
                 <Textarea rows={4} value={branding.impressum} onChange={set("impressum")} />
@@ -443,9 +473,9 @@ document.addEventListener('submit', function(e){
                         : "border-border hover:border-primary/40",
                     )}
                   >
-                    <div className="font-semibold mb-1">⚡ Fast-Track (WhatsApp)</div>
+                    <div className="font-semibold mb-1">⚡ Fast-Track</div>
                     <p className="text-muted-foreground text-[11px]">
-                      Nach dem Absenden öffnet sich ein Pop-up mit <strong>WhatsApp-Direkt-Kontakt</strong> (Nummer aus „WhatsApp-Nummer"). Bewerbung wird sofort <code>akzeptiert</code>.
+                      Bewerbung wird sofort <code>akzeptiert</code>. Pop-up: „Vielen Dank, Sie werden zum Mitarbeiter-Portal weitergeleitet" + Auto-Redirect nach 3 Sek. zu <code>portal_url/register</code>. <strong>Portal-URL ist Pflicht.</strong>
                     </p>
                   </button>
                 </div>

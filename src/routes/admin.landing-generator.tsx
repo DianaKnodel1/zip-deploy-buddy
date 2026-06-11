@@ -345,6 +345,33 @@ document.addEventListener('submit', function(e){
               <CardDescription>Änderungen erscheinen sofort in der Live-Vorschau rechts.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Setup-Vorlage / Pflichtfeld-Hilfe */}
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-2">
+                <div className="font-semibold text-primary">📋 Setup-Vorlage — was MUSS rein, damit es funktioniert</div>
+                <ul className="space-y-1.5 text-muted-foreground">
+                  <li><strong className="text-foreground">Firmenname *</strong> — z.B. <code>UWK Consulting GmbH</code></li>
+                  <li><strong className="text-foreground">Kontakt-E-Mail *</strong> — Reply-Adresse, z.B. <code>info@uwk-consulting.de</code></li>
+                  <li><strong className="text-foreground">Landing-Domain *</strong> — Domain der Landing (ohne <code>https://</code>), z.B. <code>uwk-consulting.de</code></li>
+                  <li>
+                    <strong className="text-foreground">API-Endpoint *</strong> — IMMER dein zentrales Portal-Backend:<br/>
+                    <code>https://portal.mb-portal.com/api/public/applications</code> (für alle Kunden gleich)
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Tenant-ID *</strong> — UUID aus Admin → Tenants → Spalte „ID" kopieren.<br/>
+                    Ohne Tenant-ID kommen Bewerbungen NICHT beim richtigen Kunden an (Reminder/Accept-Mail nutzen falschen SMTP).
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Mitarbeiter-Portal URL *</strong> (bei Fast-Track Pflicht) — Portal des Tenants,<br/>
+                    z.B. <code>https://portal.uwk-consulting.de</code>. Nach Bewerbung Auto-Redirect zur Registrierung.
+                  </li>
+                  <li><strong className="text-foreground">WhatsApp-Nummer</strong> (optional) — international ohne <code>+</code>, z.B. <code>491701234567</code>. Aktiviert Floating-Button + Kontakt-Card.</li>
+                  <li><strong className="text-foreground">Logo / Favicon / Farben</strong> — empfohlen, aber nicht Pflicht.</li>
+                </ul>
+                <div className="pt-1 text-[11px] text-muted-foreground">
+                  Felder unten ohne <span className="text-primary">*</span> sind optional (Impressum-Daten, SEO-Bild, Telefon-2, etc.).
+                </div>
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label="Firmenname *"><Input value={branding.firmenname} onChange={set("firmenname")} placeholder="Mustermann GmbH" /></Field>
                 <Field label="Logo (PNG/JPG/SVG, max 8 MB)">

@@ -639,30 +639,36 @@ function AdminChatPage() {
               </div>
             </div>
 
-            {/* Admin-Notiz */}
-            <div className="border-b border-border bg-amber-50/30 dark:bg-amber-950/10 px-5 py-2 shrink-0">
+            {/* Admin-Notiz – nur intern */}
+            <div className="border-b border-border bg-amber-50/60 dark:bg-amber-950/20 px-5 py-3 shrink-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <StickyNote className="h-4 w-4 text-amber-600" />
+                <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">Interne Notiz</span>
+                <span className="inline-flex items-center gap-1 text-[10px] text-amber-700/80 dark:text-amber-300/70 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
+                  <Lock className="h-2.5 w-2.5" /> Nur für Teamleiter / Admin sichtbar
+                </span>
+              </div>
               <div className="flex items-start gap-2">
-                <StickyNote className="h-3.5 w-3.5 text-amber-600 mt-2 shrink-0" />
                 <Textarea
                   value={noteDraft}
                   onChange={(e) => setNoteDraft(e.target.value)}
-                  placeholder="Admin-Notiz (z. B. 'geghosted', 'wartet auf Vertrag', …) – nur für Admins sichtbar"
-                  rows={1}
-                  className="flex-1 min-h-[32px] py-1 text-xs resize-none bg-transparent border-amber-200/50 dark:border-amber-800/30"
+                  placeholder="z. B. 'wartet auf Vertrag', 'hat angerufen', 'erreicht uns nicht' …"
+                  rows={3}
+                  className="flex-1 min-h-[72px] py-2 text-sm resize-y bg-background/60 border-amber-200 dark:border-amber-800/40"
                 />
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => saveNote(selectedUserId!)}
                   disabled={savingNote || (noteDraft.trim() === (selectedConv?.adminNote ?? ""))}
-                  className="text-xs h-8"
+                  className="text-xs h-9"
                 >
                   Speichern
                 </Button>
               </div>
               {isUnanswered(selectedConv!) && !selectedConv?.adminNote && (
-                <p className="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1 ml-5">
-                  <AlertCircle className="h-3 w-3" /> Unbeantwortet seit über 4 Stunden – ggf. Notiz hinzufügen, falls geghosted.
+                <p className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-2">
+                  <AlertCircle className="h-3 w-3" /> Seit über 4 Stunden unbeantwortet – kurz Notiz hinterlassen, falls du dranbleibst.
                 </p>
               )}
             </div>

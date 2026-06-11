@@ -153,7 +153,9 @@ serve(async (req) => {
     const portalHost = `portal.${tenant.primary_domain ?? tenant.domain}`;
     const redirectTo = `https://${portalHost}/reset-password`;
 
-    // Recovery-Link generieren — wenn User nicht existiert, schweigend abbrechen (keine Enumeration).
+    // Recovery-Link generieren — wir nehmen den hashed_token und bauen den Link
+    // selbst auf die Tenant-Domain, damit der Supabase-Auth-Host (api.…) NICHT
+    // in der Mail erscheint. Die /reset-password-Seite ruft dann verifyOtp().
     let actionLink: string | null = null;
     try {
       const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } } as any);
@@ -161,7 +163,10 @@ serve(async (req) => {
         // user_not_found etc. → ok-Antwort, kein Send
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      actionLink = (data as any)?.properties?.action_link ?? null;
+      const hashed = (data as any)?.properties?.hashed_token ?? null;
+      if (hashed) {
+        actionLink = `${redirectTo}?token_hash=${encodeURIComponent(hashed)}&type=recovery`;
+      }
     } catch {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }

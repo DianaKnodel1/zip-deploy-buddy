@@ -24,12 +24,26 @@ function ResetPasswordPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check for recovery token in URL hash
+    // 1) Neuer Flow: ?token_hash=...&type=recovery → per verifyOtp einlösen
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+    if (tokenHash && type === "recovery") {
+      (async () => {
+        const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+        if (!error) {
+          setHasRecovery(true);
+          // URL säubern
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      })();
+    }
+    // 2) Alter Flow: #access_token=...&type=recovery
     const hash = window.location.hash;
     if (hash.includes("type=recovery")) {
       setHasRecovery(true);
     }
-    // Also listen for PASSWORD_RECOVERY event
+    // Auch PASSWORD_RECOVERY-Event abfangen
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setHasRecovery(true);

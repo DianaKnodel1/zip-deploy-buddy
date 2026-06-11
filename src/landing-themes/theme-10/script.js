@@ -162,3 +162,25 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-animate]').forEach(el => io.observe(el));
   const y = document.getElementById('year'); if (y) y.textContent = new Date().getFullYear();
 });
+
+// === Floating WhatsApp-Button (sichtbar, sobald window.WHATSAPP_NUMBER gesetzt) ===
+document.addEventListener('DOMContentLoaded', function(){
+  var wa = String(window.WHATSAPP_NUMBER || '').replace(/[^0-9]/g, '');
+  if (!wa) return;
+  if (document.getElementById('wa-float-btn')) return;
+  var a = document.createElement('a');
+  a.id = 'wa-float-btn';
+  a.href = 'https://wa.me/' + wa;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.setAttribute('aria-label', 'Kontaktieren Sie uns auf WhatsApp');
+  a.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:9998;display:flex;align-items:center;gap:8px;background:#22c55e;color:#fff;text-decoration:none;font-weight:600;padding:12px 18px;border-radius:999px;font-size:15px;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;box-shadow:0 8px 24px rgba(34,197,94,.35);transition:transform .15s ease;';
+  a.onmouseenter = function(){ a.style.transform = 'translateY(-2px)'; };
+  a.onmouseleave = function(){ a.style.transform = 'translateY(0)'; };
+  a.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"/></svg><span>Kontaktieren Sie uns auf WhatsApp</span>';
+  document.body.appendChild(a);
+  // Auf schmalen Screens nur Icon
+  var mq = window.matchMedia('(max-width: 540px)');
+  function apply(){ var span = a.querySelector('span'); if(span) span.style.display = mq.matches ? 'none' : 'inline'; }
+  apply(); mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply);
+});

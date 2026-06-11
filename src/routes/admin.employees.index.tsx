@@ -84,6 +84,7 @@ function AdminEmployeesPage() {
   const [bulkConfirm, setBulkConfirm] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [activityTab, setActivityTab] = useState<"all" | "active" | "inactive">("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -187,10 +188,36 @@ function AdminEmployeesPage() {
     && !!p.contract_signed_at
     && kycByUser.get(p.user_id)?.status === "verifiziert";
 
+  // „Letzte Aktion" = ältestes offenes Item + Tage seitdem.
+  // Quellen: erster offener Onboarding-Schritt (since = profile.created_at),
+  // älteste offene Aufgabe (since = assignment.created_at).
+  const computeLastAction = (p: any): { label: string; days: number } | null => {
+    const candidates: { label: string; since: string }[] = [];
+    const steps = computeSteps(p);
+    const firstOpen = steps.find((s) => !s.done);
+    if (firstOpen) candidates.push({ label: `${firstOpen.label} fehlt`, since: p.created_at });
+    const openAssignments = assignments.filter(
+      (a) => a.user_id === p.user_id && !["abgeschlossen", "genehmigt", "entwurf"].includes(a.status)
+    );
+    const oldest = openAssignments.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
+    if (oldest) candidates.push({ label: "Aufgabe offen", since: oldest.created_at });
+    if (candidates.length === 0) return null;
+    // Wähle das älteste = größte Anzahl Tage
+    const withDays = candidates.map((c) => ({
+      label: c.label,
+      days: Math.max(0, Math.floor((Date.now() - new Date(c.since).getTime()) / 86_400_000)),
+    }));
+    return withDays.sort((a, b) => b.days - a.days)[0];
+  };
+
   const filtered = profiles.filter((p) => {
     if (!(p.full_name ?? "").toLowerCase().includes(search.toLowerCase())) return false;
     if (activityTab === "active" && !isFullyActive(p)) return false;
     if (activityTab === "inactive" && (isFullyActive(p) || adminUserIds.has(p.user_id))) return false;
+    if (overdueOnly) {
+      const la = computeLastAction(p);
+      if (!la || la.days <= 5) return false;
+    }
     if (filterStatus && filterStatus !== "all") {
       // Stuck-Filter
       if (filterStatus.startsWith("stuck:")) {
@@ -273,13 +300,23 @@ function AdminEmployeesPage() {
           }))}
       />
 
-      <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>
-        <TabsList>
-          <TabsTrigger value="all">Alle ({profiles.length})</TabsTrigger>
-          <TabsTrigger value="active">Aktiv ({activeCount})</TabsTrigger>
-          <TabsTrigger value="inactive">Nicht aktiv ({inactiveCount})</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Tabs value={activityTab} onValueChange={(v) => { setActivityTab(v as any); setPage(1); setSelected(new Set()); }}>
+          <TabsList>
+            <TabsTrigger value="all">Alle ({profiles.length})</TabsTrigger>
+            <TabsTrigger value="active">Aktiv ({activeCount})</TabsTrigger>
+            <TabsTrigger value="inactive">Nicht aktiv ({inactiveCount})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button
+          size="sm"
+          variant={overdueOnly ? "default" : "outline"}
+          className="h-8 text-xs gap-1.5"
+          onClick={() => { setOverdueOnly((v) => !v); setPage(1); }}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Nur überfällig &gt; 5 Tage
+        </Button>
+      </div>
 
       {selected.size > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
@@ -316,6 +353,7 @@ function AdminEmployeesPage() {
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tenant</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Onboarding</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aufgaben</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Letzte Aktion</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aktion</th>
             </tr>
@@ -363,6 +401,18 @@ function AdminEmployeesPage() {
                     <span className="text-accent font-medium">{doneCount}</span>
                     <span className="text-muted-foreground"> / </span>
                     <span className="text-foreground">{openCount} offen</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {(() => {
+                      const la = computeLastAction(profile);
+                      if (!la) return <span className="text-muted-foreground">–</span>;
+                      const overdue = la.days > 5;
+                      return (
+                        <span className={overdue ? "text-destructive font-medium" : "text-muted-foreground"}>
+                          {la.label} · {la.days === 0 ? "heute" : `seit ${la.days} Tag${la.days === 1 ? "" : "en"}`}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant="secondary" className={`text-[10px] ${STATUS_CONFIG[profile.status]?.color ?? "bg-muted text-muted-foreground"}`}>

@@ -477,7 +477,11 @@ function AdminChatPage() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [conversations]);
 
+  const activeCount = conversations.filter((c) => !c.hiddenAt).length;
+  const hiddenCount = conversations.filter((c) => !!c.hiddenAt).length;
+
   const filteredConversations = conversations.filter((c) => {
+    if (viewTab === "active" ? !!c.hiddenAt : !c.hiddenAt) return false;
     if (!c.full_name.toLowerCase().includes(search.toLowerCase())) return false;
     if (tenantFilter !== "all" && c.tenantId !== tenantFilter) return false;
     if (filterTab === "escalated") return c.status === "escalated";

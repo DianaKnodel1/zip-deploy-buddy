@@ -284,7 +284,7 @@ function AdminChatPage() {
     }
     setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, hiddenAt } : c));
     if (selectedUserId === userId) setSelectedUserId(null);
-    toast({ title: "Chat ausgeblendet", description: "Im Tab „Ausgeblendet" weiter sichtbar." });
+    toast({ title: "Chat ausgeblendet", description: "Im Tab 'Ausgeblendet' weiter sichtbar." });
   };
 
   const unhideConversation = async (userId: string) => {

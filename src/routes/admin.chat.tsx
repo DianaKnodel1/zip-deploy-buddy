@@ -37,6 +37,7 @@ interface Conversation {
   adminUnread?: boolean;
   adminNote?: string | null;
   lastFromEmployeeAt?: string | null;
+  hiddenAt?: string | null;
 }
 
 const UNANSWERED_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4h

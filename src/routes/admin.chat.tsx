@@ -273,21 +273,30 @@ function AdminChatPage() {
 
   const hideConversation = async (userId: string) => {
     setHiding(true);
-    // Upsert: falls noch keine chat_conversations-Zeile existiert (direct-Chats), eine anlegen.
+    const hiddenAt = new Date().toISOString();
     const { error } = await supabase
       .from("chat_conversations")
-      .upsert({ user_id: userId, admin_hidden_at: new Date().toISOString(), updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+      .upsert({ user_id: userId, admin_hidden_at: hiddenAt, updated_at: hiddenAt } as any, { onConflict: "user_id" });
     setHiding(false);
     if (error) {
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
       return;
     }
-    setConversations((prev) => prev.filter((c) => c.user_id !== userId));
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, hiddenAt } : c));
     if (selectedUserId === userId) setSelectedUserId(null);
-    toast({
-      title: "Chat ausgeblendet",
-      description: "Sobald der Mitarbeiter wieder schreibt, erscheint der Chat oben.",
-    });
+    toast({ title: "Chat ausgeblendet", description: "Im Tab „Ausgeblendet" weiter sichtbar." });
+  };
+
+  const unhideConversation = async (userId: string) => {
+    const { error } = await supabase
+      .from("chat_conversations")
+      .upsert({ user_id: userId, admin_hidden_at: null, updated_at: new Date().toISOString() } as any, { onConflict: "user_id" });
+    if (error) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      return;
+    }
+    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, hiddenAt: null } : c));
+    toast({ title: "Chat wieder eingeblendet" });
   };
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);

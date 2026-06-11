@@ -31,12 +31,16 @@ function escapeHtml(s: string): string {
 }
 
 function renderTemplate(tpl: string, vars: Record<string, string>): string {
-  // CTA-Pattern: {{cta:Label|URL}} → Button
-  let out = tpl.replace(/\{\{cta:([^|]+)\|([^}]+)\}\}/g, (_m, label, href) => {
-    const resolvedHref = href.replace(/\{\{(\w+)\}\}/g, (_m: string, k: string) => vars[k] ?? "");
-    return `<table cellpadding="0" cellspacing="0"><tr><td style="background:${vars._brand};border-radius:8px"><a href="${resolvedHref}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">${escapeHtml(label)}</a></td></tr></table>`;
+  // WICHTIG: Erst einfache Variablen ersetzen ({{reset_url}} etc.).
+  // {{cta:...}} bleibt unberührt, weil ":" kein \w-Zeichen ist.
+  // Vorher brach die CTA-Regex am ersten "}" von verschachteltem {{reset_url}} ab
+  // → kaputter Button + übriges "}}" in der Mail.
+  let out = tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
+  // CTA-Pattern: {{cta:Label|URL}} → Button (URL ist jetzt bereits aufgelöst)
+  out = out.replace(/\{\{cta:([^|]+)\|([^}]+)\}\}/g, (_m, label, href) => {
+    const safeHref = String(href).trim().replace(/"/g, "&quot;");
+    return `<table cellpadding="0" cellspacing="0"><tr><td style="background:${vars._brand};border-radius:8px"><a href="${safeHref}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">${escapeHtml(label)}</a></td></tr></table>`;
   });
-  out = out.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
   return out;
 }
 

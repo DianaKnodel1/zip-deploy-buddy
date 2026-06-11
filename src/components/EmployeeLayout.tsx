@@ -58,6 +58,7 @@ function buildNavItems(opts: {
   kycPending: boolean;
   kycRejected: boolean;
   contractPending: boolean;
+  smsVisible: boolean;
 }): NavItem[] {
   const items: NavItem[] = [
     { title: "Übersicht", url: "/dashboard", icon: LayoutDashboard, requiresActive: false },
@@ -87,7 +88,13 @@ function buildNavItems(opts: {
   items.push(
     { title: "Termin buchen", url: "/appointments", icon: CalendarDays, requiresActive: true },
     { title: "Aufträge", url: "/tasks", icon: ClipboardList, requiresActive: true },
-    { title: "SMS", url: "/sms", icon: MessageSquare, requiresActive: true },
+  );
+
+  if (opts.smsVisible) {
+    items.push({ title: "SMS", url: "/sms", icon: MessageSquare, requiresActive: true });
+  }
+
+  items.push(
     { title: "Upload Center", url: "/documents", icon: UploadCloud, requiresActive: false },
     { title: "Einstellungen", url: "/settings", icon: Settings, requiresActive: false },
   );

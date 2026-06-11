@@ -144,7 +144,6 @@ function AdminChatPage() {
     const list: Conversation[] = [];
     for (const [partnerId, a] of agg) {
       const conv = convMap.get(partnerId);
-      if (conv?.admin_hidden_at) continue;
       const prof = profileMap.get(partnerId);
       list.push({
         user_id: partnerId,
@@ -159,6 +158,7 @@ function AdminChatPage() {
         adminUnread: !!conv?.admin_unread,
         adminNote: conv?.admin_note ?? null,
         lastFromEmployeeAt: a.lastFromEmployeeAt,
+        hiddenAt: conv?.admin_hidden_at ?? null,
       });
     }
 

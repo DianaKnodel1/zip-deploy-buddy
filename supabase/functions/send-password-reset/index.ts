@@ -101,11 +101,19 @@ async function logEmail(admin: any, tenant: any, email: string, subject: string,
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
+  let admin: any;
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) {
+      console.error("send-password-reset: SUPABASE_URL/SERVICE_ROLE_KEY missing in function env");
+      return new Response(JSON.stringify({ ok: true, warn: "env_missing" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    admin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  } catch (e: any) {
+    console.error("send-password-reset: createClient failed", e);
+    return new Response(JSON.stringify({ ok: true, warn: "init_failed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
     const body = await req.json().catch(() => ({}));

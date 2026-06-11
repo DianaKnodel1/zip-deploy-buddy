@@ -455,15 +455,7 @@ function AdminChatPage() {
 
   
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "ai": return <Badge variant="secondary" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />KI</Badge>;
-      case "escalated": return <Badge variant="destructive" className="text-[10px]">Eskaliert</Badge>;
-      case "human": return <Badge className="text-[10px] bg-accent text-accent-foreground"><UserCheck className="h-3 w-3 mr-1" />Admin</Badge>;
-      case "resolved": return <Badge variant="secondary" className="text-[10px] bg-accent/10 text-accent"><CheckCircle2 className="h-3 w-3 mr-1" />Gelöst</Badge>;
-      default: return null;
-    }
-  };
+  const statusBadge = (_status: string) => null;
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="animate-pulse text-muted-foreground">Laden…</div></div>;

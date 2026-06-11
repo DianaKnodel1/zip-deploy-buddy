@@ -241,6 +241,7 @@ export default function EmployeeLayout() {
   const [kycPending, setKycPending] = useState(false);
   const [kycRejected, setKycRejected] = useState(false);
   const [contractPending, setContractPending] = useState(false);
+  const [smsVisible, setSmsVisible] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");

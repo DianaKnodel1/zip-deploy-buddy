@@ -188,10 +188,36 @@ function AdminEmployeesPage() {
     && !!p.contract_signed_at
     && kycByUser.get(p.user_id)?.status === "verifiziert";
 
+  // „Letzte Aktion" = ältestes offenes Item + Tage seitdem.
+  // Quellen: erster offener Onboarding-Schritt (since = profile.created_at),
+  // älteste offene Aufgabe (since = assignment.created_at).
+  const computeLastAction = (p: any): { label: string; days: number } | null => {
+    const candidates: { label: string; since: string }[] = [];
+    const steps = computeSteps(p);
+    const firstOpen = steps.find((s) => !s.done);
+    if (firstOpen) candidates.push({ label: `${firstOpen.label} fehlt`, since: p.created_at });
+    const openAssignments = assignments.filter(
+      (a) => a.user_id === p.user_id && !["abgeschlossen", "genehmigt", "entwurf"].includes(a.status)
+    );
+    const oldest = openAssignments.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
+    if (oldest) candidates.push({ label: "Aufgabe offen", since: oldest.created_at });
+    if (candidates.length === 0) return null;
+    // Wähle das älteste = größte Anzahl Tage
+    const withDays = candidates.map((c) => ({
+      label: c.label,
+      days: Math.max(0, Math.floor((Date.now() - new Date(c.since).getTime()) / 86_400_000)),
+    }));
+    return withDays.sort((a, b) => b.days - a.days)[0];
+  };
+
   const filtered = profiles.filter((p) => {
     if (!(p.full_name ?? "").toLowerCase().includes(search.toLowerCase())) return false;
     if (activityTab === "active" && !isFullyActive(p)) return false;
     if (activityTab === "inactive" && (isFullyActive(p) || adminUserIds.has(p.user_id))) return false;
+    if (overdueOnly) {
+      const la = computeLastAction(p);
+      if (!la || la.days <= 5) return false;
+    }
     if (filterStatus && filterStatus !== "all") {
       // Stuck-Filter
       if (filterStatus.startsWith("stuck:")) {

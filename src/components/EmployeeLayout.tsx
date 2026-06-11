@@ -348,6 +348,7 @@ export default function EmployeeLayout() {
           kycPending={kycPending}
           kycRejected={kycRejected}
           contractPending={contractPending}
+          smsVisible={smsVisible}
         />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center justify-between border-b border-border bg-card px-5 shrink-0">

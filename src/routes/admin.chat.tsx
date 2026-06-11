@@ -716,26 +716,68 @@ function AdminChatPage() {
                       </div>
                     )}
                     <div className={cn(
-                      "max-w-[70%] rounded-2xl px-4 py-2.5 text-sm",
+                      "max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative group",
                       isMine
                         ? "bg-primary text-primary-foreground rounded-br-md"
                         : isAi
                           ? "bg-accent/10 text-foreground rounded-bl-md border border-accent/20"
                           : "bg-muted text-foreground rounded-bl-md"
                     )}>
-                      {msg.message && <p className="whitespace-pre-wrap">{msg.message}</p>}
-                      {msg.attachment_url && msg.attachment_type && (
-                        <AttachmentPreview
-                          url={msg.attachment_url}
-                          name={msg.attachment_name ?? "Anhang"}
-                          type={msg.attachment_type}
-                        />
+                      {editingId === msg.id ? (
+                        <div className="space-y-2 min-w-[240px]">
+                          <Textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={2}
+                            className="text-sm bg-background text-foreground"
+                          />
+                          <div className="flex gap-1 justify-end">
+                            <Button size="sm" variant="ghost" onClick={cancelEdit} className="h-7 text-xs">
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" onClick={() => saveEdit(msg)} className="h-7 text-xs">
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {msg.message && <p className="whitespace-pre-wrap">{msg.message}</p>}
+                          {msg.attachment_url && msg.attachment_type && (
+                            <AttachmentPreview
+                              url={msg.attachment_url}
+                              name={msg.attachment_name ?? "Anhang"}
+                              type={msg.attachment_type}
+                            />
+                          )}
+                          <p className={cn("text-[10px] mt-1", isMine ? "text-primary-foreground/60" : "text-muted-foreground")}>
+                            {new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                            {(msg as any).edited_at && " · bearbeitet"}
+                            {isAi && " · 🤖 KI"}
+                            {isMine && " · 👤 Admin"}
+                          </p>
+                          {isMine && !isAi && (
+                            <div className="absolute -top-3 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(msg)}
+                                title="Bearbeiten"
+                                className="h-6 w-6 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-primary shadow-sm"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteMessage(msg)}
+                                title="Löschen"
+                                className="h-6 w-6 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-destructive shadow-sm"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
-                      <p className={cn("text-[10px] mt-1", isMine ? "text-primary-foreground/60" : "text-muted-foreground")}>
-                        {new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                        {isAi && " · 🤖 KI"}
-                        {isMine && " · 👤 Admin"}
-                      </p>
                     </div>
                   </div>
                 );

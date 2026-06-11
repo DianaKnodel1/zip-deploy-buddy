@@ -84,6 +84,7 @@ function AdminEmployeesPage() {
   const [bulkConfirm, setBulkConfirm] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [activityTab, setActivityTab] = useState<"all" | "active" | "inactive">("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

@@ -87,6 +87,7 @@ function buildNavItems(opts: {
   items.push(
     { title: "Termin buchen", url: "/appointments", icon: CalendarDays, requiresActive: true },
     { title: "Aufträge", url: "/tasks", icon: ClipboardList, requiresActive: true },
+    { title: "SMS", url: "/sms", icon: MessageSquare, requiresActive: true },
     { title: "Upload Center", url: "/documents", icon: UploadCloud, requiresActive: false },
     { title: "Einstellungen", url: "/settings", icon: Settings, requiresActive: false },
   );

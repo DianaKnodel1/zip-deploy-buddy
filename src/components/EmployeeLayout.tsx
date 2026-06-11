@@ -58,6 +58,7 @@ function buildNavItems(opts: {
   kycPending: boolean;
   kycRejected: boolean;
   contractPending: boolean;
+  smsVisible: boolean;
 }): NavItem[] {
   const items: NavItem[] = [
     { title: "Übersicht", url: "/dashboard", icon: LayoutDashboard, requiresActive: false },
@@ -87,7 +88,13 @@ function buildNavItems(opts: {
   items.push(
     { title: "Termin buchen", url: "/appointments", icon: CalendarDays, requiresActive: true },
     { title: "Aufträge", url: "/tasks", icon: ClipboardList, requiresActive: true },
-    { title: "SMS", url: "/sms", icon: MessageSquare, requiresActive: true },
+  );
+
+  if (opts.smsVisible) {
+    items.push({ title: "SMS", url: "/sms", icon: MessageSquare, requiresActive: true });
+  }
+
+  items.push(
     { title: "Upload Center", url: "/documents", icon: UploadCloud, requiresActive: false },
     { title: "Einstellungen", url: "/settings", icon: Settings, requiresActive: false },
   );
@@ -100,18 +107,20 @@ function EmployeeSidebar({
   kycPending,
   kycRejected,
   contractPending,
+  smsVisible,
 }: {
   employeeStatus: EmployeeStatus | null;
   kycPending: boolean;
   kycRejected: boolean;
   contractPending: boolean;
+  smsVisible: boolean;
 }) {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
   const { tenant } = useTenant();
   const isActive = hasFullAccess(employeeStatus);
-  const items = buildNavItems({ kycPending, kycRejected, contractPending });
+  const items = buildNavItems({ kycPending, kycRejected, contractPending, smsVisible });
 
   const brandName = "Mitarbeiter-Portal";
   const brandInitial = "M";
@@ -232,6 +241,7 @@ export default function EmployeeLayout() {
   const [kycPending, setKycPending] = useState(false);
   const [kycRejected, setKycRejected] = useState(false);
   const [contractPending, setContractPending] = useState(false);
+  const [smsVisible, setSmsVisible] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
@@ -275,6 +285,36 @@ export default function EmployeeLayout() {
     });
   }, [user]);
 
+  // SMS tab visibility: at least one active sms_assignment whose channel is
+  // referenced by a non-completed task_assignment for the same user.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data: assigns } = await supabase
+        .from("sms_assignments")
+        .select("sms_channel_id, is_active")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+      const channelIds = (assigns ?? []).map((a: any) => a.sms_channel_id);
+      if (channelIds.length === 0) {
+        if (!cancelled) setSmsVisible(false);
+        return;
+      }
+      const { data: tasks } = await supabase
+        .from("task_assignments")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("sms_channel_id", channelIds)
+        .neq("status", "abgeschlossen")
+        .limit(1);
+      if (!cancelled) setSmsVisible((tasks?.length ?? 0) > 0);
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
+
   useEffect(() => {
     if (statusLoading || !employeeStatus) return;
     if (employeeStatus === "deaktiviert") navigate("/login");
@@ -308,6 +348,7 @@ export default function EmployeeLayout() {
           kycPending={kycPending}
           kycRejected={kycRejected}
           contractPending={contractPending}
+          smsVisible={smsVisible}
         />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center justify-between border-b border-border bg-card px-5 shrink-0">

@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
           status.className = 'status success';
           status.textContent = 'Bewerbung erfolgreich gesendet.';
           var isFast = (window.FLOW_TYPE || 'classic') === 'fast';
-          showApplicationModal({ fast: isFast, whatsapp: window.WHATSAPP_NUMBER || '' });
+          showApplicationModal({ fast: isFast, whatsapp: window.WHATSAPP_NUMBER || '', redirectUrl: (res && res.redirect_url) || '' });
         })
         .catch(() => {
           status.className = 'status error';

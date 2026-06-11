@@ -30,27 +30,33 @@ function showApplicationModal(opts){
   var p = document.createElement('p');
   p.style.cssText='margin:0 0 18px;color:#475569;font-size:15px;line-height:1.55;';
   box.appendChild(close); box.appendChild(check); box.appendChild(h); box.appendChild(p);
+  function __waCard(){
+    var card = document.createElement('div');
+    card.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;';
+    var label = document.createElement('div');
+    label.textContent='SCHNELLER KONTAKT';
+    label.style.cssText='font-size:11px;font-weight:700;letter-spacing:.08em;color:#2563eb;margin-bottom:8px;';
+    var info = document.createElement('p');
+    info.style.cssText='margin:0 0 12px;font-size:14px;color:#475569;line-height:1.5;';
+    info.innerHTML='Melden Sie sich bei WhatsApp unter <strong>'+__waFormatNumber(wa)+'</strong>, um auf dem neusten Stand zu bleiben.';
+    var btn = document.createElement('a');
+    btn.href='https://wa.me/'+wa+'?text='+encodeURIComponent('Hallo, ich habe gerade meine Bewerbung abgeschickt.');
+    btn.target='_blank'; btn.rel='noopener';
+    btn.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;background:#22c55e;color:#fff;text-decoration:none;font-weight:600;padding:12px 16px;border-radius:8px;font-size:15px;';
+    btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"/></svg> WhatsApp-Chat starten';
+    card.appendChild(label); card.appendChild(info); card.appendChild(btn);
+    return card;
+  }
   if(isFast){
     p.textContent = 'Wir haben Ihre Unterlagen erhalten. Für eine besonders schnelle Rückmeldung kontaktieren Sie uns gerne direkt per WhatsApp.';
-    if(wa){
-      var card = document.createElement('div');
-      card.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;';
-      var label = document.createElement('div');
-      label.textContent='SCHNELLER KONTAKT';
-      label.style.cssText='font-size:11px;font-weight:700;letter-spacing:.08em;color:#2563eb;margin-bottom:8px;';
-      var info = document.createElement('p');
-      info.style.cssText='margin:0 0 12px;font-size:14px;color:#475569;line-height:1.5;';
-      info.innerHTML='Für eine besonders schnelle Rückmeldung erreichen Sie uns direkt per WhatsApp unter <strong>'+__waFormatNumber(wa)+'</strong>.';
-      var btn = document.createElement('a');
-      btn.href='https://wa.me/'+wa+'?text='+encodeURIComponent('Hallo, ich habe gerade meine Bewerbung abgeschickt.');
-      btn.target='_blank'; btn.rel='noopener';
-      btn.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;background:#22c55e;color:#fff;text-decoration:none;font-weight:600;padding:12px 16px;border-radius:8px;font-size:15px;';
-      btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"/></svg> WhatsApp-Chat starten';
-      card.appendChild(label); card.appendChild(info); card.appendChild(btn);
-      box.appendChild(card);
-    }
+    if(wa){ box.appendChild(__waCard()); }
   } else {
-    p.textContent = 'Wir haben Ihre Unterlagen erhalten und melden uns i.d.R. innerhalb von 10 Tagen per E-Mail bei Ihnen.';
+    if(wa){
+      p.textContent = 'Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';
+      box.appendChild(__waCard());
+    } else {
+      p.textContent = 'Wir haben Ihre Unterlagen erhalten und melden uns i.d.R. innerhalb von 10 Tagen per E-Mail bei Ihnen.';
+    }
   }
   var closeBtn = document.createElement('button');
   closeBtn.type='button'; closeBtn.textContent='Schließen';

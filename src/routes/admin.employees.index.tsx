@@ -353,6 +353,7 @@ function AdminEmployeesPage() {
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tenant</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Onboarding</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aufgaben</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Letzte Aktion</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Aktion</th>
             </tr>

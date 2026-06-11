@@ -1086,6 +1086,14 @@ function AdminTenantsPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">{t.name}</p>
                     <p className="text-xs text-muted-foreground">{t.domain}</p>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(t.id); toast({ title: "Tenant-ID kopiert", description: t.id }); }}
+                      className="mt-1 text-[10px] font-mono text-muted-foreground/80 hover:text-foreground underline decoration-dotted"
+                      title="Klicken zum Kopieren"
+                    >
+                      UUID: {t.id}
+                    </button>
                   </div>
                   <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
                     {t.is_active ? "Aktiv" : "Inaktiv"}

@@ -617,16 +617,6 @@ function AdminChatPage() {
                 )}
               </button>
               <div className="flex gap-2">
-                {selectedConv?.status === "escalated" && (
-                  <Button size="sm" onClick={() => takeOver(selectedUserId!)} className="text-xs">
-                    <UserCheck className="h-3.5 w-3.5 mr-1" /> Übernehmen
-                  </Button>
-                )}
-                {selectedConv && selectedConv.status !== "resolved" && (
-                  <Button size="sm" variant="outline" onClick={() => resolveChat(selectedUserId!)} className="text-xs">
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Gelöst
-                  </Button>
-                )}
                 <Button
                   size="sm"
                   variant="ghost"

@@ -285,6 +285,36 @@ export default function EmployeeLayout() {
     });
   }, [user]);
 
+  // SMS tab visibility: at least one active sms_assignment whose channel is
+  // referenced by a non-completed task_assignment for the same user.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data: assigns } = await supabase
+        .from("sms_assignments")
+        .select("sms_channel_id, is_active")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+      const channelIds = (assigns ?? []).map((a: any) => a.sms_channel_id);
+      if (channelIds.length === 0) {
+        if (!cancelled) setSmsVisible(false);
+        return;
+      }
+      const { data: tasks } = await supabase
+        .from("task_assignments")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("sms_channel_id", channelIds)
+        .neq("status", "abgeschlossen")
+        .limit(1);
+      if (!cancelled) setSmsVisible((tasks?.length ?? 0) > 0);
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
+
   useEffect(() => {
     if (statusLoading || !employeeStatus) return;
     if (employeeStatus === "deaktiviert") navigate("/login");

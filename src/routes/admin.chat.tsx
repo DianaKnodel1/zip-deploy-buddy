@@ -511,6 +511,27 @@ function AdminChatPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Suchen…" className="pl-9 h-9 text-sm" />
           </div>
+          {/* Aktiv / Ausgeblendet */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => setViewTab("active")}
+              className={cn(
+                "flex-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                viewTab === "active" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+              )}
+            >
+              Aktiv ({activeCount})
+            </button>
+            <button
+              onClick={() => setViewTab("hidden")}
+              className={cn(
+                "flex-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center justify-center gap-1",
+                viewTab === "hidden" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+              )}
+            >
+              <EyeOff className="h-3 w-3" /> Ausgeblendet ({hiddenCount})
+            </button>
+          </div>
           {/* Tenant-Tabs */}
           {tenantOptions.length > 1 && (
             <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">

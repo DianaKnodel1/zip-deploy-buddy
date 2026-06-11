@@ -687,16 +687,28 @@ function AdminChatPage() {
                 >
                   <MailOpen className="h-3.5 w-3.5 mr-1" /> Ungelesen
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => hideConversation(selectedUserId!)}
-                  disabled={hiding}
-                  className="text-xs text-muted-foreground hover:text-destructive"
-                  title="Chat ausblenden – kommt wieder, wenn der Mitarbeiter schreibt"
-                >
-                  <EyeOff className="h-3.5 w-3.5 mr-1" /> Ausblenden
-                </Button>
+                {selectedConv?.hiddenAt ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => unhideConversation(selectedUserId!)}
+                    className="text-xs text-muted-foreground hover:text-primary"
+                    title="Chat wieder einblenden"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5 mr-1" /> Einblenden
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => hideConversation(selectedUserId!)}
+                    disabled={hiding}
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                    title="Chat ausblenden – im Tab 'Ausgeblendet' weiter sichtbar"
+                  >
+                    <EyeOff className="h-3.5 w-3.5 mr-1" /> Ausblenden
+                  </Button>
+                )}
               </div>
             </div>
 

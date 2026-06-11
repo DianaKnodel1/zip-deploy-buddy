@@ -266,14 +266,8 @@ function AdminChatPage() {
     toast({ title: "Chat übernommen" });
   };
 
-  const resolveChat = async (userId: string) => {
-    await supabase
-      .from("chat_conversations")
-      .update({ status: "resolved", updated_at: new Date().toISOString() } as any)
-      .eq("user_id", userId);
-    setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, status: "resolved" } : c));
-    toast({ title: "Chat als gelöst markiert" });
-  };
+  // resolveChat entfernt – kein "Gelöst"-Status mehr, da KI-Eskalationen aktuell nicht aktiv sind.
+
 
   const hideConversation = async (userId: string) => {
     setHiding(true);

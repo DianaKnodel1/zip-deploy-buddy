@@ -473,9 +473,9 @@ document.addEventListener('submit', function(e){
                         : "border-border hover:border-primary/40",
                     )}
                   >
-                    <div className="font-semibold mb-1">⚡ Fast-Track (WhatsApp)</div>
+                    <div className="font-semibold mb-1">⚡ Fast-Track</div>
                     <p className="text-muted-foreground text-[11px]">
-                      Nach dem Absenden öffnet sich ein Pop-up mit <strong>WhatsApp-Direkt-Kontakt</strong> (Nummer aus „WhatsApp-Nummer"). Bewerbung wird sofort <code>akzeptiert</code>.
+                      Bewerbung wird sofort <code>akzeptiert</code>. Pop-up: „Vielen Dank, Sie werden zum Mitarbeiter-Portal weitergeleitet" + Auto-Redirect nach 3 Sek. zu <code>portal_url/register</code>. <strong>Portal-URL ist Pflicht.</strong>
                     </p>
                   </button>
                 </div>

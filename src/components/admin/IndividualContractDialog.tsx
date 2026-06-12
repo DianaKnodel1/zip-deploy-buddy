@@ -188,9 +188,10 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
     setSaving(true);
     try {
       await saveHtml({ data: { ...targetPayload(target), html_body: html } as any });
-      if (parseSalaryCents() !== null || parseHours() !== null) {
-        await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours() } as any });
+      if (parseSalaryCents() !== null || parseHours() !== null || startDate.trim()) {
+        await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours(), start_date: startDate.trim() ? startDate : null } as any });
       }
+
       toast({
         title: "Individueller Vertrag gespeichert",
         description: target.kind === "employee"

@@ -72,6 +72,8 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
   const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null);
   const [salaryEuro, setSalaryEuro] = useState<string>("");
   const [hours, setHours] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+
 
   const combined = useMemo<Target[]>(() => {
     const emps: Target[] = employees.map((e) => ({ kind: "employee", user_id: e.user_id, full_name: e.full_name || e.user_id }));
@@ -103,8 +105,10 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       setPdfSignedUrl(null);
       setSalaryEuro("");
       setHours("");
+      setStartDate("");
       setMode("editor");
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUserId]);
 
@@ -127,6 +131,8 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       }
       setSalaryEuro(ov?.monthly_salary_cents != null ? (ov.monthly_salary_cents / 100).toString().replace(".", ",") : "");
       setHours(ov?.weekly_hours != null ? String(ov.weekly_hours).replace(".", ",") : "");
+      setStartDate(ov?.start_date ?? "");
+
     } catch (e: any) {
       toast({ title: "Fehler beim Laden", description: e.message, variant: "destructive" });
     } finally {
@@ -157,8 +163,13 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
     if (!target) return;
     setSaving(true);
     try {
-      await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours() } as any });
-      toast({ title: "Gehalt / Stunden gespeichert" });
+      await saveSalary({ data: {
+        ...targetPayload(target),
+        monthly_salary_cents: parseSalaryCents(),
+        weekly_hours: parseHours(),
+        start_date: startDate.trim() ? startDate : null,
+      } as any });
+      toast({ title: "Gespeichert" });
       await reload(target);
     } catch (e: any) {
       toast({ title: "Fehler", description: e.message, variant: "destructive" });
@@ -166,6 +177,7 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       setSaving(false);
     }
   };
+
 
   const handleSaveHtml = async () => {
     if (!target) return;
@@ -176,9 +188,10 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
     setSaving(true);
     try {
       await saveHtml({ data: { ...targetPayload(target), html_body: html } as any });
-      if (parseSalaryCents() !== null || parseHours() !== null) {
-        await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours() } as any });
+      if (parseSalaryCents() !== null || parseHours() !== null || startDate.trim()) {
+        await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours(), start_date: startDate.trim() ? startDate : null } as any });
       }
+
       toast({
         title: "Individueller Vertrag gespeichert",
         description: target.kind === "employee"
@@ -312,7 +325,7 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
               <div className="flex items-center gap-2">
                 <Wallet className="h-3.5 w-3.5 text-primary" />
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Individuelles Gehalt & Wochenstunden
+                  Individuelles Gehalt, Wochenstunden & Startdatum
                 </p>
               </div>
               <p className="text-[11px] text-muted-foreground">
@@ -327,10 +340,18 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
                   <Label className="text-[11px]">Wochenstunden</Label>
                   <Input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="z. B. 20" className="h-9 text-sm" />
                 </div>
+                <div className="col-span-2">
+                  <Label className="text-[11px]">Startdatum Arbeitsverhältnis</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Wird bei bereits registrierten Mitarbeitern direkt ins Profil übernommen und ersetzt den Platzhalter <code className="bg-muted px-1 rounded">{"{{start_date}}"}</code>.
+                  </p>
+                </div>
               </div>
               <Button size="sm" onClick={handleSaveSalary} disabled={saving || loading} className="gap-1.5">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                Gehalt & Stunden speichern
+
+                Gehalt, Stunden & Startdatum speichern
               </Button>
             </div>
 

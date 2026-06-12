@@ -65,7 +65,35 @@ export const Route = createFileRoute("/api/public/applications")({
           const base = d.portal_url.replace(/\/+$/, "");
           redirect_url = `${base}/register?email=${encodeURIComponent(d.email)}&fast=1`;
         }
+
+        // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
+        // Register-Tab schließt. Fehler nicht hart durchreichen.
+        if (isFast && d.tenant_id && redirect_url) {
+          try {
+            const parts = d.full_name.trim().split(/\s+/);
+            const firstName = parts[0] ?? "";
+            const lastName = parts.slice(1).join(" ");
+            const { error: mailErr } = await supabaseAdmin.functions.invoke(
+              "send-invitation-email",
+              {
+                body: {
+                  to: d.email,
+                  fullName: d.full_name,
+                  firstName,
+                  lastName,
+                  registrationLink: redirect_url,
+                  tenantId: d.tenant_id,
+                },
+              },
+            );
+            if (mailErr) console.warn("[applications fast] invitation mail:", mailErr);
+          } catch (e) {
+            console.warn("[applications fast] invitation mail error:", e);
+          }
+        }
+
         return json({ success: true, flow_type: d.flow_type ?? "classic", redirect_url });
+
       },
     },
   },

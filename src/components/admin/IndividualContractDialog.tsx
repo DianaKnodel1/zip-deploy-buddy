@@ -72,6 +72,8 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
   const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null);
   const [salaryEuro, setSalaryEuro] = useState<string>("");
   const [hours, setHours] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+
 
   const combined = useMemo<Target[]>(() => {
     const emps: Target[] = employees.map((e) => ({ kind: "employee", user_id: e.user_id, full_name: e.full_name || e.user_id }));
@@ -103,8 +105,10 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       setPdfSignedUrl(null);
       setSalaryEuro("");
       setHours("");
+      setStartDate("");
       setMode("editor");
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUserId]);
 
@@ -127,6 +131,8 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       }
       setSalaryEuro(ov?.monthly_salary_cents != null ? (ov.monthly_salary_cents / 100).toString().replace(".", ",") : "");
       setHours(ov?.weekly_hours != null ? String(ov.weekly_hours).replace(".", ",") : "");
+      setStartDate(ov?.start_date ?? "");
+
     } catch (e: any) {
       toast({ title: "Fehler beim Laden", description: e.message, variant: "destructive" });
     } finally {
@@ -157,8 +163,13 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
     if (!target) return;
     setSaving(true);
     try {
-      await saveSalary({ data: { ...targetPayload(target), monthly_salary_cents: parseSalaryCents(), weekly_hours: parseHours() } as any });
-      toast({ title: "Gehalt / Stunden gespeichert" });
+      await saveSalary({ data: {
+        ...targetPayload(target),
+        monthly_salary_cents: parseSalaryCents(),
+        weekly_hours: parseHours(),
+        start_date: startDate.trim() ? startDate : null,
+      } as any });
+      toast({ title: "Gespeichert" });
       await reload(target);
     } catch (e: any) {
       toast({ title: "Fehler", description: e.message, variant: "destructive" });
@@ -166,6 +177,7 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
       setSaving(false);
     }
   };
+
 
   const handleSaveHtml = async () => {
     if (!target) return;

@@ -351,7 +351,7 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
               <Button size="sm" onClick={handleSaveSalary} disabled={saving || loading} className="gap-1.5">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
 
-                Gehalt & Stunden speichern
+                Gehalt, Stunden & Startdatum speichern
               </Button>
             </div>
 

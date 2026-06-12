@@ -212,6 +212,11 @@ export const saveContractOverrideSalary = createServerFn({ method: "POST" })
       z.object({
         monthly_salary_cents: z.number().int().min(0).max(100_000_00).nullable(),
         weekly_hours: z.number().min(0).max(80).nullable(),
+        start_date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .optional(),
       }),
     ).parse(i),
   )
@@ -225,24 +230,30 @@ export const saveContractOverrideSalary = createServerFn({ method: "POST" })
       application_id: data.application_id ?? null,
     };
     const prof = await loadTargetProfile(sb, t);
-    await upsertOverride(
-      sb,
-      t,
-      {
-        monthly_salary_cents: data.monthly_salary_cents,
-        weekly_hours: data.weekly_hours,
-      },
-      context.userId,
-    );
+    const patch: Record<string, any> = {
+      monthly_salary_cents: data.monthly_salary_cents,
+      weekly_hours: data.weekly_hours,
+    };
+    if (data.start_date !== undefined) patch.start_date = data.start_date;
+    await upsertOverride(sb, t, patch, context.userId);
+    // Für existierende Mitarbeiter zusätzlich auf das Profil spiegeln,
+    // damit alle bestehenden Render-/PDF-Pfade das neue Startdatum nutzen.
+    if (t.user_id && data.start_date !== undefined) {
+      await sb
+        .from("profiles")
+        .update({ employment_start_date: data.start_date })
+        .eq("user_id", t.user_id);
+    }
     await logOverride(sb, {
       action: "vertrag_override_salary",
       target: t,
       actorId: context.userId,
       prof,
-      comment: `Individuelles Gehalt / Wochenstunden aktualisiert für ${prof?.full_name ?? t.email ?? "Person"}.`,
+      comment: `Individuelles Gehalt / Wochenstunden / Startdatum aktualisiert für ${prof?.full_name ?? t.email ?? "Person"}.`,
     });
     return { ok: true };
   });
+
 
 export const deleteContractOverride = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -267,9 +278,10 @@ export const getMyContractOverride = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await (context.supabase as any)
       .from("employee_contract_overrides")
-      .select("html_body, pdf_url, monthly_salary_cents, weekly_hours, updated_at")
+      .select("html_body, pdf_url, monthly_salary_cents, weekly_hours, start_date, updated_at")
       .eq("user_id", context.userId)
       .maybeSingle();
+
     if (error) throw new Error(error.message);
     return { override: data ?? null };
   });

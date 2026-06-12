@@ -325,7 +325,7 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
               <div className="flex items-center gap-2">
                 <Wallet className="h-3.5 w-3.5 text-primary" />
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Individuelles Gehalt & Wochenstunden
+                  Individuelles Gehalt, Wochenstunden & Startdatum
                 </p>
               </div>
               <p className="text-[11px] text-muted-foreground">
@@ -340,9 +340,17 @@ export function IndividualContractDialog({ open, onOpenChange, employees, applic
                   <Label className="text-[11px]">Wochenstunden</Label>
                   <Input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="z. B. 20" className="h-9 text-sm" />
                 </div>
+                <div className="col-span-2">
+                  <Label className="text-[11px]">Startdatum Arbeitsverhältnis</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Wird bei bereits registrierten Mitarbeitern direkt ins Profil übernommen und ersetzt den Platzhalter <code className="bg-muted px-1 rounded">{"{{start_date}}"}</code>.
+                  </p>
+                </div>
               </div>
               <Button size="sm" onClick={handleSaveSalary} disabled={saving || loading} className="gap-1.5">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+
                 Gehalt & Stunden speichern
               </Button>
             </div>

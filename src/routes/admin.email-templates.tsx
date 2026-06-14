@@ -443,12 +443,31 @@ function AdminEmailTemplatesPage() {
     }
   };
 
+  const getTestTemplate = (key: TestTemplateKey): { subject: string; body: string } => {
+    switch (key) {
+      case "welcome": return { subject: welcomeSubject, body: welcomeBody };
+      case "reset": return { subject: resetSubject, body: resetBody };
+      case "invite": return { subject: rInviteSubject, body: rInviteBody };
+      case "confirm": return { subject: rConfirmSubject, body: rConfirmBody };
+      case "completion": return { subject: rCompletionSubject, body: rCompletionBody };
+      case "no_booking": return { subject: rNoBookingSubject, body: rNoBookingBody };
+      case "recovery_ma": return { subject: rRecoveryMaSubject, body: rRecoveryMaBody };
+      case "recovery_bew": return { subject: rRecoveryBewSubject, body: rRecoveryBewBody };
+      case "appointment": return { subject: rAppointmentSubject, body: rAppointmentBody };
+    }
+  };
+
+  const handleUseMyEmail = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (data.user?.email) setTestEmail(data.user.email);
+    else toast({ title: "Keine E-Mail gefunden", variant: "destructive" });
+  };
+
   const handleTestSend = async () => {
     if (!testEmail || !selectedTenant) return;
     setTesting(true);
     try {
-      const subject = testType === "welcome" ? welcomeSubject : resetSubject;
-      const body = testType === "welcome" ? welcomeBody : resetBody;
+      const { subject, body } = getTestTemplate(testType);
       const html = generateEmailHtml(subject, body, signature, selectedTenant);
 
       const { data, error } = await supabase.functions.invoke("send-invitation-email", {
@@ -460,7 +479,7 @@ function AdminEmailTemplatesPage() {
           registrationLink: `https://${selectedTenant.domain}/register?token=test`,
           tenantId: selectedTenantId,
           isTestEmail: true,
-          customSubject: replacePlaceholders(subject, selectedTenant),
+          customSubject: `[TEST] ${replacePlaceholders(subject, selectedTenant)}`,
           customHtml: html,
         },
       });

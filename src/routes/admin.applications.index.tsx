@@ -42,9 +42,26 @@ function AdminApplicationsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [remindersLoading, setRemindersLoading] = useState(false);
   const [resendInvitesLoading, setResendInvitesLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [dripOpen, setDripOpen] = useState(false);
+  const [windowHours, setWindowHours] = useState(48);
+  const [preview, setPreview] = useState<{
+    eligible: number; wouldQueue?: number; alreadyQueued: number;
+    sample: Array<{ email: string; full_name: string | null; tenant_id: string; created_at: string }>;
+    perTenant: Record<string, number>;
+  } | null>(null);
+  const [queueStatus, setQueueStatus] = useState<{
+    counts: { queued: number; sent: number; failed: number; skipped: number };
+    nextScheduledAt: string | null; lastScheduledAt: string | null;
+  } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
+  const queueStatusFn = useServerFn(getInviteResendQueueStatus);
+
+  const loadQueueStatus = async () => {
+    try { setQueueStatus(await queueStatusFn({ data: undefined as any })); } catch { /* silent */ }
+  };
+  useEffect(() => { loadQueueStatus(); const t = setInterval(loadQueueStatus, 30_000); return () => clearInterval(t); }, []);
 
   useEffect(() => {
     supabase.from("tenants").select("id, name, domain, primary_domain").then(({ data }) => {

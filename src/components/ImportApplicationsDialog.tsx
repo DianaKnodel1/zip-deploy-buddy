@@ -391,10 +391,11 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
                 <span className="font-medium">{rows.length} Einträge bereit zum Import</span>
                 <span className="text-muted-foreground">— Vorschau aller Einträge</span>
               </div>
-              <div className="overflow-auto">
+              <div className="overflow-auto max-h-[420px]">
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/20 text-muted-foreground">
+                  <thead className="bg-muted/20 text-muted-foreground sticky top-0">
                     <tr>
+                      <th className="text-left p-2 font-medium">#</th>
                       <th className="text-left p-2 font-medium">Name</th>
                       <th className="text-left p-2 font-medium">E-Mail</th>
                       <th className="text-left p-2 font-medium">Telefon</th>
@@ -403,6 +404,7 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
                   <tbody>
                     {rows.map((r, i) => (
                       <tr key={i} className="border-t border-border">
+                        <td className="p-2 text-muted-foreground tabular-nums">{i + 1}</td>
                         <td className="p-2">{r.full_name}</td>
                         <td className="p-2">{r.email}</td>
                         <td className="p-2">{r.phone || "—"}</td>

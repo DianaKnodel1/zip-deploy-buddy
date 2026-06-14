@@ -51,7 +51,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     });
 
     if (targets.length === 0) {
-      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null };
+      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, sample: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0 };
     }
 
     // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.
@@ -61,9 +61,23 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       .eq("status", "queued");
     const openSet = new Set<string>((openRows ?? []).map((r: any) => r.application_id));
     const fresh = targets.filter((a: any) => !openSet.has(a.id));
+    const alreadyQueued = targets.length - fresh.length;
+
+    // Per-Tenant-Aufschlüsselung (für Preview)
+    const perTenant: Record<string, number> = {};
+    for (const t of fresh) perTenant[t.tenant_id] = (perTenant[t.tenant_id] ?? 0) + 1;
+
+    // Sample der ersten 20 Empfänger (für Preview)
+    const sample = fresh.slice(0, 20).map((a: any) => ({
+      email: a.email, full_name: a.full_name, tenant_id: a.tenant_id, created_at: a.created_at,
+    }));
 
     if (fresh.length === 0) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, sample, perTenant, alreadyQueued };
+    }
+
+    if (dryRun) {
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, sample, perTenant, alreadyQueued, wouldQueue: fresh.length };
     }
 
     // 4) Per Tenant gruppieren und scheduled_at gleichmäßig über windowHours verteilen
@@ -82,7 +96,6 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       const n = list.length;
       const step = n > 1 ? windowMs / n : 0;
       list.forEach((a: any, i: number) => {
-        // kleine Zufallsstreuung ±2 min, damit Sends nicht exakt synchron laufen
         const jitter = Math.floor((Math.random() - 0.5) * 4 * 60 * 1000);
         rows.push({
           application_id: a.id,
@@ -97,7 +110,6 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       });
     }
 
-    // 5) Insert in 500er-Chunks
     let queued = 0;
     for (let i = 0; i < rows.length; i += 500) {
       const chunk = rows.slice(i, i + 500);
@@ -108,7 +120,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       queued += count ?? chunk.length;
     }
 
-    return { eligible: targets.length, queued, windowHours, batchId };
+    return { eligible: targets.length, queued, windowHours, batchId, dryRun, sample, perTenant, alreadyQueued };
   });
 
 /**

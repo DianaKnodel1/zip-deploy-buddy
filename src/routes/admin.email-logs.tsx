@@ -5,6 +5,9 @@ export const Route = createFileRoute("/admin/email-logs")({
 });
 
 import { useState, useEffect, useMemo } from "react";
+import { fetchAll } from "@/lib/fetch-all";
+import { usePagination } from "@/hooks/use-pagination";
+import { PaginationBar } from "@/components/PaginationBar";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,14 +54,21 @@ export function AdminEmailLogsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("email_send_log")
-      .select("*")
-      .neq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    setLogs((data as EmailLogFull[]) ?? []);
-    setLoading(false);
+    try {
+      // Letzte 30 Tage komplett laden (paginiert via fetchAll, kein 1000er-Limit).
+      const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+      const rows = await fetchAll<EmailLogFull>(() =>
+        supabase
+          .from("email_send_log")
+          .select("*")
+          .neq("status", "pending")
+          .gte("created_at", since)
+          .order("created_at", { ascending: false }),
+      );
+      setLogs(rows);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -75,6 +85,8 @@ export function AdminEmailLogsPage() {
       return true;
     });
   }, [logs, filterStatus, search]);
+
+  const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 100);
 
   const resendEmail = async (log: EmailLog) => {
     setResending(log.id);
@@ -290,7 +302,7 @@ export function AdminEmailLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.slice(0, 100).map((log) => {
+              {paged.map((log) => {
                 const canResend = ["failed", "dlq"].includes(log.status);
                 const smtpHost = log.metadata?.smtp_host;
 
@@ -347,11 +359,9 @@ export function AdminEmailLogsPage() {
               })}
             </tbody>
           </table>
-          {filtered.length > 100 && (
-            <div className="px-4 py-3 text-xs text-muted-foreground bg-muted/20 border-t">
-              Zeige 100 von {filtered.length} Einträgen
-            </div>
-          )}
+          <div className="border-t border-border bg-muted/20">
+            <PaginationBar page={page} pageCount={pageCount} setPage={setPage} rangeFrom={rangeFrom} rangeTo={rangeTo} total={total} />
+          </div>
         </div>
       )}
 

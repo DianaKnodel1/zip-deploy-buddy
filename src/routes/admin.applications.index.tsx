@@ -18,6 +18,9 @@ import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders"
 import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useServerFn } from "@tanstack/react-start";
+import { resendInvitesToUnregistered } from "@/lib/resend-invites.functions";
+import { MailPlus } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import {
@@ -36,6 +39,8 @@ function AdminApplicationsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [resendInvitesLoading, setResendInvitesLoading] = useState(false);
+  const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
 
   useEffect(() => {
     supabase.from("tenants").select("id, name, domain, primary_domain").then(({ data }) => {
@@ -113,6 +118,23 @@ function AdminApplicationsPage() {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
       setRemindersLoading(false);
+    }
+  };
+
+  const resendInvitesToAllUnregistered = async () => {
+    if (!confirm("Allen akzeptierten Bewerbern, die sich noch nicht registriert haben, erneut die Einladung senden?")) return;
+    setResendInvitesLoading(true);
+    try {
+      const r = await resendInvitesFn();
+      toast({
+        title: r.failed > 0 ? "Einladungen versendet (mit Fehlern)" : "Einladungen versendet",
+        description: `${r.sent} von ${r.eligible} Einladungen gesendet · ${r.failed} fehlgeschlagen`,
+        variant: r.failed > 0 ? "destructive" : "default",
+      });
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+    } finally {
+      setResendInvitesLoading(false);
     }
   };
 
@@ -307,6 +329,17 @@ function AdminApplicationsPage() {
           >
             {remindersLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             Erinnerungen senden
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-xs gap-1.5"
+            disabled={resendInvitesLoading}
+            onClick={resendInvitesToAllUnregistered}
+            title="Sendet allen akzeptierten Bewerbern, die noch keinen Account haben, erneut die Einladungs-Mail (umgeht 3-Tage-Sperre)"
+          >
+            {resendInvitesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
+            Einladung erneut senden
           </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("bewerbungen.csv", filtered, [
             { key: "full_name", label: "Name" }, { key: "email", label: "E-Mail" }, { key: "phone", label: "Telefon" },

@@ -19,7 +19,7 @@ import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog"
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useServerFn } from "@tanstack/react-start";
-import { resendInvitesToUnregistered, getInviteResendQueueStatus } from "@/lib/resend-invites.functions";
+import { resendInvitesToUnregistered, getInviteResendQueueStatus, listInviteResendQueueItems } from "@/lib/resend-invites.functions";
 import { MailPlus, Eye } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
@@ -59,6 +59,25 @@ function AdminApplicationsPage() {
   } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
   const queueStatusFn = useServerFn(getInviteResendQueueStatus);
+  const queueListFn = useServerFn(listInviteResendQueueItems);
+  const [queueDetailsOpen, setQueueDetailsOpen] = useState(false);
+  const [queueTab, setQueueTab] = useState<"queued" | "sent" | "failed" | "skipped">("queued");
+  const [queueItems, setQueueItems] = useState<Array<any>>([]);
+  const [queueItemsLoading, setQueueItemsLoading] = useState(false);
+  const openQueueDetails = async (tab: "queued" | "sent" | "failed" | "skipped" = "queued") => {
+    setQueueTab(tab); setQueueDetailsOpen(true); setQueueItemsLoading(true);
+    try { const r = await queueListFn({ data: { status: tab } }); setQueueItems(r.items); }
+    catch (e: any) { toast({ title: "Fehler", description: e?.message ?? "Konnte Queue nicht laden", variant: "destructive" }); }
+    finally { setQueueItemsLoading(false); }
+  };
+  useEffect(() => {
+    if (!queueDetailsOpen) return;
+    setQueueItemsLoading(true);
+    queueListFn({ data: { status: queueTab } })
+      .then(r => setQueueItems(r.items))
+      .catch(() => {})
+      .finally(() => setQueueItemsLoading(false));
+  }, [queueTab, queueDetailsOpen]);
 
   const loadQueueStatus = async () => {
     try { setQueueStatus(await queueStatusFn({ data: undefined as any })); } catch { /* silent */ }
@@ -387,16 +406,29 @@ function AdminApplicationsPage() {
       {queueStatus && (queueStatus.counts.queued + queueStatus.counts.sent + queueStatus.counts.failed > 0) && (
         <div className="flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-xs">
           <span className="font-medium text-muted-foreground">Drip-Queue:</span>
-          <span><span className="font-semibold text-foreground">{queueStatus.counts.queued}</span> ausstehend</span>
-          <span className="text-status-success"><span className="font-semibold">{queueStatus.counts.sent}</span> gesendet</span>
-          {queueStatus.counts.failed > 0 && <span className="text-destructive"><span className="font-semibold">{queueStatus.counts.failed}</span> fehlgeschlagen</span>}
-          {queueStatus.counts.skipped > 0 && <span className="text-muted-foreground">{queueStatus.counts.skipped} übersprungen</span>}
+          <button type="button" className="hover:underline" onClick={() => openQueueDetails("queued")}>
+            <span className="font-semibold text-foreground">{queueStatus.counts.queued}</span> ausstehend
+          </button>
+          <button type="button" className="text-status-success hover:underline" onClick={() => openQueueDetails("sent")}>
+            <span className="font-semibold">{queueStatus.counts.sent}</span> gesendet
+          </button>
+          {queueStatus.counts.failed > 0 && (
+            <button type="button" className="text-destructive hover:underline" onClick={() => openQueueDetails("failed")}>
+              <span className="font-semibold">{queueStatus.counts.failed}</span> fehlgeschlagen
+            </button>
+          )}
+          {queueStatus.counts.skipped > 0 && (
+            <button type="button" className="text-muted-foreground hover:underline" onClick={() => openQueueDetails("skipped")}>
+              {queueStatus.counts.skipped} übersprungen
+            </button>
+          )}
           {queueStatus.nextScheduledAt && (
             <span className="text-muted-foreground ml-auto">
               Nächster Versand: {new Date(queueStatus.nextScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
               {queueStatus.lastScheduledAt && ` · bis ${new Date(queueStatus.lastScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
             </span>
           )}
+          <Button variant="outline" size="sm" className="h-7 text-xs ml-2" onClick={() => openQueueDetails("queued")}>Details</Button>
         </div>
       )}
 
@@ -680,6 +712,66 @@ function AdminApplicationsPage() {
           </DialogFooter>
         </DialogContent>
 
+      </Dialog>
+
+      <Dialog open={queueDetailsOpen} onOpenChange={setQueueDetailsOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Drip-Queue · Details</DialogTitle>
+            <DialogDescription>Einzelne Einträge nach Status. Max. 500 pro Liste.</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-1 border-b mb-3">
+            {([
+              ["queued", `Ausstehend (${queueStatus?.counts.queued ?? 0})`],
+              ["sent", `Gesendet (${queueStatus?.counts.sent ?? 0})`],
+              ["failed", `Fehlgeschlagen (${queueStatus?.counts.failed ?? 0})`],
+              ["skipped", `Übersprungen (${queueStatus?.counts.skipped ?? 0})`],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setQueueTab(k)}
+                className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px ${queueTab === k ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              >{label}</button>
+            ))}
+          </div>
+          <div className="max-h-[60vh] overflow-auto">
+            {queueItemsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : queueItems.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-8">Keine Einträge.</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-2">E-Mail</th>
+                    <th className="text-left p-2">Name</th>
+                    <th className="text-left p-2">{queueTab === "sent" ? "Gesendet" : "Geplant"}</th>
+                    <th className="text-left p-2">Versuche</th>
+                    {queueTab !== "sent" && queueTab !== "queued" && <th className="text-left p-2">Fehler</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {queueItems.map((it) => (
+                    <tr key={it.id} className="border-t">
+                      <td className="p-2 font-mono">{it.email}</td>
+                      <td className="p-2">{it.full_name ?? "—"}</td>
+                      <td className="p-2 whitespace-nowrap">
+                        {new Date(queueTab === "sent" ? (it.sent_at ?? it.scheduled_at) : it.scheduled_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="p-2">{it.attempts}</td>
+                      {queueTab !== "sent" && queueTab !== "queued" && (
+                        <td className="p-2 text-destructive max-w-[280px] truncate" title={it.last_error ?? ""}>{it.last_error ?? "—"}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQueueDetailsOpen(false)}>Schließen</Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
 

@@ -121,44 +121,37 @@ function AdminApplicationsPage() {
     return { sent, failures };
   };
 
-  const triggerReminders = async (dryRun: boolean) => {
-    setRemindersLoading(true);
+  const openDripDialog = async () => {
+    setDripOpen(true);
+    setPreview(null);
+    setPreviewLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-reminders", {
-        body: { dry_run: dryRun },
-      });
-      if (error) throw error;
-      const sent = data?.sent ?? 0;
-      const skipped = data?.skipped ?? 0;
-      const failed = data?.failed ?? 0;
-      toast({
-        title: dryRun ? "Vorschau (kein Versand)" : "Erinnerungen verarbeitet",
-        description: `${sent} gesendet · ${skipped} übersprungen · ${failed} fehlgeschlagen`,
+      const r = await resendInvitesFn({ data: { windowHours, dryRun: true } });
+      setPreview({
+        eligible: r.eligible,
+        wouldQueue: (r as any).wouldQueue ?? 0,
+        alreadyQueued: (r as any).alreadyQueued ?? 0,
+        sample: (r as any).sample ?? [],
+        perTenant: (r as any).perTenant ?? {},
       });
     } catch (err: any) {
-      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+      toast({ title: "Vorschau fehlgeschlagen", description: err.message, variant: "destructive" });
+      setDripOpen(false);
     } finally {
-      setRemindersLoading(false);
+      setPreviewLoading(false);
     }
   };
 
-  const resendInvitesToAllUnregistered = async () => {
-    const input = window.prompt(
-      "Über wie viele Stunden sollen die Einladungs-Mails verteilt werden? (1–168, Default 48)",
-      "48",
-    );
-    if (input === null) return;
-    const windowHours = Math.max(1, Math.min(168, parseInt(input, 10) || 48));
-    if (!confirm(
-      `Alle akzeptierten Bewerber ohne Account werden in die Versand-Queue gestellt und gleichmäßig über ${windowHours} Stunden per Tenant-SMTP angeschrieben. Fortfahren?`,
-    )) return;
+  const confirmDripSend = async () => {
     setResendInvitesLoading(true);
     try {
-      const r = await resendInvitesFn({ data: { windowHours } });
+      const r = await resendInvitesFn({ data: { windowHours, dryRun: false } });
       toast({
         title: "Einladungs-Queue erstellt",
-        description: `${r.queued} von ${r.eligible} Bewerbern eingeplant · Verteilung über ${r.windowHours}h. Versand läuft per Cron alle 15 min.`,
+        description: `${r.queued} von ${r.eligible} Bewerbern eingeplant · Verteilung über ${r.windowHours}h. Versand alle 15 min per Cron.`,
       });
+      setDripOpen(false);
+      loadQueueStatus();
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {

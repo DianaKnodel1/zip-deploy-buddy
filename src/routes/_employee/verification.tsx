@@ -241,8 +241,12 @@ function VerificationPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-xl font-heading font-bold">Personenverifizierung</h1>
-              <p className="text-xs text-muted-foreground">KYC nach §6 GwG</p>
+              <h1 className="text-xl font-heading font-bold">Personalausweis hochladen</h1>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <span>Dauer: ca. 1 Minute</span>
+                <span className="text-muted-foreground/40">•</span>
+                <span>KYC nach §6 GwG</span>
+              </p>
             </div>
           </div>
           <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
@@ -444,6 +448,21 @@ function VerificationPage() {
                   <ShieldCheck className="h-4 w-4 mr-1" />
                   Verifizierung einreichen
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Trust-Badges — Vertrauen erhöhen, Abbruch reduzieren */}
+        {!isVerified && !isSubmitted && (
+          <Card className="bg-muted/30 border-border">
+            <CardContent className="py-4 px-5">
+              <p className="text-xs font-semibold text-foreground mb-2.5">Deine Daten sind sicher</p>
+              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">🔒 DSGVO-konforme Speicherung</span>
+                <span className="inline-flex items-center gap-1.5">🔒 Verschlüsselte Übertragung</span>
+                <span className="inline-flex items-center gap-1.5">🔒 Nur zur Identitätsprüfung verwendet</span>
+                <span className="inline-flex items-center gap-1.5">🔒 Keine Weitergabe an Dritte</span>
               </div>
             </CardContent>
           </Card>

@@ -48,9 +48,11 @@ function AdminApplicationsPage() {
   const [windowHours, setWindowHours] = useState(48);
   const [preview, setPreview] = useState<{
     eligible: number; wouldQueue?: number; alreadyQueued: number;
-    sample: Array<{ email: string; full_name: string | null; tenant_id: string; created_at: string }>;
+    items: Array<{ id: string; email: string; full_name: string | null; first_name: string | null; last_name: string | null; phone: string | null; tenant_id: string; status: string; created_at: string }>;
     perTenant: Record<string, number>;
   } | null>(null);
+  const [previewSelected, setPreviewSelected] = useState<Set<string>>(new Set());
+  const [rejectingPreview, setRejectingPreview] = useState(false);
   const [queueStatus, setQueueStatus] = useState<{
     counts: { queued: number; sent: number; failed: number; skipped: number };
     nextScheduledAt: string | null; lastScheduledAt: string | null;

@@ -158,7 +158,7 @@ function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
-async function logSend(admin: any, tenantId: string, to: string, subject: string, html: string, senderEmail: string, status: string, error?: string) {
+async function logSend(admin: any, tenantId: string, to: string, subject: string, html: string, senderEmail: string, status: string, error?: string, metadata?: Record<string, unknown>) {
   try {
     await admin.from("email_send_log").insert({
       tenant_id: tenantId,
@@ -169,6 +169,7 @@ async function logSend(admin: any, tenantId: string, to: string, subject: string
       rendered_subject: subject,
       rendered_html: html,
       sender_email: senderEmail,
+      metadata: metadata ?? null,
     });
   } catch { /* non-critical */ }
 }

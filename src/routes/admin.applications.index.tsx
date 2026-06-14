@@ -574,7 +574,7 @@ function AdminApplicationsPage() {
                 <div className="flex items-center gap-2">
                   <Input
                     type="number" min={1} max={168} value={windowHours}
-                    onChange={(e) => setWindowHours(Math.max(1, Math.min(168, parseInt(e.target.value, 10) || 48)))}
+                    onChange={(e) => setWindowHours(Math.max(1, Math.min(168, parseInt(e.target.value, 10) || 24)))}
                     className="h-9 w-32"
                   />
                   <span className="text-xs text-muted-foreground">

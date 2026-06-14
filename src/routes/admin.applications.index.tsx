@@ -122,14 +122,21 @@ function AdminApplicationsPage() {
   };
 
   const resendInvitesToAllUnregistered = async () => {
-    if (!confirm("Allen akzeptierten Bewerbern, die sich noch nicht registriert haben, erneut die Einladung senden?")) return;
+    const input = window.prompt(
+      "Über wie viele Stunden sollen die Einladungs-Mails verteilt werden? (1–168, Default 48)",
+      "48",
+    );
+    if (input === null) return;
+    const windowHours = Math.max(1, Math.min(168, parseInt(input, 10) || 48));
+    if (!confirm(
+      `Alle akzeptierten Bewerber ohne Account werden in die Versand-Queue gestellt und gleichmäßig über ${windowHours} Stunden per Tenant-SMTP angeschrieben. Fortfahren?`,
+    )) return;
     setResendInvitesLoading(true);
     try {
-      const r = await resendInvitesFn();
+      const r = await resendInvitesFn({ data: { windowHours } });
       toast({
-        title: r.failed > 0 ? "Einladungen versendet (mit Fehlern)" : "Einladungen versendet",
-        description: `${r.sent} von ${r.eligible} Einladungen gesendet · ${r.failed} fehlgeschlagen`,
-        variant: r.failed > 0 ? "destructive" : "default",
+        title: "Einladungs-Queue erstellt",
+        description: `${r.queued} von ${r.eligible} Bewerbern eingeplant · Verteilung über ${r.windowHours}h. Versand läuft per Cron alle 15 min.`,
       });
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
@@ -336,10 +343,10 @@ function AdminApplicationsPage() {
             className="h-9 text-xs gap-1.5"
             disabled={resendInvitesLoading}
             onClick={resendInvitesToAllUnregistered}
-            title="Sendet allen akzeptierten Bewerbern, die noch keinen Account haben, erneut die Einladungs-Mail (umgeht 3-Tage-Sperre)"
+            title="Plant Einladungs-Mails an alle akzeptierten Bewerber ohne Account und verteilt sie gleichmäßig (Drip, Default 48 h) über die Tenant-SMTP. Erinnerungs-Mails laufen parallel weiter."
           >
             {resendInvitesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
-            Einladung erneut senden
+            Drip-Einladungen planen
           </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("bewerbungen.csv", filtered, [
             { key: "full_name", label: "Name" }, { key: "email", label: "E-Mail" }, { key: "phone", label: "Telefon" },

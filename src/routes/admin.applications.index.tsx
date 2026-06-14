@@ -225,6 +225,14 @@ function AdminApplicationsPage() {
         },
       });
 
+      // Offene Drip-Queue-Einträge dieses Bewerbers überspringen (Doppelversand vermeiden).
+      if (!emailError) {
+        try {
+          await skipQueuedFn({ data: { application_ids: [app.id], emails: app.email ? [app.email] : [], reason: "accepted_manual" } });
+        } catch { /* nicht kritisch */ }
+      }
+
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from("activity_log").insert({

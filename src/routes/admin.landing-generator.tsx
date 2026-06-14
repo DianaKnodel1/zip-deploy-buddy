@@ -216,7 +216,7 @@ document.addEventListener('click', function(e){
   if(b){ var item = b.closest('.faq-item'); if(item) item.classList.toggle('open'); }
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
-var __WA = ${JSON.stringify((branding.whatsapp_number || "").replace(/[^0-9]/g, ""))};
+var __WA = ${JSON.stringify(branding.whatsapp_enabled ? (branding.whatsapp_number || "").replace(/[^0-9]/g, "") : "")};
 document.addEventListener('submit', function(e){
   var f = e.target && e.target.id === 'application-form' ? e.target : null;
   if(!f) return;

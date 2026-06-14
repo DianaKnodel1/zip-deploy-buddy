@@ -209,13 +209,14 @@ export function GuidedOnboarding() {
     const key = `${STORAGE_PREFIX}${user.id}`;
     const done = localStorage.getItem(key);
     if (done) { setReady(true); return; }
-    // Tour startet NUR explizit über "Tour starten"-Button (sessionStorage-Flag)
-    // oder über den Hilfe-Button im Header. Kein Auto-Start mehr.
+    // Auto-Start: Tour läuft direkt beim ersten Login (oder via Header-Hilfe-Button).
+    // Kurzes Delay, damit das Dashboard schon gerendert ist und die Tour-Targets existieren.
     if (sessionStorage.getItem(`start_tour_${user.id}`) === "1") {
       sessionStorage.removeItem(`start_tour_${user.id}`);
-      setShow(true);
     }
+    const t = setTimeout(() => setShow(true), 600);
     setReady(true);
+    return () => clearTimeout(t);
   }, [user]);
 
   const close = useCallback(() => {

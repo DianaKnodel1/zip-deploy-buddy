@@ -217,6 +217,55 @@ document.addEventListener('click', function(e){
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
 var __WA = ${JSON.stringify(branding.whatsapp_enabled ? (branding.whatsapp_number || "").replace(/[^0-9]/g, "") : "")};
+function __waFormatNumber(num){ var d=String(num||'').replace(/[^0-9]/g,''); if(!d) return ''; if(d.length>4) return '+'+d.slice(0,2)+' '+d.slice(2,5)+' '+d.slice(5); return '+'+d; }
+function showApplicationModal(opts){
+  opts = opts || {}; var isFast = !!opts.fast; var wa = String(opts.whatsapp||'').replace(/[^0-9]/g,'');
+  var overlay = document.createElement('div');
+  overlay.setAttribute('role','dialog'); overlay.setAttribute('aria-modal','true');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;backdrop-filter:blur(2px);';
+  var box = document.createElement('div');
+  box.style.cssText='background:#fff;color:#0f172a;max-width:460px;width:100%;border-radius:14px;padding:28px;box-shadow:0 20px 60px -10px rgba(0,0,0,.35);font-family:inherit;position:relative;';
+  var close = document.createElement('button'); close.type='button'; close.innerHTML='&times;';
+  close.style.cssText='position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;line-height:1;cursor:pointer;color:#64748b;';
+  close.onclick=function(){ overlay.remove(); };
+  var check = document.createElement('div');
+  check.style.cssText='width:46px;height:46px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin-bottom:14px;';
+  check.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  var h = document.createElement('h3'); h.textContent='Vielen Dank für Ihre Bewerbung';
+  h.style.cssText='margin:0 0 8px;font-size:22px;font-weight:700;line-height:1.25;';
+  var p = document.createElement('p'); p.style.cssText='margin:0 0 18px;color:#475569;font-size:15px;line-height:1.55;';
+  box.appendChild(close); box.appendChild(check); box.appendChild(h); box.appendChild(p);
+  if(isFast){
+    p.textContent='Vielen Dank für Ihre Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal für die Registrierung weitergeleitet.';
+    var redirInfo = document.createElement('p');
+    redirInfo.style.cssText='margin:0 0 16px;font-size:13px;color:#64748b;';
+    redirInfo.textContent='[Vorschau] Weiterleitung zum Portal würde jetzt erfolgen.';
+    box.appendChild(redirInfo);
+  } else if(wa){
+    p.textContent='Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';
+    var card = document.createElement('div');
+    card.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;';
+    var label = document.createElement('div'); label.textContent='SCHNELLER KONTAKT';
+    label.style.cssText='font-size:11px;font-weight:700;letter-spacing:.08em;color:#2563eb;margin-bottom:8px;';
+    var info = document.createElement('p'); info.style.cssText='margin:0 0 12px;font-size:14px;color:#475569;line-height:1.5;';
+    info.innerHTML='Melden Sie sich bei WhatsApp unter <strong>'+__waFormatNumber(wa)+'</strong>, um auf dem neusten Stand zu bleiben.';
+    var btn = document.createElement('a');
+    btn.href='https://wa.me/'+wa+'?text='+encodeURIComponent('Hallo, ich habe gerade meine Bewerbung abgeschickt.');
+    btn.target='_blank'; btn.rel='noopener';
+    btn.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;background:#22c55e;color:#fff;text-decoration:none;font-weight:600;padding:12px 16px;border-radius:8px;font-size:15px;';
+    btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"/></svg> WhatsApp-Chat starten';
+    card.appendChild(label); card.appendChild(info); card.appendChild(btn);
+    box.appendChild(card);
+  } else {
+    p.textContent='Wir haben Ihre Unterlagen erhalten und melden uns i.d.R. innerhalb von 10 Tagen per E-Mail bei Ihnen.';
+  }
+  var closeBtn = document.createElement('button'); closeBtn.type='button'; closeBtn.textContent='Schließen';
+  closeBtn.style.cssText='background:#fff;border:1px solid #cbd5e1;color:#0f172a;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;';
+  closeBtn.onclick=function(){ overlay.remove(); };
+  box.appendChild(closeBtn); overlay.appendChild(box);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
 document.addEventListener('submit', function(e){
   var f = e.target && e.target.id === 'application-form' ? e.target : null;
   if(!f) return;
@@ -224,11 +273,10 @@ document.addEventListener('submit', function(e){
   var status = document.getElementById('form-status');
   if(status){ status.className = 'status success'; status.textContent = 'Bewerbung erfolgreich gesendet. [Vorschau-Modus]'; }
   try { f.reset(); } catch(_){}
-  if(typeof showApplicationModal === 'function'){
-    showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA });
-  }
+  showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA, redirectUrl: __FLOW === 'fast' ? '#preview-redirect' : '' });
 }, true);
 <\/script>`;
+
     html = html.replace(/<\/body>/i, previewScript + "</body>");
 
     return html;

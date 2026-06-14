@@ -19,10 +19,11 @@ async function assertAdmin(ctx: { supabase: any; userId: string }) {
  */
 export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { windowHours?: number } | undefined) => input ?? {})
+  .inputValidator((input: { windowHours?: number; dryRun?: boolean } | undefined) => input ?? {})
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const windowHours = Math.min(Math.max(data.windowHours ?? 48, 1), 168); // 1h..7d
+    const dryRun = !!data.dryRun;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;
 

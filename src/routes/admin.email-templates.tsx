@@ -714,23 +714,34 @@ function AdminEmailTemplatesPage() {
             <div className="flex items-end gap-3 flex-wrap">
               <div className="flex-1 min-w-[200px]">
                 <Label className="text-xs">Empfänger-E-Mail</Label>
-                <Input
-                  type="email"
-                  value={testEmail}
-                  onChange={(e) => setTestEmail(e.target.value)}
-                  placeholder="test@example.com"
-                  className="mt-1"
-                />
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="test@example.com"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={handleUseMyEmail}>
+                    An mich
+                  </Button>
+                </div>
               </div>
-              <div className="w-48">
+              <div className="w-60">
                 <Label className="text-xs">Template</Label>
-                <Select value={testType} onValueChange={(v) => setTestType(v as "welcome" | "reset")}>
+                <Select value={testType} onValueChange={(v) => setTestType(v as TestTemplateKey)}>
                   <SelectTrigger className="mt-1 h-10 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="welcome">Willkommen</SelectItem>
+                    <SelectItem value="welcome">Willkommen / Einladung</SelectItem>
                     <SelectItem value="reset">Passwort-Reset</SelectItem>
+                    <SelectItem value="invite">Erinnerung: Einladung</SelectItem>
+                    <SelectItem value="confirm">Erinnerung: E-Mail bestätigen</SelectItem>
+                    <SelectItem value="completion">Erinnerung: Registrierung abschließen</SelectItem>
+                    <SelectItem value="no_booking">Erinnerung: Keine Buchung</SelectItem>
+                    <SelectItem value="recovery_ma">Domain-Wechsel: Mitarbeiter</SelectItem>
+                    <SelectItem value="recovery_bew">Domain-Wechsel: Bewerber</SelectItem>
+                    <SelectItem value="appointment">30 Min vor Termin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

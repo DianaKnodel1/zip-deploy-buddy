@@ -59,6 +59,25 @@ function AdminApplicationsPage() {
   } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
   const queueStatusFn = useServerFn(getInviteResendQueueStatus);
+  const queueListFn = useServerFn(listInviteResendQueueItems);
+  const [queueDetailsOpen, setQueueDetailsOpen] = useState(false);
+  const [queueTab, setQueueTab] = useState<"queued" | "sent" | "failed" | "skipped">("queued");
+  const [queueItems, setQueueItems] = useState<Array<any>>([]);
+  const [queueItemsLoading, setQueueItemsLoading] = useState(false);
+  const openQueueDetails = async (tab: "queued" | "sent" | "failed" | "skipped" = "queued") => {
+    setQueueTab(tab); setQueueDetailsOpen(true); setQueueItemsLoading(true);
+    try { const r = await queueListFn({ data: { status: tab } }); setQueueItems(r.items); }
+    catch (e: any) { toast({ title: "Fehler", description: e?.message ?? "Konnte Queue nicht laden", variant: "destructive" }); }
+    finally { setQueueItemsLoading(false); }
+  };
+  useEffect(() => {
+    if (!queueDetailsOpen) return;
+    setQueueItemsLoading(true);
+    queueListFn({ data: { status: queueTab } })
+      .then(r => setQueueItems(r.items))
+      .catch(() => {})
+      .finally(() => setQueueItemsLoading(false));
+  }, [queueTab, queueDetailsOpen]);
 
   const loadQueueStatus = async () => {
     try { setQueueStatus(await queueStatusFn({ data: undefined as any })); } catch { /* silent */ }

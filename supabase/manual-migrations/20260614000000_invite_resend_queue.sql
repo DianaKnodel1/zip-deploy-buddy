@@ -1,6 +1,6 @@
 -- APPLY MANUALLY via: bash scripts/migrate.sh
 -- Drip-Resend-Queue für Einladungs-Mails an akzeptierte Bewerber ohne Account.
--- Wird befüllt durch resendInvitesToUnregistered() (Spread über N Stunden, Default 48).
+-- Wird befüllt durch resendInvitesToUnregistered() (Spread über N Stunden, Default 24).
 -- Verarbeitet durch Edge Function process-invite-resend-queue (per pg_cron alle 15min).
 
 CREATE TABLE IF NOT EXISTS public.invite_resend_queue (

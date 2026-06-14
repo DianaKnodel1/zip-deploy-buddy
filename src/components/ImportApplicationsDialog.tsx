@@ -183,10 +183,11 @@ function parseBlock(block: string): Row | null {
 }
 
 function parseFreeText(text: string): { rows: Row[]; errors: string[] } {
-  // Blöcke trennen: Linien aus Bindestrichen ODER 2+ Leerzeilen
-  const blocks = text
-    .replace(/\r/g, "")
-    .split(/(?:^|\n)\s*-{3,}\s*(?=\n|$)|\n\s*_{3,}\s*(?=\n|$)|\n\s*= {0,}-{2,}\s*(?=\n|$)|\n{2,}/)
+  const normalized = text.replace(/\r/g, "");
+  const separatorRe = /(?:^|\n)\s*(?:-{3,}|_{3,}|[=]{3,})\s*(?=\n|$)/;
+  const hasExplicitSeparators = separatorRe.test(normalized);
+  const blocks = normalized
+    .split(hasExplicitSeparators ? /(?:^|\n)\s*(?:-{3,}|_{3,}|[=]{3,})\s*(?=\n|$)/ : /\n{2,}/)
     .map((b) => b.trim())
     .filter(Boolean);
   const rows: Row[] = [];
@@ -364,9 +365,9 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-xs">
                 <CheckCircle2 className="h-3.5 w-3.5 text-status-success" />
                 <span className="font-medium">{rows.length} Einträge bereit zum Import</span>
-                <span className="text-muted-foreground">— Vorschau (max. 8)</span>
+                <span className="text-muted-foreground">— Vorschau aller Einträge</span>
               </div>
-              <div className="overflow-auto max-h-60">
+              <div className="overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/20 text-muted-foreground">
                     <tr>
@@ -376,7 +377,7 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.slice(0, 8).map((r, i) => (
+                    {rows.map((r, i) => (
                       <tr key={i} className="border-t border-border">
                         <td className="p-2">{r.full_name}</td>
                         <td className="p-2">{r.email}</td>

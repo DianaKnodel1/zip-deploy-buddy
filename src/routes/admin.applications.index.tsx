@@ -626,6 +626,19 @@ function AdminApplicationsPage() {
                 </div>
               </div>
 
+              {preview.stats && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+                  <div className="font-medium text-muted-foreground">Filter-Statistik (akzeptierte Bewerbungen)</div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                    <span>Akzeptiert gesamt: <strong className="text-foreground">{preview.stats.acceptedTotal}</strong></span>
+                    <span>− ohne E-Mail/Tenant: <strong className="text-foreground">{preview.stats.missingEmailOrTenant}</strong></span>
+                    <span>− bereits registriert: <strong className="text-foreground">{preview.stats.alreadyRegistered}</strong></span>
+                    <span>− Doppel-Bewerbungen (gleiche E-Mail): <strong className="text-foreground">{preview.stats.duplicateEmail}</strong></span>
+                    <span>= übrig: <strong className="text-foreground">{previewEligible}</strong></span>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="text-xs">Versand über (Stunden, 1–168)</Label>
                 <div className="flex items-center gap-2">

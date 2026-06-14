@@ -512,6 +512,93 @@ function AdminApplicationsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={dripOpen} onOpenChange={(o) => { if (!resendInvitesLoading) setDripOpen(o); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Eye className="h-4 w-4" /> Vorschau: Drip-Einladungen</DialogTitle>
+            <DialogDescription>
+              Keine Mail wurde gesendet. Prüfe Empfängerzahl und Verteilung, dann freigeben.
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewLoading || !preview ? (
+            <div className="py-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Lade Vorschau…
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-bold">{preview.eligible}</div>
+                  <div className="text-[11px] text-muted-foreground">Akzeptiert ohne Account</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-primary/5">
+                  <div className="text-2xl font-bold text-primary">{preview.wouldQueue ?? 0}</div>
+                  <div className="text-[11px] text-muted-foreground">Werden eingeplant</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-bold text-muted-foreground">{preview.alreadyQueued}</div>
+                  <div className="text-[11px] text-muted-foreground">Schon in Queue (skip)</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Versand über (Stunden, 1–168)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number" min={1} max={168} value={windowHours}
+                    onChange={(e) => setWindowHours(Math.max(1, Math.min(168, parseInt(e.target.value, 10) || 48)))}
+                    className="h-9 w-32"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    ≈ {preview.wouldQueue && windowHours > 0 ? Math.round((preview.wouldQueue / windowHours) * 10) / 10 : 0} Mails/Stunde im Schnitt
+                  </span>
+                </div>
+              </div>
+
+              {Object.keys(preview.perTenant).length > 0 && (
+                <div className="text-xs space-y-1">
+                  <div className="font-medium text-muted-foreground">Verteilung pro Tenant:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(preview.perTenant).map(([tid, n]) => (
+                      <Badge key={tid} variant="secondary" className="text-[10px]">
+                        {tenantMap[tid]?.name ?? tid.slice(0, 8)}: {n}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {preview.sample.length > 0 && (
+                <div className="text-xs">
+                  <div className="font-medium text-muted-foreground mb-1.5">Erste {preview.sample.length} Empfänger (Stichprobe):</div>
+                  <div className="max-h-48 overflow-auto rounded border divide-y">
+                    {preview.sample.map((s, i) => (
+                      <div key={i} className="px-2 py-1.5 flex justify-between gap-2">
+                        <span className="truncate">{s.full_name ?? "—"} · <span className="text-muted-foreground">{s.email}</span></span>
+                        <span className="text-muted-foreground shrink-0">{tenantMap[s.tenant_id]?.name ?? "?"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDripOpen(false)} disabled={resendInvitesLoading}>Abbrechen</Button>
+            <Button
+              onClick={confirmDripSend}
+              disabled={resendInvitesLoading || previewLoading || !preview || (preview.wouldQueue ?? 0) === 0}
+            >
+              {resendInvitesLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MailPlus className="h-4 w-4 mr-1.5" />}
+              {preview ? `${preview.wouldQueue ?? 0} Einladungen einplanen` : "Einplanen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }

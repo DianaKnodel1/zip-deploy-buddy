@@ -27,6 +27,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     const dryRun = !!data.dryRun;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;
+    const pageSize = 1000;
 
     // 1) Auth-User-E-Mails einsammeln
     const existing = new Set<string>();
@@ -39,12 +40,18 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     }
 
     // 2) Akzeptierte Bewerbungen ohne Auth-Account (per E-Mail dedupliziert)
-    const { data: apps, error } = await sb
-      .from("applications")
-      .select("id, email, full_name, first_name, last_name, phone, tenant_id, status, created_at")
-      .eq("status", "akzeptiert")
-      .order("created_at", { ascending: true });
-    if (error) throw new Error(error.message);
+    const apps: any[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data: chunk, error } = await sb
+        .from("applications")
+        .select("id, email, full_name, first_name, last_name, phone, tenant_id, status, created_at")
+        .eq("status", "akzeptiert")
+        .order("created_at", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw new Error(error.message);
+      apps.push(...(chunk ?? []));
+      if (!chunk || chunk.length < pageSize) break;
+    }
 
     const acceptedTotal = (apps ?? []).length;
     let missingEmailOrTenant = 0;
@@ -67,11 +74,18 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     }
 
     // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.
-    const { data: openRows } = await sb
-      .from("invite_resend_queue")
-      .select("application_id")
-      .eq("status", "queued");
-    const openSet = new Set<string>((openRows ?? []).map((r: any) => r.application_id));
+    const openRows: Array<{ application_id: string }> = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data: chunk, error } = await sb
+        .from("invite_resend_queue")
+        .select("application_id")
+        .eq("status", "queued")
+        .range(from, from + pageSize - 1);
+      if (error) throw new Error(error.message);
+      openRows.push(...((chunk ?? []) as Array<{ application_id: string }>));
+      if (!chunk || chunk.length < pageSize) break;
+    }
+    const openSet = new Set<string>(openRows.map((r) => r.application_id));
     const fresh = targets.filter((a: any) => !openSet.has(a.id));
     const alreadyQueued = targets.length - fresh.length;
 

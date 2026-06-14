@@ -383,10 +383,18 @@ export function AdminEmailLogsPage() {
                 <DetailRow label="Typ" value={EMAIL_TYPE_LABELS[previewLog.template_name] ?? previewLog.template_name} />
                 <DetailRow label="Empfänger" value={previewLog.recipient_email} />
                 <DetailRow label="Absender" value={previewLog.sender_email || previewLog.metadata?.from_email || "–"} />
-                <DetailRow label="SMTP-Host" value={previewLog.metadata?.smtp_host || "–"} />
+                <DetailRow label="Tenant" value={previewLog.metadata?.tenant_name || "–"} />
+                <DetailRow label="Reply-To" value={previewLog.metadata?.reply_to || "–"} />
+                <DetailRow
+                  label="SMTP-Server"
+                  value={previewLog.metadata?.smtp_host
+                    ? `${previewLog.metadata.smtp_host}:${previewLog.metadata.smtp_port ?? "?"}${previewLog.metadata.smtp_secure ? " (TLS)" : ""}`
+                    : "–"}
+                />
+                <DetailRow label="SMTP-User" value={previewLog.metadata?.smtp_username || "–"} />
                 <DetailRow label="Zeitpunkt" value={new Date(previewLog.created_at).toLocaleString("de-DE")} />
                 <DetailRow label="Betreff" value={previewLog.rendered_subject || previewLog.metadata?.subject || "–"} />
-                <DetailRow label="Message-ID" value={previewLog.message_id || "–"} />
+                <DetailRow label="Message-ID" value={previewLog.message_id || previewLog.metadata?.message_id || "–"} />
               </div>
 
               {previewLog.error_message && (

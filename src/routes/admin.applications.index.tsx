@@ -330,6 +330,17 @@ function AdminApplicationsPage() {
             {remindersLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             Erinnerungen senden
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-xs gap-1.5"
+            disabled={resendInvitesLoading}
+            onClick={resendInvitesToAllUnregistered}
+            title="Sendet allen akzeptierten Bewerbern, die noch keinen Account haben, erneut die Einladungs-Mail (umgeht 3-Tage-Sperre)"
+          >
+            {resendInvitesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
+            Einladung erneut senden
+          </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("bewerbungen.csv", filtered, [
             { key: "full_name", label: "Name" }, { key: "email", label: "E-Mail" }, { key: "phone", label: "Telefon" },
             { key: "status", label: "Status" }, { key: "created_at", label: "Datum" },

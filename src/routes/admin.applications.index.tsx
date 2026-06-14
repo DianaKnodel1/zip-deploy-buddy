@@ -121,6 +121,23 @@ function AdminApplicationsPage() {
     }
   };
 
+  const resendInvitesToAllUnregistered = async () => {
+    if (!confirm("Allen akzeptierten Bewerbern, die sich noch nicht registriert haben, erneut die Einladung senden?")) return;
+    setResendInvitesLoading(true);
+    try {
+      const r = await resendInvitesFn();
+      toast({
+        title: r.failed > 0 ? "Einladungen versendet (mit Fehlern)" : "Einladungen versendet",
+        description: `${r.sent} von ${r.eligible} Einladungen gesendet · ${r.failed} fehlgeschlagen`,
+        variant: r.failed > 0 ? "destructive" : "default",
+      });
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+    } finally {
+      setResendInvitesLoading(false);
+    }
+  };
+
   const acceptApplication = async (app: typeof applications[0], e: React.MouseEvent) => {
     e.stopPropagation();
     setActionLoading(app.id);

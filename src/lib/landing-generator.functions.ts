@@ -26,6 +26,7 @@ const BrandingSchema = z.object({
   primary_color: HexColor,
   secondary_color: HexColor,
   whatsapp_number: z.string().max(40).default(""),
+  whatsapp_enabled: z.coerce.boolean().default(false),
   email: z.string().email().max(255),
   telefon: z.string().max(40).default(""),
   telefon_2: z.string().max(40).default(""),
@@ -106,7 +107,7 @@ window.PORTAL_API = "${escape(b.api_endpoint)}";
 window.PORTAL_URL = "${escape(b.portal_url ?? "")}";
 window.TENANT_ID = "${escape(b.tenant_id ?? "")}";
 window.FLOW_TYPE = "${escape(b.flow_type)}";
-window.WHATSAPP_NUMBER = "${escape((b.whatsapp_number ?? "").replace(/[^0-9]/g, ""))}";
+window.WHATSAPP_NUMBER = "${escape(b.whatsapp_enabled ? (b.whatsapp_number ?? "").replace(/[^0-9]/g, "") : "")}";
 </script>`;
   if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, block + "</head>");
   return block + html;

@@ -21,6 +21,7 @@ type Branding = {
   primary_color: string;
   secondary_color: string;
   whatsapp_number: string;
+  whatsapp_enabled: boolean;
   email: string;
   telefon: string;
   telefon_2: string;
@@ -50,6 +51,7 @@ const EMPTY: Branding = {
   primary_color: "#2563eb",
   secondary_color: "#1e40af",
   whatsapp_number: "",
+  whatsapp_enabled: false,
   email: "",
   telefon: "",
   telefon_2: "",
@@ -214,7 +216,7 @@ document.addEventListener('click', function(e){
   if(b){ var item = b.closest('.faq-item'); if(item) item.classList.toggle('open'); }
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
-var __WA = ${JSON.stringify((branding.whatsapp_number || "").replace(/[^0-9]/g, ""))};
+var __WA = ${JSON.stringify(branding.whatsapp_enabled ? (branding.whatsapp_number || "").replace(/[^0-9]/g, "") : "")};
 document.addEventListener('submit', function(e){
   var f = e.target && e.target.id === 'application-form' ? e.target : null;
   if(!f) return;
@@ -408,6 +410,19 @@ document.addEventListener('submit', function(e){
                   </div>
                 </Field>
                 <Field label="WhatsApp-Nummer (international, ohne +)"><Input value={branding.whatsapp_number} onChange={set("whatsapp_number")} placeholder="491234567890" /></Field>
+                <Field label="WhatsApp im Erfolgs-Popup & als Floating-Button anzeigen">
+                  <label className="flex items-center gap-2 h-10 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={branding.whatsapp_enabled}
+                      onChange={(e) => setBranding((b) => ({ ...b, whatsapp_enabled: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-muted-foreground">
+                      Aktiviert „Jetzt bei WhatsApp kontaktieren" nach erfolgreicher Bewerbung (Link auf wa.me/{branding.whatsapp_number || "…"}).
+                    </span>
+                  </label>
+                </Field>
                 <Field label="Kontakt-E-Mail *"><Input type="email" value={branding.email} onChange={set("email")} /></Field>
                 <Field label="Telefon"><Input value={branding.telefon} onChange={set("telefon")} /></Field>
                 <Field label="Straße & Hausnummer"><Input value={branding.strasse} onChange={set("strasse")} /></Field>

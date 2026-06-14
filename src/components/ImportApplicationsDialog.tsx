@@ -89,6 +89,10 @@ const SKIP_LINE_RE = /^(bewerber\s*information|adresse|anschrift|wohnort|geboren
 // Länder / Bundesländer in eigenen Zeilen ignorieren
 const COUNTRY_RE = /^(deutschland|österreich|schweiz|germany|austria|switzerland)$/i;
 
+function normalizeInlineSeparators(s: string): string {
+  return s.replace(/\s+(?=[|•·●])|(?<=[|•·●])\s*/g, " | ").replace(/\s*\|\s*/g, " | ");
+}
+
 function stripCtl(s: string): string {
   // Unsichtbare Steuerzeichen (LRE/RLE/PDF/LRM/RLM/BOM …) entfernen
   return s.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "");
@@ -114,15 +118,14 @@ function isNameCandidate(s: string): boolean {
 function parseBlock(block: string): Row | null {
   const raw = block
     .split(/\r?\n/)
-    .map((l) => stripCtl(l).replace(/^[•·●○*]+\s*/, "").trim())
+    .flatMap((l) => normalizeInlineSeparators(stripCtl(l)).split(/\s+\|\s+/))
+    .map((l) => l.replace(/^[•·●○*]+\s*/, "").trim())
     .filter(Boolean);
   if (raw.length === 0) return null;
 
   // E-Mail extrahieren
   let email = "";
   for (const l of raw) { const m = l.match(EMAIL_RE); if (m) { email = m[0]; break; } }
-  if (!email) return null;
-
   // Telefon extrahieren — Label-Zeile bevorzugt, sonst irgendwo (außer E-Mail-Zeile)
   let phone: string | null = null;
   for (const l of raw) {
@@ -152,7 +155,8 @@ function parseBlock(block: string): Row | null {
     const nameParts: string[] = [];
     for (const l of raw) {
       if (EMAIL_LABEL_RE.test(l) || PHONE_LABEL_RE.test(l)) continue;
-      if (EMAIL_RE.test(l)) continue;
+      const withoutEmailLabel = l.replace(EMAIL_LABEL_RE, "").trim();
+      if (EMAIL_RE.test(withoutEmailLabel)) continue;
       if (PHONE_RE.test(l) && l.replace(/\D/g, "").length >= 7) continue;
       if (SKIP_LINE_RE.test(l)) continue;
       if (COUNTRY_RE.test(l)) continue;
@@ -164,7 +168,7 @@ function parseBlock(block: string): Row | null {
     }
     name = nameParts.join(" ").replace(/\s+/g, " ").trim();
   }
-  if (!name) return null;
+  if (!name || !email) return null;
 
   // Trailing-Kommas/Punkte entfernen
   name = name.replace(/[,;]+$/, "").trim();
@@ -181,7 +185,8 @@ function parseBlock(block: string): Row | null {
 function parseFreeText(text: string): { rows: Row[]; errors: string[] } {
   // Blöcke trennen: Linien aus Bindestrichen ODER 2+ Leerzeilen
   const blocks = text
-    .split(/\n\s*-{3,}\s*\n|\n{2,}/)
+    .replace(/\r/g, "")
+    .split(/(?:^|\n)\s*-{3,}\s*(?=\n|$)|\n\s*_{3,}\s*(?=\n|$)|\n\s*= {0,}-{2,}\s*(?=\n|$)|\n{2,}/)
     .map((b) => b.trim())
     .filter(Boolean);
   const rows: Row[] = [];

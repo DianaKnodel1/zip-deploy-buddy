@@ -302,7 +302,7 @@ export function AdminEmailLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.slice(0, 100).map((log) => {
+              {paged.map((log) => {
                 const canResend = ["failed", "dlq"].includes(log.status);
                 const smtpHost = log.metadata?.smtp_host;
 

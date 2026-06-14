@@ -242,18 +242,9 @@ function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="text-sm font-medium text-white/90">
-                    Passwort
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/forgot-password")}
-                    className="text-xs font-medium text-white/50 hover:text-white transition-colors"
-                  >
-                    Vergessen?
-                  </button>
-                </div>
+                <label htmlFor="password" className="text-sm font-medium text-white/90">
+                  Passwort
+                </label>
                 <Input
                   id="password"
                   type="password"
@@ -264,7 +255,17 @@ function LoginPage() {
                   className="h-11 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-white/20 focus-visible:border-white/30"
                   required
                 />
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-xs font-medium text-white/60 hover:text-white underline-offset-4 hover:underline transition-colors"
+                  >
+                    Passwort vergessen?
+                  </button>
+                </div>
               </div>
+
 
               <Button
                 type="submit"

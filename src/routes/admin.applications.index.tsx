@@ -123,9 +123,7 @@ function AdminApplicationsPage() {
     return { sent, failures };
   };
 
-  const openDripDialog = async () => {
-    setDripOpen(true);
-    setPreview(null);
+  const loadPreview = async () => {
     setPreviewLoading(true);
     try {
       const r = await resendInvitesFn({ data: { windowHours, dryRun: true } });
@@ -133,7 +131,7 @@ function AdminApplicationsPage() {
         eligible: r.eligible,
         wouldQueue: (r as any).wouldQueue ?? 0,
         alreadyQueued: (r as any).alreadyQueued ?? 0,
-        sample: (r as any).sample ?? [],
+        items: (r as any).items ?? [],
         perTenant: (r as any).perTenant ?? {},
       });
     } catch (err: any) {
@@ -143,6 +141,32 @@ function AdminApplicationsPage() {
       setPreviewLoading(false);
     }
   };
+
+  const openDripDialog = async () => {
+    setDripOpen(true);
+    setPreview(null);
+    setPreviewSelected(new Set());
+    await loadPreview();
+  };
+
+  const rejectPreviewSelected = async () => {
+    if (previewSelected.size === 0) return;
+    setRejectingPreview(true);
+    try {
+      const ids = Array.from(previewSelected);
+      const { error } = await supabase.from("applications").update({ status: "abgelehnt" }).in("id", ids);
+      if (error) throw error;
+      toast({ title: "Aus Drip ausgeschlossen", description: `${ids.length} Bewerber auf "abgelehnt" gesetzt.` });
+      setPreviewSelected(new Set());
+      await loadData();
+      await loadPreview();
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+    } finally {
+      setRejectingPreview(false);
+    }
+  };
+
 
   const confirmDripSend = async () => {
     setResendInvitesLoading(true);

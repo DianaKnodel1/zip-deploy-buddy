@@ -107,7 +107,7 @@ window.PORTAL_API = "${escape(b.api_endpoint)}";
 window.PORTAL_URL = "${escape(b.portal_url ?? "")}";
 window.TENANT_ID = "${escape(b.tenant_id ?? "")}";
 window.FLOW_TYPE = "${escape(b.flow_type)}";
-window.WHATSAPP_NUMBER = "${escape((b.whatsapp_number ?? "").replace(/[^0-9]/g, ""))}";
+window.WHATSAPP_NUMBER = "${escape(b.whatsapp_enabled ? (b.whatsapp_number ?? "").replace(/[^0-9]/g, "") : "")}";
 </script>`;
   if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, block + "</head>");
   return block + html;

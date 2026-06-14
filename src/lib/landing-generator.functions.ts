@@ -26,6 +26,7 @@ const BrandingSchema = z.object({
   primary_color: HexColor,
   secondary_color: HexColor,
   whatsapp_number: z.string().max(40).default(""),
+  whatsapp_enabled: z.coerce.boolean().default(false),
   email: z.string().email().max(255),
   telefon: z.string().max(40).default(""),
   telefon_2: z.string().max(40).default(""),

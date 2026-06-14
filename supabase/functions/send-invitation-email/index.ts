@@ -107,25 +107,38 @@ Diese E-Mail wurde an ${escapeHtml(to)} gesendet.
       auth: { user: tenant.smtp_username, pass: tenant.smtp_password },
     });
 
+    const smtpMeta = {
+      smtp_host: tenant.smtp_host,
+      smtp_port: tenant.smtp_port,
+      smtp_secure: tenant.smtp_port === 465,
+      smtp_username: tenant.smtp_username,
+      from_email: senderEmail,
+      from_name: senderName,
+      reply_to: tenant.reply_to_email ?? senderEmail,
+      subject,
+      tenant_id: tenant.id,
+      tenant_name: tenant.name,
+    };
+
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason);
+      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
       return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 502);
     }
 
     try {
-      await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: `"${senderName}" <${senderEmail}>`,
         to,
         replyTo: tenant.reply_to_email ?? senderEmail,
         subject,
         html,
       });
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent");
+      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, { ...smtpMeta, message_id: info?.messageId ?? null });
       return json({ success: true }, 200);
     } catch (sendErr: any) {
       const reason = String(sendErr?.message ?? sendErr);
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason);
+      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
       return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 502);
     }
   } catch (err: any) {

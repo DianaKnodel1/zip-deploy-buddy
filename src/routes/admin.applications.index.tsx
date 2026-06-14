@@ -50,6 +50,7 @@ function AdminApplicationsPage() {
     eligible: number; wouldQueue?: number; alreadyQueued: number;
     items: Array<{ id: string; email: string; full_name: string | null; first_name: string | null; last_name: string | null; phone: string | null; tenant_id: string; status: string; created_at: string }>;
     perTenant: Record<string, number>;
+    stats?: { acceptedTotal: number; missingEmailOrTenant: number; alreadyRegistered: number; duplicateEmail: number };
   } | null>(null);
   const [previewSelected, setPreviewSelected] = useState<Set<string>>(new Set());
   const [rejectingPreview, setRejectingPreview] = useState(false);
@@ -158,6 +159,7 @@ function AdminApplicationsPage() {
         alreadyQueued: (r as any).alreadyQueued ?? 0,
         items: (r as any).items ?? [],
         perTenant: (r as any).perTenant ?? {},
+        stats: (r as any).stats,
       });
     } catch (err: any) {
       toast({ title: "Vorschau fehlgeschlagen", description: err.message, variant: "destructive" });
@@ -623,6 +625,19 @@ function AdminApplicationsPage() {
                   </div>
                 </div>
               </div>
+
+              {preview.stats && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+                  <div className="font-medium text-muted-foreground">Filter-Statistik (akzeptierte Bewerbungen)</div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                    <span>Akzeptiert gesamt: <strong className="text-foreground">{preview.stats.acceptedTotal}</strong></span>
+                    <span>− ohne E-Mail/Tenant: <strong className="text-foreground">{preview.stats.missingEmailOrTenant}</strong></span>
+                    <span>− bereits registriert: <strong className="text-foreground">{preview.stats.alreadyRegistered}</strong></span>
+                    <span>− Doppel-Bewerbungen (gleiche E-Mail): <strong className="text-foreground">{preview.stats.duplicateEmail}</strong></span>
+                    <span>= übrig: <strong className="text-foreground">{previewEligible}</strong></span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label className="text-xs">Versand über (Stunden, 1–168)</Label>

@@ -38,7 +38,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       if (users.length < 1000) break;
     }
 
-    // 2) Akzeptierte Bewerbungen ohne Auth-Account
+    // 2) Akzeptierte Bewerbungen ohne Auth-Account (per E-Mail dedupliziert)
     const { data: apps, error } = await sb
       .from("applications")
       .select("id, email, full_name, first_name, last_name, phone, tenant_id, status, created_at")
@@ -46,13 +46,24 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
 
+    const acceptedTotal = (apps ?? []).length;
+    let missingEmailOrTenant = 0;
+    let alreadyRegistered = 0;
+    let duplicateEmail = 0;
+    const seenEmails = new Set<string>();
+
     const targets = (apps ?? []).filter((a: any) => {
-      const e = (a.email ?? "").toLowerCase();
-      return e && !existing.has(e) && a.tenant_id;
+      const e = (a.email ?? "").toLowerCase().trim();
+      if (!e || !a.tenant_id) { missingEmailOrTenant++; return false; }
+      if (existing.has(e)) { alreadyRegistered++; return false; }
+      if (seenEmails.has(e)) { duplicateEmail++; return false; }
+      seenEmails.add(e);
+      return true;
     });
+    const stats = { acceptedTotal, missingEmailOrTenant, alreadyRegistered, duplicateEmail };
 
     if (targets.length === 0) {
-      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, items: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0, wouldQueue: 0 };
+      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, items: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0, wouldQueue: 0, stats };
     }
 
     // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.
@@ -76,11 +87,11 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     }));
 
     if (fresh.length === 0) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: 0 };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: 0, stats };
     }
 
     if (dryRun) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length, stats };
     }
 
 
@@ -124,7 +135,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       queued += count ?? chunk.length;
     }
 
-    return { eligible: targets.length, queued, windowHours, batchId, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length };
+    return { eligible: targets.length, queued, windowHours, batchId, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length, stats };
   });
 
 /**

@@ -86,6 +86,8 @@ export function AdminEmailLogsPage() {
     });
   }, [logs, filterStatus, search]);
 
+  const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 100);
+
   const resendEmail = async (log: EmailLog) => {
     setResending(log.id);
     try {

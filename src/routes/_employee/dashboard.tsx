@@ -21,6 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useNextStep } from "@/hooks/use-next-step";
 import { useToast } from "@/hooks/use-toast";
+import { TeamLeaderCard } from "@/components/TeamLeaderCard";
+import { OnboardingFAQ } from "@/components/OnboardingFAQ";
 
 interface Transaction {
   id: string;
@@ -157,18 +159,39 @@ function DashboardPage() {
   const nextStep = nextStepResult;
 
   const kycDone = kyc?.status === "verifiziert";
-  const kycSubmitted = kyc?.status === "verifiziert" || kyc?.status === "in_pruefung";
-  const checklistItems = [
-    { id: "kyc", label: "Identität verifizieren", desc: "Lade deinen Personalausweis hoch, damit wir dich bestätigen können.", icon: ShieldCheck, done: kycDone, path: "/verification", enabled: true },
-    { id: "contract", label: "Arbeitsvertrag unterschreiben", desc: "Unterschreibe digital deinen Arbeitsvertrag.", icon: FileText, done: contractSigned, path: "/contract", enabled: true },
-    { id: "onboarding", label: "Einführung abschließen", desc: "Lerne in 6 kurzen Schritten die wichtigsten Abläufe kennen.", icon: GraduationCap, done: onboardingDone, path: "/onboarding", enabled: contractSigned },
-    { id: "appointment", label: "Ersten Termin buchen", desc: "Sobald wir deine Registrierung geprüft haben, kannst du deinen ersten Termin buchen.", icon: CalendarDays, done: hasAppointment, path: "/appointments", enabled: onboardingDone && canBookAppointments },
+  const kycSubmitted = kyc?.status === "verifiziert" || kyc?.status === "in_pruefung" || kyc?.status === "eingereicht";
+
+  // 🎯 NUR die 2 conversion-kritischen Schritte: Vertrag zuerst, dann Ausweis.
+  // Bewusst weggelassen aus der primären Liste: Einführung-Tour, Terminbuchung
+  // → die kommen erst NACH der Personalprüfung (inReview-Banner).
+  const primarySteps = [
+    {
+      id: "contract",
+      label: "Arbeitsvertrag unterschreiben",
+      desc: "Digital in wenigen Sekunden — kein Drucken, kein Scannen.",
+      duration: "ca. 1 Minute",
+      icon: FileText,
+      done: contractSigned,
+      path: "/contract",
+      enabled: true,
+    },
+    {
+      id: "kyc",
+      label: "Personalausweis hochladen",
+      desc: "Kurze Identitätsprüfung — Pflicht nach §6 GwG.",
+      duration: "ca. 1 Minute",
+      icon: ShieldCheck,
+      done: kycSubmitted,
+      // Ausweis erst nach Vertrag freischalten — Commitment-Reihenfolge!
+      path: "/verification",
+      enabled: contractSigned,
+    },
   ];
-  const completedChecklist = checklistItems.filter((i) => i.done).length;
-  const checklistProgress = (completedChecklist / checklistItems.length) * 100;
-  const nextChecklistItem = checklistItems.find((i) => !i.done && i.enabled);
-  // Alle Mitarbeiter-seitigen Schritte sind erledigt (Vertrag + KYC eingereicht),
-  // aber das Profil ist noch nicht angenommen → Personalabteilung prüft.
+  const primaryDoneCount = primarySteps.filter((s) => s.done).length;
+  const remaining = primarySteps.length - primaryDoneCount;
+  const nextPrimary = primarySteps.find((s) => !s.done && s.enabled);
+
+  // Personalabteilung prüft Registrierung
   const inReview = !fullyActive && !isDeactivated && contractSigned && kycSubmitted && profile?.status === "registriert";
 
 
@@ -194,30 +217,183 @@ function DashboardPage() {
       fullyActive ? "max-w-7xl" : "max-w-3xl"
     )}>
 
-      {/* Greeting */}
-      <div className="animate-fade-in">
-        <h1 className="text-2xl font-heading font-bold text-foreground">{greeting()}, {firstName} 👋</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {fullyActive ? "Hier ist dein Überblick." : "Schließe die nächsten Schritte ab, um loszulegen."}
-        </p>
-      </div>
-
-      {/* Grüne Guthaben-Bar — nur im Onboarding/Übergang sichtbar (im Active-Layout sitzt sie in der linken Spalte) */}
+      {/* ── ONBOARDING VIEW (Conversion-optimiert) ── */}
       {!fullyActive && !isDeactivated && (
-        <button
-          onClick={() => navigate("/earnings")}
-          data-tour="balance"
-          className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-md px-5 py-3.5 flex items-center justify-between text-white"
-        >
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            <span className="text-sm font-semibold">Ihr Guthaben:</span>
+        <>
+          {/* Hero-Greeting */}
+          <div className="animate-fade-in space-y-2">
+            <h1 className="text-3xl sm:text-4xl font-heading font-bold text-foreground tracking-tight">
+              Willkommen im Team, {firstName} 👋
+            </h1>
+            {inReview ? (
+              <p className="text-base text-muted-foreground">
+                Geschafft! Deine Unterlagen werden geprüft.
+              </p>
+            ) : remaining === 0 ? (
+              <p className="text-base text-muted-foreground">
+                Alles erledigt — gleich kann's losgehen 🎉
+              </p>
+            ) : (
+              <>
+                <p className="text-lg text-foreground">
+                  Nur noch <span className="font-bold text-primary">{remaining === 1 ? "1 Schritt" : `${remaining} Schritte`}</span> bis zu deinem ersten Auftrag.
+                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground pt-1">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    Kontoerstellung abgeschlossen
+                  </span>
+                  <span className="text-muted-foreground/40">•</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Dauer: ca. {remaining === 1 ? "1 Minute" : "2 Minuten"}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-          <span className="text-lg font-heading font-bold tabular-nums">
-            {balance.toFixed(2).replace(".", ",")} €
-          </span>
-        </button>
+
+          {/* Teamleiter — prominent oben, signalisiert Hilfe verfügbar */}
+          <TeamLeaderCard />
+
+          {/* Guthaben-Bar (klein, sekundär) */}
+          <button
+            onClick={() => navigate("/earnings")}
+            data-tour="balance"
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-md px-5 py-3 flex items-center justify-between text-white"
+          >
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              <span className="text-sm font-semibold">Dein Guthaben:</span>
+            </div>
+            <span className="text-base font-heading font-bold tabular-nums">
+              {balance.toFixed(2).replace(".", ",")} €
+            </span>
+          </button>
+
+          {/* "Wird geprüft"-Banner — wenn beide Schritte erledigt */}
+          {inReview && (
+            <Card className="animate-fade-in border-primary/15 bg-gradient-to-br from-primary/5 to-accent/5">
+              <CardContent className="py-5 px-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <Clock className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-heading font-bold text-foreground">Deine Registrierung wird geprüft 🎉</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Du hast alle Schritte abgeschlossen. Unsere Personalabteilung prüft deine Unterlagen –
+                      das dauert in der Regel <strong>bis zu 24 Stunden</strong>.
+                      Sobald wir dich freigeschaltet haben, kannst du deinen ersten Termin buchen
+                      und deinen ersten Auftrag erhalten.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* EIN primärer CTA — nur der nächste Schritt */}
+          {nextPrimary && !inReview && (
+            <Card className="animate-fade-in overflow-hidden border-none shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80">
+              <CardContent className="py-7 px-6">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-primary-foreground/70 uppercase tracking-wider font-medium">
+                    Dein nächster Schritt
+                  </p>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-primary-foreground/70 bg-primary-foreground/10 px-2 py-0.5 rounded-full">
+                    <Clock className="h-3 w-3" />
+                    {nextPrimary.duration}
+                  </span>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-primary-foreground/15 flex items-center justify-center shrink-0">
+                    <nextPrimary.icon className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-heading font-bold text-xl text-primary-foreground">{nextPrimary.label}</p>
+                    <p className="text-sm text-primary-foreground/80 mt-1 leading-relaxed">{nextPrimary.desc}</p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => navigate(nextPrimary.path)}
+                  className="w-full mt-5 gap-2 h-12 text-base font-semibold bg-primary-foreground text-primary hover:bg-primary-foreground/90 rounded-xl"
+                >
+                  Jetzt starten <ArrowRight className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Mini-Checkliste (2 Items, klar visualisiert) */}
+          <Card className="animate-fade-in" data-tour="checklist">
+            <CardContent className="py-4 px-6 space-y-0.5">
+              {primarySteps.map((item) => {
+                const isNext = item === nextPrimary;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => item.enabled && !item.done ? navigate(item.path) : undefined}
+                    disabled={!item.enabled || item.done}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-left transition-all",
+                      item.done && "opacity-60",
+                      item.enabled && !item.done && "hover:bg-primary/5 cursor-pointer",
+                      !item.enabled && !item.done && "opacity-40 cursor-not-allowed",
+                      isNext && "bg-primary/5 ring-1 ring-primary/15",
+                    )}
+                  >
+                    <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
+                      item.done ? "bg-emerald-500/10" : isNext ? "bg-primary/10" : "bg-muted"
+                    )}>
+                      {item.done ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> :
+                       !item.enabled ? <Lock className="h-4 w-4 text-muted-foreground/40" /> :
+                       <Circle className="h-4 w-4 text-muted-foreground/30" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={cn("text-sm font-semibold block", item.done ? "line-through text-muted-foreground" : "text-foreground")}>
+                        {item.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {item.done ? "Erledigt ✓" : `${item.duration}`}
+                      </span>
+                    </div>
+                    {isNext && <ArrowRight className="h-4 w-4 text-primary shrink-0" />}
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Einführung-Tour als sekundärer Link (nicht mehr als Haupt-Step) */}
+          {contractSigned && kycSubmitted && !onboardingDone && (
+            <button
+              onClick={() => navigate("/onboarding")}
+              className="w-full text-left rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors px-5 py-3 flex items-center gap-3"
+            >
+              <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Optional: Kurze Einführung ansehen</p>
+                <p className="text-xs text-muted-foreground">Lerne die wichtigsten Abläufe in 4 kurzen Schritten</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
+
+          {/* Trust-Strip */}
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground pt-2">
+            <span className="inline-flex items-center gap-1.5">🔒 DSGVO-konform</span>
+            <span className="inline-flex items-center gap-1.5">🔒 Verschlüsselte Übertragung</span>
+            <span className="inline-flex items-center gap-1.5">🔒 Keine Weitergabe an Dritte</span>
+          </div>
+
+          {/* FAQ */}
+          <OnboardingFAQ />
+        </>
       )}
+
       {/* Deactivated */}
       {isDeactivated && (
         <Card className="animate-fade-in border-destructive/20 bg-destructive/5">
@@ -229,8 +405,16 @@ function DashboardPage() {
         </Card>
       )}
 
-      {/* Scheduled task countdown */}
-      {scheduledTask && !taskCount && (
+      {/* Aktive User: Active-Dashboard-Greeting */}
+      {fullyActive && (
+        <div className="animate-fade-in">
+          <h1 className="text-2xl font-heading font-bold text-foreground">{greeting()}, {firstName} 👋</h1>
+          <p className="text-muted-foreground text-sm mt-1">Hier ist dein Überblick.</p>
+        </div>
+      )}
+
+      {/* Scheduled task countdown (nur aktive Phase) */}
+      {fullyActive && scheduledTask && !taskCount && (
         <Card className="animate-fade-in border-primary/15 bg-primary/5">
           <CardContent className="py-4 px-6">
             <div className="flex items-center gap-4">
@@ -246,102 +430,6 @@ function DashboardPage() {
         </Card>
       )}
 
-      {/* ── ONBOARDING VIEW ── */}
-      {!fullyActive && !isDeactivated && (
-        <>
-          {/* Personalabteilung prüft Registrierung */}
-          {inReview && (
-            <Card className="animate-fade-in border-primary/15 bg-gradient-to-br from-primary/5 to-accent/5">
-              <CardContent className="py-5 px-6">
-                <div className="flex items-start gap-4">
-                  <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-                    <Clock className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-heading font-bold text-foreground">Deine Registrierung wird geprüft</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Vielen Dank! Du hast alle erforderlichen Daten eingereicht.
-                      Unsere Personalabteilung prüft deine Unterlagen – das dauert in der Regel <strong>bis zu 24 Stunden</strong>.
-                      Sobald wir dich freigeschaltet haben, kannst du deinen ersten Termin buchen.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Next step CTA */}
-          {nextChecklistItem && !inReview && (
-            <Card className="animate-fade-in overflow-hidden border-none shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80">
-              <CardContent className="py-7 px-6">
-                <p className="text-xs text-primary-foreground/60 uppercase tracking-wider font-medium mb-2">Dein nächster Schritt</p>
-                <div className="flex items-start gap-4">
-                  <div className="h-12 w-12 rounded-2xl bg-primary-foreground/15 flex items-center justify-center shrink-0">
-                    <nextChecklistItem.icon className="h-6 w-6 text-primary-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-heading font-bold text-lg text-primary-foreground">{nextChecklistItem.label}</p>
-                    <p className="text-sm text-primary-foreground/80 mt-1 leading-relaxed">{nextChecklistItem.desc}</p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => navigate(nextChecklistItem.path)}
-                  className="w-full mt-5 gap-2 h-11 text-sm font-semibold bg-primary-foreground text-primary hover:bg-primary-foreground/90 rounded-xl"
-                >
-                  Jetzt erledigen <ArrowRight className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Progress */}
-          <Card className="animate-fade-in">
-            <CardContent className="py-5 px-6">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-foreground">
-                  {completedChecklist === checklistItems.length ? "Alles erledigt! 🎉" : `Noch ${checklistItems.length - completedChecklist} Schritte`}
-                </p>
-                <span className="text-sm font-bold text-primary">{completedChecklist}/{checklistItems.length}</span>
-              </div>
-              <Progress value={checklistProgress} className="h-2" />
-            </CardContent>
-          </Card>
-
-
-          {/* Checklist */}
-          <Card className="animate-fade-in" data-tour="checklist">
-            <CardContent className="py-4 px-6 space-y-0.5">
-              {checklistItems.map((item) => {
-                const isNext = item === nextChecklistItem;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => item.enabled && !item.done ? navigate(item.path) : undefined}
-                    disabled={!item.enabled || item.done}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-left transition-all",
-                      item.done && "opacity-50",
-                      item.enabled && !item.done && "hover:bg-primary/5 cursor-pointer",
-                      !item.enabled && "opacity-30 cursor-not-allowed",
-                      isNext && "bg-primary/5 ring-1 ring-primary/15",
-                    )}
-                  >
-                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                      item.done ? "bg-accent/10" : isNext ? "bg-primary/10" : "bg-muted"
-                    )}>
-                      {item.done ? <CheckCircle2 className="h-4 w-4 text-accent" /> :
-                       !item.enabled ? <Lock className="h-4 w-4 text-muted-foreground/40" /> :
-                       <Circle className="h-4 w-4 text-muted-foreground/30" />}
-                    </div>
-                    <span className={cn("text-sm font-medium flex-1", item.done ? "line-through text-muted-foreground" : "text-foreground")}>{item.label}</span>
-                    {isNext && <ArrowRight className="h-4 w-4 text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </>
-      )}
 
       {/* ── ACTIVE DASHBOARD ── */}
       {fullyActive && (

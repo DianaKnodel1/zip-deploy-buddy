@@ -280,10 +280,15 @@ function ContractPage() {
         signature_url: signaturePath || `text:${signatureName.trim()}`,
       }).eq("user_id", user.id);
 
-      toast({ title: "Vertrag unterschrieben", description: "Willkommen im Team!" });
+      toast({
+        title: "Perfekt! 🎉 Vertrag unterschrieben",
+        description: "Nur noch 1 Schritt: Lade jetzt deinen Personalausweis hoch.",
+      });
       // Neu laden
       const { data: contracts } = await supabase.from("contracts").select("*").eq("user_id", user.id).order("signed_at", { ascending: false }).limit(1);
       if (contracts && contracts.length > 0) setContract(contracts[0] as unknown as Contract);
+      // Dopamin-Moment: Direkt weiter zum nächsten Schritt — keine Wartezeit, kein Klick verloren
+      setTimeout(() => navigate("/verification"), 800);
     } catch (err: any) {
       toast({ title: "Vertrag konnte nicht gespeichert werden", description: translateDbError(err?.message), variant: "destructive" });
     } finally {

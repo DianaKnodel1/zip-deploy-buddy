@@ -19,7 +19,7 @@ import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog"
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useServerFn } from "@tanstack/react-start";
-import { resendInvitesToUnregistered, getInviteResendQueueStatus } from "@/lib/resend-invites.functions";
+import { resendInvitesToUnregistered, getInviteResendQueueStatus, listInviteResendQueueItems } from "@/lib/resend-invites.functions";
 import { MailPlus, Eye } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";

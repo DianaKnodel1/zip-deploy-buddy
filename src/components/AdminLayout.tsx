@@ -72,9 +72,6 @@ const navGroups: NavGroup[] = [
   {
     label: "System",
     items: [
-      { title: "Landing Pages", url: "/admin/landing-generator", icon: Globe },
-      { title: "Domains", url: "/admin/domains", icon: Globe },
-      { title: "Protokoll", url: "/admin/activity", icon: History },
       { title: "Einstellungen", url: "/admin/settings", icon: Settings },
     ],
   },

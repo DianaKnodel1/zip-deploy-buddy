@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/EmptyState";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { useToast } from "@/hooks/use-toast";
-import { BellRing, RefreshCw, CheckCircle2, XCircle, Send, Clock, Activity, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BellRing, RefreshCw, CheckCircle2, XCircle, Send, Clock, Activity, Loader2, Eye, Mail } from "lucide-react";
 import { getReminderHealth } from "@/lib/reminder-log.functions";
 
 export const Route = createFileRoute("/admin/reminders")({
@@ -46,6 +47,28 @@ export function AdminRemindersPage() {
   const [running, setRunning] = useState<"send" | "dry" | null>(null);
   const [health, setHealth] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
+  const [preview, setPreview] = useState<null | {
+    loading: boolean;
+    reminder: ReminderRow;
+    log: any | null;
+  }>(null);
+
+  const openPreview = async (r: ReminderRow) => {
+    setPreview({ loading: true, reminder: r, log: null });
+    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + ±5 min Fenster um sent_at.
+    const t = new Date(r.sent_at).getTime();
+    const from = new Date(t - 5 * 60_000).toISOString();
+    const to = new Date(t + 5 * 60_000).toISOString();
+    const { data } = await supabase
+      .from("email_send_log")
+      .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
+      .eq("recipient_email", r.email)
+      .gte("created_at", from)
+      .lte("created_at", to)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setPreview({ loading: false, reminder: r, log: (data ?? [])[0] ?? null });
+  };
 
   const loadHealth = async () => {
     setLoadingHealth(true);
@@ -187,6 +210,7 @@ export function AdminRemindersPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Versuch</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Zeitpunkt</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Fehler</th>
+                <th className="w-12"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -207,12 +231,66 @@ export function AdminRemindersPage() {
                     {new Date(r.sent_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </td>
                   <td className="px-4 py-3 text-xs text-destructive max-w-[240px] truncate">{r.error ?? "–"}</td>
+                  <td className="px-3 py-3">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Vorschau" onClick={() => openPreview(r)}>
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Mail-Vorschau</DialogTitle>
+            <DialogDescription>
+              Sucht die zugehörige Mail im Protokoll (gleiche Adresse, ±5&nbsp;Minuten um den Reminder-Zeitpunkt).
+            </DialogDescription>
+          </DialogHeader>
+          {preview?.loading ? (
+            <div className="py-10 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Lade Mail…</div>
+          ) : preview && !preview.log ? (
+            <div className="border rounded-lg p-6 bg-muted/30 text-center text-xs text-muted-foreground">
+              Keine zugehörige Mail im Protokoll gefunden. Reminder-Mails aus Edge Functions werden eventuell nicht in <code>email_send_log</code> protokolliert.
+            </div>
+          ) : preview && preview.log ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs border rounded-lg p-3 bg-muted/30">
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">Status</p><p className="text-xs">{preview.log.status}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">Empfänger</p><p className="text-xs break-all">{preview.log.recipient_email}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">Absender</p><p className="text-xs break-all">{preview.log.sender_email || preview.log.metadata?.from_email || "–"}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">SMTP-Server</p><p className="text-xs break-all">{preview.log.metadata?.smtp_host ? `${preview.log.metadata.smtp_host}:${preview.log.metadata.smtp_port ?? "?"}` : "–"}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">SMTP-User</p><p className="text-xs break-all">{preview.log.metadata?.smtp_username || "–"}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">Zeitpunkt</p><p className="text-xs">{new Date(preview.log.created_at).toLocaleString("de-DE")}</p></div>
+                <div className="col-span-2"><p className="text-[10px] font-semibold uppercase text-muted-foreground">Betreff</p><p className="text-xs">{preview.log.rendered_subject || preview.log.metadata?.subject || "–"}</p></div>
+              </div>
+              {preview.log.error_message && (
+                <div className="border border-destructive/30 bg-destructive/5 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold uppercase text-destructive mb-1">Fehler</p>
+                  <p className="text-xs text-destructive font-mono break-all">{preview.log.error_message}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">HTML-Vorschau</p>
+                {preview.log.rendered_html ? (
+                  <iframe srcDoc={preview.log.rendered_html} sandbox="" className="w-full h-[400px] border rounded-lg bg-white" title="Email Preview" />
+                ) : (
+                  <div className="border rounded-lg p-6 bg-muted/30 text-center text-xs text-muted-foreground">
+                    Für diese Mail wurde kein gerendertes HTML gespeichert.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>Schließen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

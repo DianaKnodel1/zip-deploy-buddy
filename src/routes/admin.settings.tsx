@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { translateAuthError } from "@/lib/auth-errors";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Lock, Save, Palette, Bot, ArrowRight, Globe, Users as UsersIcon, Mail } from "lucide-react";
+import { Lock, Save, Palette, Bot, ArrowRight, Globe, Users as UsersIcon, Mail, History } from "lucide-react";
 import { BookingLimitsCard } from "@/components/admin/BookingLimitsCard";
 import { StandardTasksCard } from "@/components/admin/StandardTasksCard";
 import { Link } from "@tanstack/react-router";
@@ -86,6 +86,24 @@ function AdminSettingsPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2"><Mail className="h-4 w-4" /> E-Mail-Vorlagen</CardTitle>
               <CardDescription className="text-xs">Willkommen, Reset, Signatur</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
+          </Card>
+        </Link>
+        <Link to="/admin/landing-generator" className="group">
+          <Card className="hover:border-primary/40 transition-colors h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Landing Pages</CardTitle>
+              <CardDescription className="text-xs">Themes, WhatsApp-Button, Generator</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
+          </Card>
+        </Link>
+        <Link to="/admin/activity" className="group">
+          <Card className="hover:border-primary/40 transition-colors h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><History className="h-4 w-4" /> Protokoll</CardTitle>
+              <CardDescription className="text-xs">Aktivitäts-Log aller Admin-Aktionen</CardDescription>
             </CardHeader>
             <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
           </Card>

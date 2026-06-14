@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function assertAdmin(ctx: { supabase: any; userId: string }) {
@@ -193,4 +194,49 @@ export const listInviteResendQueueItems = createServerFn({ method: "GET" })
       sent_at: string | null; attempts: number; last_error: string | null; created_at: string;
     }> };
   });
+
+/**
+ * Markiert offene Queue-Einträge (status='queued') für gegebene application_ids
+ * oder E-Mail-Adressen als 'skipped'. Wird beim manuellen "Einladung erneut senden"
+ * aufgerufen, damit der Bewerber nicht zusätzlich noch eine Drip-Mail bekommt.
+ */
+export const skipQueuedInvitesFor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({
+      application_ids: z.array(z.string().uuid()).optional(),
+      emails: z.array(z.string().email()).optional(),
+      reason: z.string().max(200).optional(),
+    }).parse(input ?? {})
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const ids = data.application_ids ?? [];
+    const emails = (data.emails ?? []).map((e) => e.toLowerCase());
+    if (ids.length === 0 && emails.length === 0) return { skipped: 0 };
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+    const reason = data.reason ?? "manual_resend";
+
+    let total = 0;
+    if (ids.length > 0) {
+      const { count } = await sb
+        .from("invite_resend_queue")
+        .update({ status: "skipped", last_error: reason }, { count: "exact" })
+        .eq("status", "queued")
+        .in("application_id", ids);
+      total += count ?? 0;
+    }
+    if (emails.length > 0) {
+      const { count } = await sb
+        .from("invite_resend_queue")
+        .update({ status: "skipped", last_error: reason }, { count: "exact" })
+        .eq("status", "queued")
+        .in("email", emails);
+      total += count ?? 0;
+    }
+    return { skipped: total };
+  });
+
 

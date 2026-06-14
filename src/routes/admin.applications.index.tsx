@@ -19,7 +19,7 @@ import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog"
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useServerFn } from "@tanstack/react-start";
-import { resendInvitesToUnregistered, getInviteResendQueueStatus, listInviteResendQueueItems } from "@/lib/resend-invites.functions";
+import { resendInvitesToUnregistered, getInviteResendQueueStatus, listInviteResendQueueItems, skipQueuedInvitesFor } from "@/lib/resend-invites.functions";
 import { MailPlus, Eye } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
@@ -58,6 +58,7 @@ function AdminApplicationsPage() {
     nextScheduledAt: string | null; lastScheduledAt: string | null;
   } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
+  const skipQueuedFn = useServerFn(skipQueuedInvitesFor);
   const queueStatusFn = useServerFn(getInviteResendQueueStatus);
   const queueListFn = useServerFn(listInviteResendQueueItems);
   const [queueDetailsOpen, setQueueDetailsOpen] = useState(false);
@@ -117,6 +118,11 @@ function AdminApplicationsPage() {
 
     if (error) throw new Error(error.message || "E-Mail-Versand fehlgeschlagen");
     if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
+
+    // Doppelversand verhindern: offene Drip-Queue-Einträge dieses Bewerbers überspringen.
+    try {
+      await skipQueuedFn({ data: { application_ids: [app.id], emails: app.email ? [app.email] : [], reason: "manual_resend" } });
+    } catch { /* nicht kritisch – Hauptmail wurde gesendet */ }
   };
 
   const sendInvitationEmailsInBatches = async (appsToInvite: Array<(typeof applications)[number]>) => {
@@ -218,6 +224,14 @@ function AdminApplicationsPage() {
           lastName: app.last_name, registrationLink: buildPortalLink(app.tenant_id), tenantId: app.tenant_id,
         },
       });
+
+      // Offene Drip-Queue-Einträge dieses Bewerbers überspringen (Doppelversand vermeiden).
+      if (!emailError) {
+        try {
+          await skipQueuedFn({ data: { application_ids: [app.id], emails: app.email ? [app.email] : [], reason: "accepted_manual" } });
+        } catch { /* nicht kritisch */ }
+      }
+
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {

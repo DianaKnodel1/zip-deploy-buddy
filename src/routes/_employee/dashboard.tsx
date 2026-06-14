@@ -613,10 +613,14 @@ function DashboardPage() {
                   </Button>
                 </div>
               )}
-            </CardContent>
+          </CardContent>
           </Card>
+
+          {/* FAQ — auch für aktive Nutzer */}
+          <OnboardingFAQ />
         </>
       )}
+
     </div>
   );
 }

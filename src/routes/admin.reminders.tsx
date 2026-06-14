@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/EmptyState";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { useToast } from "@/hooks/use-toast";
-import { BellRing, RefreshCw, CheckCircle2, XCircle, Send, Clock, Activity, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BellRing, RefreshCw, CheckCircle2, XCircle, Send, Clock, Activity, Loader2, Eye, Mail } from "lucide-react";
 import { getReminderHealth } from "@/lib/reminder-log.functions";
 
 export const Route = createFileRoute("/admin/reminders")({
@@ -46,6 +47,28 @@ export function AdminRemindersPage() {
   const [running, setRunning] = useState<"send" | "dry" | null>(null);
   const [health, setHealth] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
+  const [preview, setPreview] = useState<null | {
+    loading: boolean;
+    reminder: ReminderRow;
+    log: any | null;
+  }>(null);
+
+  const openPreview = async (r: ReminderRow) => {
+    setPreview({ loading: true, reminder: r, log: null });
+    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + ±5 min Fenster um sent_at.
+    const t = new Date(r.sent_at).getTime();
+    const from = new Date(t - 5 * 60_000).toISOString();
+    const to = new Date(t + 5 * 60_000).toISOString();
+    const { data } = await supabase
+      .from("email_send_log")
+      .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
+      .eq("recipient_email", r.email)
+      .gte("created_at", from)
+      .lte("created_at", to)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setPreview({ loading: false, reminder: r, log: (data ?? [])[0] ?? null });
+  };
 
   const loadHealth = async () => {
     setLoadingHealth(true);

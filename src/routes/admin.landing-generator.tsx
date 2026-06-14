@@ -410,6 +410,19 @@ document.addEventListener('submit', function(e){
                   </div>
                 </Field>
                 <Field label="WhatsApp-Nummer (international, ohne +)"><Input value={branding.whatsapp_number} onChange={set("whatsapp_number")} placeholder="491234567890" /></Field>
+                <Field label="WhatsApp im Erfolgs-Popup & als Floating-Button anzeigen">
+                  <label className="flex items-center gap-2 h-10 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={branding.whatsapp_enabled}
+                      onChange={(e) => setBranding((b) => ({ ...b, whatsapp_enabled: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-muted-foreground">
+                      Aktiviert „Jetzt bei WhatsApp kontaktieren" nach erfolgreicher Bewerbung (Link auf wa.me/{branding.whatsapp_number || "…"}).
+                    </span>
+                  </label>
+                </Field>
                 <Field label="Kontakt-E-Mail *"><Input type="email" value={branding.email} onChange={set("email")} /></Field>
                 <Field label="Telefon"><Input value={branding.telefon} onChange={set("telefon")} /></Field>
                 <Field label="Straße & Hausnummer"><Input value={branding.strasse} onChange={set("strasse")} /></Field>

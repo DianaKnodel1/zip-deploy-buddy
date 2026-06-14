@@ -19,11 +19,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Max. Sends pro Run (15min): 75 → 300/h → 7200/24h Gesamtkapazität.
-const MAX_PER_RUN = 75;
-// Quiet-Hours (Europe/Berlin)
-const QUIET_START = 8;
-const QUIET_END = 21;
+// Ziel: 75 Mails/Stunde → bei Cron */15 = 19 pro Run (≈76/h).
+// Sendefenster 06–22 Uhr (16h) → max ~1.200 Mails/Tag.
+const MAX_PER_RUN = 19;
+// Quiet-Hours (Europe/Berlin): aktiv außerhalb 06–22 Uhr
+const QUIET_START = 6;
+const QUIET_END = 22;
 
 function berlinHour(): number {
   const h = new Intl.DateTimeFormat("de-DE", {

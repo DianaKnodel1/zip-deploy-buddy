@@ -10,24 +10,23 @@ async function assertAdmin(ctx: { supabase: any; userId: string }) {
 }
 
 /**
- * Sendet allen akzeptierten Bewerbern, die noch KEINEN Auth-Account haben,
- * erneut die Einladungs-Mail (Portal-Link zur Registrierung).
- * Umgeht die 3-Tage-/Cap-Sperren von send-reminders. Idempotent über message_id ist NICHT garantiert
- * — gedacht als manuelle "Resend"-Aktion, nicht für Cron.
+ * Drip-Resend: Plant Einladungs-Mails an alle akzeptierten Bewerber OHNE Auth-Account.
+ * Statt sofort zu senden, werden Rows in invite_resend_queue eingestellt mit
+ * scheduled_at gleichmäßig über `windowHours` (Default 48) verteilt — pro Tenant
+ * separat, damit jeder Tenant sein eigenes SMTP gleichmäßig auslastet.
+ *
+ * Worker: Edge Function process-invite-resend-queue (per pg_cron alle 15 min).
  */
 export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((input: { windowHours?: number } | undefined) => input ?? {})
+  .handler(async ({ data, context }) => {
     await assertAdmin(context);
+    const windowHours = Math.min(Math.max(data.windowHours ?? 48, 1), 168); // 1h..7d
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;
 
-    // 1) Tenants für Portal-Link
-    const { data: tenants } = await sb.from("tenants").select("id, domain, primary_domain");
-    const tenantMap = new Map<string, { domain: string; primary_domain: string | null }>();
-    (tenants ?? []).forEach((t: any) => tenantMap.set(t.id, { domain: t.domain, primary_domain: t.primary_domain ?? null }));
-
-    // 2) Auth-User-E-Mails einsammeln (alle Seiten)
+    // 1) Auth-User-E-Mails einsammeln
     const existing = new Set<string>();
     for (let page = 1; page < 50; page++) {
       const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
@@ -37,11 +36,12 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       if (users.length < 1000) break;
     }
 
-    // 3) Akzeptierte Bewerbungen ohne Auth-Account
+    // 2) Akzeptierte Bewerbungen ohne Auth-Account
     const { data: apps, error } = await sb
       .from("applications")
-      .select("id, email, full_name, first_name, last_name, tenant_id, status")
-      .eq("status", "akzeptiert");
+      .select("id, email, full_name, first_name, last_name, tenant_id, status, created_at")
+      .eq("status", "akzeptiert")
+      .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
 
     const targets = (apps ?? []).filter((a: any) => {
@@ -49,36 +49,105 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       return e && !existing.has(e) && a.tenant_id;
     });
 
-    let sent = 0;
-    const failures: Array<{ email: string; reason: string }> = [];
+    if (targets.length === 0) {
+      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null };
+    }
 
-    // Batches à 5
-    for (let i = 0; i < targets.length; i += 5) {
-      const batch = targets.slice(i, i + 5);
-      const results = await Promise.allSettled(
-        batch.map(async (app: any) => {
-          const t = tenantMap.get(app.tenant_id);
-          const activeDomain = t?.primary_domain ?? t?.domain ?? null;
-          const registrationLink = activeDomain ? `https://portal.${activeDomain}/register` : "";
-          const { data, error } = await sb.functions.invoke("send-invitation-email", {
-            body: {
-              to: app.email,
-              fullName: app.full_name,
-              firstName: app.first_name,
-              lastName: app.last_name,
-              registrationLink,
-              tenantId: app.tenant_id,
-            },
-          });
-          if (error) throw new Error(error.message || "send failed");
-          if ((data as any)?.error) throw new Error((data as any).error);
-        }),
-      );
-      results.forEach((r, idx) => {
-        if (r.status === "fulfilled") sent++;
-        else failures.push({ email: batch[idx].email, reason: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.
+    const { data: openRows } = await sb
+      .from("invite_resend_queue")
+      .select("application_id")
+      .eq("status", "queued");
+    const openSet = new Set<string>((openRows ?? []).map((r: any) => r.application_id));
+    const fresh = targets.filter((a: any) => !openSet.has(a.id));
+
+    if (fresh.length === 0) {
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null };
+    }
+
+    // 4) Per Tenant gruppieren und scheduled_at gleichmäßig über windowHours verteilen
+    const batchId = crypto.randomUUID();
+    const now = Date.now();
+    const windowMs = windowHours * 60 * 60 * 1000;
+
+    const byTenant = new Map<string, any[]>();
+    for (const t of fresh) {
+      if (!byTenant.has(t.tenant_id)) byTenant.set(t.tenant_id, []);
+      byTenant.get(t.tenant_id)!.push(t);
+    }
+
+    const rows: any[] = [];
+    for (const [tenantId, list] of byTenant) {
+      const n = list.length;
+      const step = n > 1 ? windowMs / n : 0;
+      list.forEach((a: any, i: number) => {
+        // kleine Zufallsstreuung ±2 min, damit Sends nicht exakt synchron laufen
+        const jitter = Math.floor((Math.random() - 0.5) * 4 * 60 * 1000);
+        rows.push({
+          application_id: a.id,
+          tenant_id: tenantId,
+          email: a.email,
+          full_name: a.full_name,
+          first_name: a.first_name,
+          last_name: a.last_name,
+          scheduled_at: new Date(now + i * step + jitter).toISOString(),
+          batch_id: batchId,
+        });
       });
     }
 
-    return { eligible: targets.length, sent, failed: failures.length, failures: failures.slice(0, 10) };
+    // 5) Insert in 500er-Chunks
+    let queued = 0;
+    for (let i = 0; i < rows.length; i += 500) {
+      const chunk = rows.slice(i, i + 500);
+      const { error: insErr, count } = await sb
+        .from("invite_resend_queue")
+        .insert(chunk, { count: "exact" });
+      if (insErr) throw new Error(insErr.message);
+      queued += count ?? chunk.length;
+    }
+
+    return { eligible: targets.length, queued, windowHours, batchId };
+  });
+
+/**
+ * Live-Status der Drip-Queue (für UI-Anzeige).
+ */
+export const getInviteResendQueueStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+
+    const counts = { queued: 0, sent: 0, failed: 0, skipped: 0 };
+    for (const status of Object.keys(counts) as Array<keyof typeof counts>) {
+      const { count } = await sb
+        .from("invite_resend_queue")
+        .select("id", { head: true, count: "exact" })
+        .eq("status", status);
+      counts[status] = count ?? 0;
+    }
+
+    const { data: nextRow } = await sb
+      .from("invite_resend_queue")
+      .select("scheduled_at")
+      .eq("status", "queued")
+      .order("scheduled_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: lastRow } = await sb
+      .from("invite_resend_queue")
+      .select("scheduled_at")
+      .eq("status", "queued")
+      .order("scheduled_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      counts,
+      nextScheduledAt: nextRow?.scheduled_at ?? null,
+      lastScheduledAt: lastRow?.scheduled_at ?? null,
+    };
   });

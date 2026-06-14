@@ -359,11 +359,9 @@ export function AdminEmailLogsPage() {
               })}
             </tbody>
           </table>
-          {filtered.length > 100 && (
-            <div className="px-4 py-3 text-xs text-muted-foreground bg-muted/20 border-t">
-              Zeige 100 von {filtered.length} Einträgen
-            </div>
-          )}
+          <div className="border-t border-border bg-muted/20">
+            <PaginationBar page={page} pageCount={pageCount} setPage={setPage} rangeFrom={rangeFrom} rangeTo={rangeTo} total={total} />
+          </div>
         </div>
       )}
 

@@ -16,7 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   FileText, GraduationCap, ClipboardList, CalendarDays,
   Wallet, ArrowRight, CheckCircle2, Clock,
-  Lock, Circle, Timer, PartyPopper, TrendingUp, ShieldCheck, Sparkles,
+  Lock, Circle, Timer, PartyPopper, TrendingUp, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNextStep } from "@/hooks/use-next-step";

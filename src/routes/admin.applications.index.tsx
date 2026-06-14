@@ -713,6 +713,66 @@ function AdminApplicationsPage() {
         </DialogContent>
 
       </Dialog>
+
+      <Dialog open={queueDetailsOpen} onOpenChange={setQueueDetailsOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Drip-Queue · Details</DialogTitle>
+            <DialogDescription>Einzelne Einträge nach Status. Max. 500 pro Liste.</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-1 border-b mb-3">
+            {([
+              ["queued", `Ausstehend (${queueStatus?.counts.queued ?? 0})`],
+              ["sent", `Gesendet (${queueStatus?.counts.sent ?? 0})`],
+              ["failed", `Fehlgeschlagen (${queueStatus?.counts.failed ?? 0})`],
+              ["skipped", `Übersprungen (${queueStatus?.counts.skipped ?? 0})`],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setQueueTab(k)}
+                className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px ${queueTab === k ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              >{label}</button>
+            ))}
+          </div>
+          <div className="max-h-[60vh] overflow-auto">
+            {queueItemsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : queueItems.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-8">Keine Einträge.</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-2">E-Mail</th>
+                    <th className="text-left p-2">Name</th>
+                    <th className="text-left p-2">{queueTab === "sent" ? "Gesendet" : "Geplant"}</th>
+                    <th className="text-left p-2">Versuche</th>
+                    {queueTab !== "sent" && queueTab !== "queued" && <th className="text-left p-2">Fehler</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {queueItems.map((it) => (
+                    <tr key={it.id} className="border-t">
+                      <td className="p-2 font-mono">{it.email}</td>
+                      <td className="p-2">{it.full_name ?? "—"}</td>
+                      <td className="p-2 whitespace-nowrap">
+                        {new Date(queueTab === "sent" ? (it.sent_at ?? it.scheduled_at) : it.scheduled_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="p-2">{it.attempts}</td>
+                      {queueTab !== "sent" && queueTab !== "queued" && (
+                        <td className="p-2 text-destructive max-w-[280px] truncate" title={it.last_error ?? ""}>{it.last_error ?? "—"}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQueueDetailsOpen(false)}>Schließen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
 
   );

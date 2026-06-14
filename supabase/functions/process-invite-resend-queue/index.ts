@@ -64,8 +64,38 @@ serve(async (req) => {
   if (dueErr) return json({ error: dueErr.message }, 500);
   if (!due || due.length === 0) return json({ processed: 0, sent: 0, failed: 0 }, 200);
 
-  // 2) Tenants vorladen (für portal-link)
-  const tenantIds = Array.from(new Set(due.map((r: any) => r.tenant_id)));
+  // 2a) Auto-Skip: Bewerber, die sich inzwischen registriert haben (Auth-Account existiert)
+  //     → markieren als skipped, damit keine unnötige Einladungs-Mail rausgeht.
+  const registeredEmails = new Set<string>();
+  try {
+    for (let page = 1; page < 50; page++) {
+      const { data: usersPage, error: usersErr } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+      if (usersErr) break;
+      const users = usersPage?.users ?? [];
+      for (const u of users) if (u.email) registeredEmails.add(u.email.toLowerCase());
+      if (users.length < 1000) break;
+    }
+  } catch (_) { /* best-effort */ }
+
+  const dueFiltered: any[] = [];
+  let autoSkipped = 0;
+  for (const row of due) {
+    if (row.email && registeredEmails.has(String(row.email).toLowerCase())) {
+      await admin.from("invite_resend_queue").update({
+        status: "skipped",
+        last_error: "auto_skip_registered",
+      }).eq("id", row.id);
+      autoSkipped++;
+    } else {
+      dueFiltered.push(row);
+    }
+  }
+  if (dueFiltered.length === 0) {
+    return json({ processed: due.length, sent: 0, failed: 0, skipped: autoSkipped }, 200);
+  }
+
+  // 2b) Tenants vorladen (für portal-link)
+  const tenantIds = Array.from(new Set(dueFiltered.map((r: any) => r.tenant_id)));
   const { data: tenants } = await admin
     .from("tenants")
     .select("id, domain, primary_domain, emails_paused, is_active")

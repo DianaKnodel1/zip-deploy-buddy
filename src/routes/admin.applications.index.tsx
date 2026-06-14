@@ -12,21 +12,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/EmptyState";
-import { FileText, Download, Trash2, CheckCircle2, XCircle, Loader2, Send } from "lucide-react";
+import { FileText, Download, Trash2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { exportToCsv } from "@/lib/csv-export";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useServerFn } from "@tanstack/react-start";
-import { resendInvitesToUnregistered } from "@/lib/resend-invites.functions";
-import { MailPlus } from "lucide-react";
+import { resendInvitesToUnregistered, getInviteResendQueueStatus } from "@/lib/resend-invites.functions";
+import { MailPlus, Eye } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 function AdminApplicationsPage() {
   const { applications, loading, loadData } = useAdminData();

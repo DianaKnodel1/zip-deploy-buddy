@@ -195,7 +195,11 @@ function VerificationPage() {
     }
 
     setKyc((prev) => prev ? { ...prev, status: "eingereicht" as KycStatus } : prev);
-    toast({ title: "Verifizierung eingereicht!", description: "Deine Dokumente werden geprüft." });
+    toast({
+      title: "Geschafft! 🚀",
+      description: "Dein Onboarding ist abgeschlossen. Wir prüfen deine Unterlagen.",
+    });
+    setTimeout(() => navigate("/dashboard"), 1200);
   };
 
   if (authLoading || loading) {

@@ -50,6 +50,7 @@ function AdminApplicationsPage() {
     eligible: number; wouldQueue?: number; alreadyQueued: number;
     items: Array<{ id: string; email: string; full_name: string | null; first_name: string | null; last_name: string | null; phone: string | null; tenant_id: string; status: string; created_at: string }>;
     perTenant: Record<string, number>;
+    stats?: { acceptedTotal: number; missingEmailOrTenant: number; alreadyRegistered: number; duplicateEmail: number };
   } | null>(null);
   const [previewSelected, setPreviewSelected] = useState<Set<string>>(new Set());
   const [rejectingPreview, setRejectingPreview] = useState(false);

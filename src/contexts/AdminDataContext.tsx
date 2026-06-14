@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, createContext, useContext, ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef, createContext, useContext, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { checkRiskFlag, type EmployeeStatus, type KycStatus, type OnboardingStatus } from "@/lib/status";
@@ -80,8 +80,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set());
   const [emailConfirmedUserIds, setEmailConfirmedUserIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
   const loadData = useCallback(async () => {
+    // Re-entry-Guard: laufende Ladevorgänge mergen, statt parallel zu starten
+    if (inFlightRef.current) return inFlightRef.current;
     setLoading(true);
 
     const getValue = <T,>(
@@ -96,78 +99,91 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       return fallback;
     };
 
-    try {
-      // KEINE Limits — fetchAll() paginiert in 1000er-Chunks, bis ALLES geladen ist.
-      const results = await Promise.allSettled([
-        fetchAll<Application>(() => supabase.from("applications").select("*").order("created_at", { ascending: false })),
-        fetchAll<ProfileRow>(() => supabase.from("profiles").select("*").order("created_at", { ascending: false })),
-        fetchAll<KycRow>(() => supabase.from("kyc_verifications").select("*").order("created_at", { ascending: false })),
-        fetchAll<TaskTemplate>(() => supabase.from("task_templates").select("*").order("created_at", { ascending: false })),
-        fetchAll<AssignmentRow>(() => supabase.from("task_assignments").select("*").order("created_at", { ascending: false })),
-        fetchAll<TimeSlotRow>(() => supabase.from("time_slots").select("*").order("slot_date", { ascending: false })),
-        fetchAll<BookingRow>(() => supabase.from("bookings").select("*").order("created_at", { ascending: false })),
-        fetchAll<TransactionRow>(() => supabase.from("user_transactions").select("*").order("created_at", { ascending: false })),
-        fetchAll<ChatConversationRow>(() => supabase.from("chat_conversations").select("*").order("created_at", { ascending: false })),
-        fetchAll<{ user_id: string; role: string }>(() => supabase.from("user_roles").select("user_id, role").eq("role", "admin")),
-      ]);
-
-      const failures: string[] = [];
-      const apps = getValue(results[0], [] as Application[], "Bewerbungen", failures);
-      const profileData = getValue(results[1], [] as ProfileRow[], "Mitarbeiter", failures);
-      const kycData = getValue(results[2], [] as KycRow[], "KYC", failures);
-      const templatesData = getValue(results[3], [] as TaskTemplate[], "Aufgaben-Vorlagen", failures);
-      const assignData = getValue(results[4], [] as AssignmentRow[], "Aufgaben", failures);
-      const slotsData = getValue(results[5], [] as TimeSlotRow[], "Terminslots", failures);
-      const bookingsData = getValue(results[6], [] as BookingRow[], "Buchungen", failures);
-      const txData = getValue(results[7], [] as TransactionRow[], "Transaktionen", failures);
-      const convData = getValue(results[8], [] as ChatConversationRow[], "Chats", failures);
-      const rolesData = getValue(results[9], [] as { user_id: string; role: string }[], "Admin-Rollen", failures);
-
-      setApplications(apps);
-      setProfiles(profileData);
-      setAdminUserIds(new Set(rolesData.map((r) => r.user_id)));
-
+    const run = (async () => {
       try {
-        const { data: confs } = await (supabase as any).rpc("admin_get_email_confirmations");
-        setEmailConfirmedUserIds(new Set((confs ?? []).filter((c: any) => c.email_confirmed).map((c: any) => c.user_id)));
-      } catch (error) {
-        console.error("[AdminData] E-Mail-Bestätigungen konnten nicht geladen werden", error);
-      }
+        // KEINE Limits — fetchAll() paginiert in 1000er-Chunks, bis ALLES geladen ist.
+        const results = await Promise.allSettled([
+          fetchAll<Application>(() => supabase.from("applications").select("*").order("created_at", { ascending: false })),
+          fetchAll<ProfileRow>(() => supabase.from("profiles").select("*").order("created_at", { ascending: false })),
+          fetchAll<KycRow>(() => supabase.from("kyc_verifications").select("*").order("created_at", { ascending: false })),
+          fetchAll<TaskTemplate>(() => supabase.from("task_templates").select("*").order("created_at", { ascending: false })),
+          fetchAll<AssignmentRow>(() => supabase.from("task_assignments").select("*").order("created_at", { ascending: false })),
+          fetchAll<TimeSlotRow>(() => supabase.from("time_slots").select("*").order("slot_date", { ascending: false })),
+          fetchAll<BookingRow>(() => supabase.from("bookings").select("*").order("created_at", { ascending: false })),
+          fetchAll<TransactionRow>(() => supabase.from("user_transactions").select("*").order("created_at", { ascending: false })),
+          fetchAll<ChatConversationRow>(() => supabase.from("chat_conversations").select("*").order("created_at", { ascending: false })),
+          fetchAll<{ user_id: string; role: string }>(() => supabase.from("user_roles").select("user_id, role").eq("role", "admin")),
+          (supabase as any).rpc("admin_get_email_confirmations").then((r: any) => r.data ?? []),
+        ]);
 
-      for (const kyc of kycData) {
-        const profile = profileData.find((p) => p.user_id === kyc.user_id);
-        const shouldFlag = profile ? checkRiskFlag(profile.living_since) : false;
-        if (shouldFlag !== kyc.risk_flag) {
-          await supabase.from("kyc_verifications").update({ risk_flag: shouldFlag }).eq("id", kyc.id);
-          kyc.risk_flag = shouldFlag;
+        const failures: string[] = [];
+        const apps = getValue(results[0], [] as Application[], "Bewerbungen", failures);
+        const profileData = getValue(results[1], [] as ProfileRow[], "Mitarbeiter", failures);
+        const kycData = getValue(results[2], [] as KycRow[], "KYC", failures);
+        const templatesData = getValue(results[3], [] as TaskTemplate[], "Aufgaben-Vorlagen", failures);
+        const assignData = getValue(results[4], [] as AssignmentRow[], "Aufgaben", failures);
+        const slotsData = getValue(results[5], [] as TimeSlotRow[], "Terminslots", failures);
+        const bookingsData = getValue(results[6], [] as BookingRow[], "Buchungen", failures);
+        const txData = getValue(results[7], [] as TransactionRow[], "Transaktionen", failures);
+        const convData = getValue(results[8], [] as ChatConversationRow[], "Chats", failures);
+        const rolesData = getValue(results[9], [] as { user_id: string; role: string }[], "Admin-Rollen", failures);
+        const confs = getValue(results[10], [] as { user_id: string; email_confirmed: boolean }[], "E-Mail-Bestätigungen", failures);
+
+        setApplications(apps);
+        setProfiles(profileData);
+        setAdminUserIds(new Set(rolesData.map((r) => r.user_id)));
+        setEmailConfirmedUserIds(new Set(confs.filter((c) => c.email_confirmed).map((c) => c.user_id)));
+
+        // Risk-Flag-Sync: gruppieren statt N+1-Updates
+        const toFlagTrue: string[] = [];
+        const toFlagFalse: string[] = [];
+        for (const kyc of kycData) {
+          const profile = profileData.find((p) => p.user_id === kyc.user_id);
+          const shouldFlag = profile ? checkRiskFlag(profile.living_since) : false;
+          if (shouldFlag !== kyc.risk_flag) {
+            (shouldFlag ? toFlagTrue : toFlagFalse).push(kyc.id);
+            kyc.risk_flag = shouldFlag;
+          }
         }
-      }
+        if (toFlagTrue.length > 0 || toFlagFalse.length > 0) {
+          await Promise.allSettled([
+            toFlagTrue.length > 0
+              ? supabase.from("kyc_verifications").update({ risk_flag: true }).in("id", toFlagTrue)
+              : Promise.resolve(),
+            toFlagFalse.length > 0
+              ? supabase.from("kyc_verifications").update({ risk_flag: false }).in("id", toFlagFalse)
+              : Promise.resolve(),
+          ]);
+        }
 
-      setKycList(kycData);
-      setTemplates(templatesData);
-      setAssignments(assignData);
-      setTimeSlots(slotsData);
-      setAllBookings(bookingsData);
-      setAllTransactions(txData);
-      setChatConversations(convData);
+        setKycList(kycData);
+        setTemplates(templatesData);
+        setAssignments(assignData);
+        setTimeSlots(slotsData);
+        setAllBookings(bookingsData);
+        setAllTransactions(txData);
+        setChatConversations(convData);
 
-      if (failures.length > 0) {
+        if (failures.length > 0) {
+          toast({
+            title: "Admin-Daten nur teilweise geladen",
+            description: `Fehlende Bereiche: ${failures.join(", ")}`,
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("[AdminData] Unerwarteter Fehler beim Laden", error);
         toast({
-          title: "Admin-Daten nur teilweise geladen",
-          description: `Fehlende Bereiche: ${failures.join(", ")}`,
+          title: "Admin-Daten konnten nicht geladen werden",
+          description: error instanceof Error ? error.message : "Unbekannter Fehler",
           variant: "destructive",
         });
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("[AdminData] Unerwarteter Fehler beim Laden", error);
-      toast({
-        title: "Admin-Daten konnten nicht geladen werden",
-        description: error instanceof Error ? error.message : "Unbekannter Fehler",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    })();
+    inFlightRef.current = run;
+    try { await run; } finally { inFlightRef.current = null; }
   }, [toast]);
 
   useEffect(() => {

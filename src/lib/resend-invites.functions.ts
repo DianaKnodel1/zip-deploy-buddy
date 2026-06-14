@@ -167,3 +167,30 @@ export const getInviteResendQueueStatus = createServerFn({ method: "GET" })
       lastScheduledAt: lastRow?.scheduled_at ?? null,
     };
   });
+
+/**
+ * Detail-Liste der Drip-Queue (gefiltert nach Status). Limit 500.
+ */
+export const listInviteResendQueueItems = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { status?: "queued" | "sent" | "failed" | "skipped" | "all" } | undefined) => input ?? {})
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+    const status = data.status ?? "all";
+    let q = sb
+      .from("invite_resend_queue")
+      .select("id, application_id, tenant_id, email, full_name, status, scheduled_at, sent_at, attempts, last_error, created_at")
+      .order("scheduled_at", { ascending: true })
+      .limit(500);
+    if (status !== "all") q = q.eq("status", status);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    return { items: (rows ?? []) as Array<{
+      id: string; application_id: string; tenant_id: string; email: string;
+      full_name: string | null; status: string; scheduled_at: string;
+      sent_at: string | null; attempts: number; last_error: string | null; created_at: string;
+    }> };
+  });
+

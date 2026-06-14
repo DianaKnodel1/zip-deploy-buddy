@@ -12,8 +12,8 @@ interface StepDef {
 }
 
 const STEPS: StepDef[] = [
-  { key: "kyc",        label: "Verifizierung",      to: "/verification" },
   { key: "contract",   label: "Vertrag",            to: "/contract" },
+  { key: "kyc",        label: "Ausweis",            to: "/verification" },
   { key: "onboarding", label: "Einführung",         to: "/onboarding" },
   { key: "appointment",label: "Erster Termin",      to: "/appointments" },
 ];
@@ -74,7 +74,9 @@ export function OnboardingProgressBar() {
     <div className="sticky top-0 z-30 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-accent/5 backdrop-blur-sm">
       <div className="px-5 py-2.5 flex items-center gap-4 max-w-7xl mx-auto">
         <div className="text-xs font-semibold text-foreground shrink-0">
-          Onboarding: <span className="text-primary">{doneCount}/{STEPS.length} erledigt</span>
+          {STEPS.length - doneCount === 0
+            ? <span className="text-emerald-500">Geschafft 🎉</span>
+            : <>Nur noch <span className="text-primary">{STEPS.length - doneCount === 1 ? "1 Schritt" : `${STEPS.length - doneCount} Schritte`}</span></>}
         </div>
         <div className="flex-1 flex items-center gap-1 overflow-x-auto">
           {STEPS.map((step, idx) => {

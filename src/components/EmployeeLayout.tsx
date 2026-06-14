@@ -351,7 +351,6 @@ export default function EmployeeLayout() {
           </header>
           <MissingPayrollDataBanner />
           <main className="flex-1 overflow-auto">
-            <OnboardingPopup />
             <GuidedOnboarding />
             <Outlet />
           </main>

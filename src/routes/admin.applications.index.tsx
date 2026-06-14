@@ -39,6 +39,8 @@ function AdminApplicationsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [resendInvitesLoading, setResendInvitesLoading] = useState(false);
+  const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
 
   useEffect(() => {
     supabase.from("tenants").select("id, name, domain, primary_domain").then(({ data }) => {

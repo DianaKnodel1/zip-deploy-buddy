@@ -89,6 +89,10 @@ const SKIP_LINE_RE = /^(bewerber\s*information|adresse|anschrift|wohnort|geboren
 // Länder / Bundesländer in eigenen Zeilen ignorieren
 const COUNTRY_RE = /^(deutschland|österreich|schweiz|germany|austria|switzerland)$/i;
 
+function normalizeInlineSeparators(s: string): string {
+  return s.replace(/\s+(?=[|•·●])|(?<=[|•·●])\s*/g, " | ").replace(/\s*\|\s*/g, " | ");
+}
+
 function stripCtl(s: string): string {
   // Unsichtbare Steuerzeichen (LRE/RLE/PDF/LRM/RLM/BOM …) entfernen
   return s.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "");
@@ -104,6 +108,28 @@ function titleCase(s: string): string {
   return s.toLowerCase().split(/\s+/).map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
 }
 
+function cleanNameCandidate(s: string): string {
+  return s
+    .replace(NAME_LABEL_RE, "")
+    .replace(/,\s*geb\.?\s+.*$/i, "")
+    .replace(/\b(?:geb\.?|geboren)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveNameFromEmail(email: string): string {
+  const localPart = email.split("@")[0] ?? "";
+  const base = localPart
+    .replace(/[0-9]+$/g, "")
+    .replace(/[._-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!base) return email;
+  return titleCase(base);
+}
+
 function isNameCandidate(s: string): boolean {
   // Nur Buchstaben/Leerzeichen/Bindestrich/Punkt/Apostroph, mind. 2 Zeichen, höchstens 6 Wörter
   if (s.length < 2 || s.length > 80) return false;
@@ -114,15 +140,14 @@ function isNameCandidate(s: string): boolean {
 function parseBlock(block: string): Row | null {
   const raw = block
     .split(/\r?\n/)
-    .map((l) => stripCtl(l).replace(/^[•·●○*]+\s*/, "").trim())
+    .flatMap((l) => normalizeInlineSeparators(stripCtl(l)).split(/\s+\|\s+/))
+    .map((l) => l.replace(/^[•·●○*]+\s*/, "").trim())
     .filter(Boolean);
   if (raw.length === 0) return null;
 
   // E-Mail extrahieren
   let email = "";
   for (const l of raw) { const m = l.match(EMAIL_RE); if (m) { email = m[0]; break; } }
-  if (!email) return null;
-
   // Telefon extrahieren — Label-Zeile bevorzugt, sonst irgendwo (außer E-Mail-Zeile)
   let phone: string | null = null;
   for (const l of raw) {
@@ -143,7 +168,7 @@ function parseBlock(block: string): Row | null {
   // 1) Explizite Name-Label-Zeile
   for (const l of raw) {
     if (NAME_LABEL_RE.test(l)) {
-      const cand = l.replace(NAME_LABEL_RE, "").trim();
+      const cand = cleanNameCandidate(l);
       if (isNameCandidate(cand)) { name = cand; break; }
     }
   }
@@ -152,19 +177,22 @@ function parseBlock(block: string): Row | null {
     const nameParts: string[] = [];
     for (const l of raw) {
       if (EMAIL_LABEL_RE.test(l) || PHONE_LABEL_RE.test(l)) continue;
-      if (EMAIL_RE.test(l)) continue;
+      const withoutEmailLabel = l.replace(EMAIL_LABEL_RE, "").trim();
+      if (EMAIL_RE.test(withoutEmailLabel)) continue;
       if (PHONE_RE.test(l) && l.replace(/\D/g, "").length >= 7) continue;
       if (SKIP_LINE_RE.test(l)) continue;
       if (COUNTRY_RE.test(l)) continue;
       if (looksLikeAddress(l)) continue;
       if (DATE_RE.test(l)) continue;
-      if (!isNameCandidate(l)) continue;
-      nameParts.push(l);
+      const cand = cleanNameCandidate(l);
+      if (!isNameCandidate(cand)) continue;
+      nameParts.push(cand);
       if (nameParts.length >= 2) break;
     }
     name = nameParts.join(" ").replace(/\s+/g, " ").trim();
   }
-  if (!name) return null;
+  if (!name && email) name = deriveNameFromEmail(email);
+  if (!name || !email) return null;
 
   // Trailing-Kommas/Punkte entfernen
   name = name.replace(/[,;]+$/, "").trim();
@@ -179,9 +207,11 @@ function parseBlock(block: string): Row | null {
 }
 
 function parseFreeText(text: string): { rows: Row[]; errors: string[] } {
-  // Blöcke trennen: Linien aus Bindestrichen ODER 2+ Leerzeilen
-  const blocks = text
-    .split(/\n\s*-{3,}\s*\n|\n{2,}/)
+  const normalized = text.replace(/\r/g, "");
+  const separatorRe = /(?:^|\n)\s*(?:-{3,}|_{3,}|[=]{3,})\s*(?=\n|$)/;
+  const hasExplicitSeparators = separatorRe.test(normalized);
+  const blocks = normalized
+    .split(hasExplicitSeparators ? /(?:^|\n)\s*(?:-{3,}|_{3,}|[=]{3,})\s*(?=\n|$)/ : /\n{2,}/)
     .map((b) => b.trim())
     .filter(Boolean);
   const rows: Row[] = [];
@@ -359,9 +389,9 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-xs">
                 <CheckCircle2 className="h-3.5 w-3.5 text-status-success" />
                 <span className="font-medium">{rows.length} Einträge bereit zum Import</span>
-                <span className="text-muted-foreground">— Vorschau (max. 8)</span>
+                <span className="text-muted-foreground">— Vorschau aller Einträge</span>
               </div>
-              <div className="overflow-auto max-h-60">
+              <div className="overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/20 text-muted-foreground">
                     <tr>
@@ -371,7 +401,7 @@ export function ImportApplicationsDialog({ onImported }: { onImported: () => voi
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.slice(0, 8).map((r, i) => (
+                    {rows.map((r, i) => (
                       <tr key={i} className="border-t border-border">
                         <td className="p-2">{r.full_name}</td>
                         <td className="p-2">{r.email}</td>

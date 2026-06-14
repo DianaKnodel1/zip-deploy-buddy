@@ -87,11 +87,11 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     }));
 
     if (fresh.length === 0) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: 0 };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: 0, stats };
     }
 
     if (dryRun) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length, stats };
     }
 
 

@@ -108,6 +108,28 @@ function titleCase(s: string): string {
   return s.toLowerCase().split(/\s+/).map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
 }
 
+function cleanNameCandidate(s: string): string {
+  return s
+    .replace(NAME_LABEL_RE, "")
+    .replace(/,\s*geb\.?\s+.*$/i, "")
+    .replace(/\b(?:geb\.?|geboren)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveNameFromEmail(email: string): string {
+  const localPart = email.split("@")[0] ?? "";
+  const base = localPart
+    .replace(/[0-9]+$/g, "")
+    .replace(/[._-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!base) return email;
+  return titleCase(base);
+}
+
 function isNameCandidate(s: string): boolean {
   // Nur Buchstaben/Leerzeichen/Bindestrich/Punkt/Apostroph, mind. 2 Zeichen, höchstens 6 Wörter
   if (s.length < 2 || s.length > 80) return false;
@@ -146,7 +168,7 @@ function parseBlock(block: string): Row | null {
   // 1) Explizite Name-Label-Zeile
   for (const l of raw) {
     if (NAME_LABEL_RE.test(l)) {
-      const cand = l.replace(NAME_LABEL_RE, "").trim();
+      const cand = cleanNameCandidate(l);
       if (isNameCandidate(cand)) { name = cand; break; }
     }
   }
@@ -162,12 +184,14 @@ function parseBlock(block: string): Row | null {
       if (COUNTRY_RE.test(l)) continue;
       if (looksLikeAddress(l)) continue;
       if (DATE_RE.test(l)) continue;
-      if (!isNameCandidate(l)) continue;
-      nameParts.push(l);
+      const cand = cleanNameCandidate(l);
+      if (!isNameCandidate(cand)) continue;
+      nameParts.push(cand);
       if (nameParts.length >= 2) break;
     }
     name = nameParts.join(" ").replace(/\s+/g, " ").trim();
   }
+  if (!name && email) name = deriveNameFromEmail(email);
   if (!name || !email) return null;
 
   // Trailing-Kommas/Punkte entfernen

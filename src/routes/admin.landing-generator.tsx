@@ -21,6 +21,7 @@ type Branding = {
   primary_color: string;
   secondary_color: string;
   whatsapp_number: string;
+  whatsapp_enabled: boolean;
   email: string;
   telefon: string;
   telefon_2: string;

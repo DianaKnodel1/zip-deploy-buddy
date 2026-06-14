@@ -63,7 +63,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     const stats = { acceptedTotal, missingEmailOrTenant, alreadyRegistered, duplicateEmail };
 
     if (targets.length === 0) {
-      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, items: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0, wouldQueue: 0 };
+      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, items: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0, wouldQueue: 0, stats };
     }
 
     // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.

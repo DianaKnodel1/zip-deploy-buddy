@@ -16,11 +16,13 @@ import { Progress } from "@/components/ui/progress";
 import {
   FileText, GraduationCap, ClipboardList, CalendarDays,
   Wallet, ArrowRight, CheckCircle2, Clock,
-  Lock, Circle, Timer, PartyPopper, TrendingUp, ShieldCheck,
+  Lock, Circle, Timer, PartyPopper, TrendingUp, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNextStep } from "@/hooks/use-next-step";
 import { useToast } from "@/hooks/use-toast";
+import { TeamLeaderCard } from "@/components/TeamLeaderCard";
+import { OnboardingFAQ } from "@/components/OnboardingFAQ";
 
 interface Transaction {
   id: string;

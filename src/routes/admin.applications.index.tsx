@@ -175,6 +175,9 @@ function AdminApplicationsPage() {
   };
 
   const previewTotalReminders = (preview?.wouldQueue ?? 0) + (preview?.alreadyQueued ?? 0);
+  const previewWouldQueue = preview?.wouldQueue ?? 0;
+  const previewAlreadyQueued = preview?.alreadyQueued ?? 0;
+  const previewEligible = preview?.eligible ?? 0;
 
   const rejectPreviewSelected = async () => {
     if (previewSelected.size === 0) return;
@@ -603,23 +606,22 @@ function AdminApplicationsPage() {
           ) : (
             <div className="space-y-4">
               <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                Insgesamt betroffen: <span className="font-semibold text-foreground">{previewTotalReminders}</span>
-                {preview.alreadyQueued > 0
-                  ? ` · ${preview.alreadyQueued} bereits ausstehend, ${preview.wouldQueue ?? 0} werden jetzt neu eingeplant`
-                  : ` · aktuell ist niemand mehr ausstehend, ${preview.wouldQueue ?? 0} würden jetzt neu eingeplant`}
+                Offen für Einladung: <span className="font-semibold text-foreground">{previewEligible}</span>
+                {` · ${previewWouldQueue} werden jetzt neu eingeplant · ${previewAlreadyQueued} sind bereits ausstehend`}
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-lg border p-3">
-                  <div className="text-2xl font-bold">{preview.eligible}</div>
-                  <div className="text-[11px] text-muted-foreground">Akzeptiert ohne Account</div>
+                  <div className="text-2xl font-bold">{previewEligible}</div>
+                  <div className="text-[11px] text-muted-foreground">Gesamt offen</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">neu + bereits ausstehend</div>
                 </div>
                 <div className="rounded-lg border p-3 bg-primary/5">
-                  <div className="text-2xl font-bold text-primary">{preview.wouldQueue ?? 0}</div>
-                  <div className="text-[11px] text-muted-foreground">Werden eingeplant</div>
+                  <div className="text-2xl font-bold text-primary">{previewWouldQueue}</div>
+                  <div className="text-[11px] text-muted-foreground">Neu in dieser Welle</div>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <div className="text-2xl font-bold text-muted-foreground">{preview.alreadyQueued}</div>
-                  <div className="text-[11px] text-muted-foreground">Bereits ausstehend</div>
+                  <div className="text-2xl font-bold text-muted-foreground">{previewAlreadyQueued}</div>
+                  <div className="text-[11px] text-muted-foreground">Schon in Queue</div>
                 </div>
               </div>
 
@@ -632,7 +634,7 @@ function AdminApplicationsPage() {
                     className="h-9 w-32"
                   />
                   <span className="text-xs text-muted-foreground">
-                    ≈ {preview.wouldQueue && windowHours > 0 ? Math.round((preview.wouldQueue / windowHours) * 10) / 10 : 0} Mails/Stunde im Schnitt
+                    ≈ {previewWouldQueue && windowHours > 0 ? Math.round((previewWouldQueue / windowHours) * 10) / 10 : 0} Mails/Stunde im Schnitt
                   </span>
                 </div>
               </div>
@@ -726,10 +728,10 @@ function AdminApplicationsPage() {
             <Button variant="outline" onClick={() => setDripOpen(false)} disabled={resendInvitesLoading}>Abbrechen</Button>
             <Button
               onClick={confirmDripSend}
-              disabled={resendInvitesLoading || previewLoading || rejectingPreview || !preview || (preview.wouldQueue ?? 0) === 0}
+              disabled={resendInvitesLoading || previewLoading || rejectingPreview || !preview || previewWouldQueue === 0}
             >
               {resendInvitesLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MailPlus className="h-4 w-4 mr-1.5" />}
-              {preview ? `${preview.wouldQueue ?? 0} neue Einladungen einplanen` : "Einplanen"}
+              {preview ? `${previewWouldQueue} neue Einladungen einplanen` : "Einplanen"}
             </Button>
           </DialogFooter>
         </DialogContent>

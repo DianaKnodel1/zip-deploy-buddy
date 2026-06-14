@@ -344,22 +344,11 @@ function AdminApplicationsPage() {
             variant="outline"
             size="sm"
             className="h-9 text-xs gap-1.5"
-            disabled={remindersLoading}
-            onClick={() => triggerReminders(false)}
-            title="Sendet Erinnerungs-Mails an Bewerber & unvollständige Registrierungen (max. 5 Mails, alle 3 Tage)"
+            disabled={resendInvitesLoading || previewLoading}
+            onClick={openDripDialog}
+            title="Vorschau anzeigen, bevor Einladungs-Mails an alle akzeptierten Bewerber ohne Account verteilt (Drip) versendet werden."
           >
-            {remindersLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            Erinnerungen senden
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs gap-1.5"
-            disabled={resendInvitesLoading}
-            onClick={resendInvitesToAllUnregistered}
-            title="Plant Einladungs-Mails an alle akzeptierten Bewerber ohne Account und verteilt sie gleichmäßig (Drip, Default 48 h) über die Tenant-SMTP. Erinnerungs-Mails laufen parallel weiter."
-          >
-            {resendInvitesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
+            {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
             Drip-Einladungen planen
           </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("bewerbungen.csv", filtered, [

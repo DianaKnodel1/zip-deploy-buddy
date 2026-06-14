@@ -40,7 +40,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     // 2) Akzeptierte Bewerbungen ohne Auth-Account
     const { data: apps, error } = await sb
       .from("applications")
-      .select("id, email, full_name, first_name, last_name, tenant_id, status, created_at")
+      .select("id, email, full_name, first_name, last_name, phone, tenant_id, status, created_at")
       .eq("status", "akzeptiert")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
@@ -51,7 +51,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     });
 
     if (targets.length === 0) {
-      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, sample: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0 };
+      return { eligible: 0, queued: 0, windowHours, batchId: null as string | null, dryRun, items: [] as any[], perTenant: {} as Record<string, number>, alreadyQueued: 0, wouldQueue: 0 };
     }
 
     // 3) Schon offen in der Queue? Skip, um Doppel-Einträge zu vermeiden.
@@ -67,18 +67,21 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
     const perTenant: Record<string, number> = {};
     for (const t of fresh) perTenant[t.tenant_id] = (perTenant[t.tenant_id] ?? 0) + 1;
 
-    // Sample der ersten 20 Empfänger (für Preview)
-    const sample = fresh.slice(0, 20).map((a: any) => ({
-      email: a.email, full_name: a.full_name, tenant_id: a.tenant_id, created_at: a.created_at,
+    // Vollständige Liste (für Preview-Tabelle)
+    const items = fresh.map((a: any) => ({
+      id: a.id, email: a.email, full_name: a.full_name,
+      first_name: a.first_name, last_name: a.last_name,
+      phone: a.phone, tenant_id: a.tenant_id, status: a.status, created_at: a.created_at,
     }));
 
     if (fresh.length === 0) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, sample, perTenant, alreadyQueued };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: 0 };
     }
 
     if (dryRun) {
-      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, sample, perTenant, alreadyQueued, wouldQueue: fresh.length };
+      return { eligible: targets.length, queued: 0, windowHours, batchId: null, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length };
     }
+
 
     // 4) Per Tenant gruppieren und scheduled_at gleichmäßig über windowHours verteilen
     const batchId = crypto.randomUUID();

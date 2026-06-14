@@ -135,7 +135,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
       queued += count ?? chunk.length;
     }
 
-    return { eligible: targets.length, queued, windowHours, batchId, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length };
+    return { eligible: targets.length, queued, windowHours, batchId, dryRun, items, perTenant, alreadyQueued, wouldQueue: fresh.length, stats };
   });
 
 /**

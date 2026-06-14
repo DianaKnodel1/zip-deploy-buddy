@@ -12,21 +12,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/EmptyState";
-import { FileText, Download, Trash2, CheckCircle2, XCircle, Loader2, Send } from "lucide-react";
+import { FileText, Download, Trash2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { exportToCsv } from "@/lib/csv-export";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { ImportApplicationsDialog } from "@/components/ImportApplicationsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useServerFn } from "@tanstack/react-start";
-import { resendInvitesToUnregistered } from "@/lib/resend-invites.functions";
-import { MailPlus } from "lucide-react";
+import { resendInvitesToUnregistered, getInviteResendQueueStatus } from "@/lib/resend-invites.functions";
+import { MailPlus, Eye } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 function AdminApplicationsPage() {
   const { applications, loading, loadData } = useAdminData();
@@ -38,9 +42,26 @@ function AdminApplicationsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [remindersLoading, setRemindersLoading] = useState(false);
   const [resendInvitesLoading, setResendInvitesLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [dripOpen, setDripOpen] = useState(false);
+  const [windowHours, setWindowHours] = useState(48);
+  const [preview, setPreview] = useState<{
+    eligible: number; wouldQueue?: number; alreadyQueued: number;
+    sample: Array<{ email: string; full_name: string | null; tenant_id: string; created_at: string }>;
+    perTenant: Record<string, number>;
+  } | null>(null);
+  const [queueStatus, setQueueStatus] = useState<{
+    counts: { queued: number; sent: number; failed: number; skipped: number };
+    nextScheduledAt: string | null; lastScheduledAt: string | null;
+  } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
+  const queueStatusFn = useServerFn(getInviteResendQueueStatus);
+
+  const loadQueueStatus = async () => {
+    try { setQueueStatus(await queueStatusFn({ data: undefined as any })); } catch { /* silent */ }
+  };
+  useEffect(() => { loadQueueStatus(); const t = setInterval(loadQueueStatus, 30_000); return () => clearInterval(t); }, []);
 
   useEffect(() => {
     supabase.from("tenants").select("id, name, domain, primary_domain").then(({ data }) => {
@@ -100,44 +121,37 @@ function AdminApplicationsPage() {
     return { sent, failures };
   };
 
-  const triggerReminders = async (dryRun: boolean) => {
-    setRemindersLoading(true);
+  const openDripDialog = async () => {
+    setDripOpen(true);
+    setPreview(null);
+    setPreviewLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-reminders", {
-        body: { dry_run: dryRun },
-      });
-      if (error) throw error;
-      const sent = data?.sent ?? 0;
-      const skipped = data?.skipped ?? 0;
-      const failed = data?.failed ?? 0;
-      toast({
-        title: dryRun ? "Vorschau (kein Versand)" : "Erinnerungen verarbeitet",
-        description: `${sent} gesendet · ${skipped} übersprungen · ${failed} fehlgeschlagen`,
+      const r = await resendInvitesFn({ data: { windowHours, dryRun: true } });
+      setPreview({
+        eligible: r.eligible,
+        wouldQueue: (r as any).wouldQueue ?? 0,
+        alreadyQueued: (r as any).alreadyQueued ?? 0,
+        sample: (r as any).sample ?? [],
+        perTenant: (r as any).perTenant ?? {},
       });
     } catch (err: any) {
-      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+      toast({ title: "Vorschau fehlgeschlagen", description: err.message, variant: "destructive" });
+      setDripOpen(false);
     } finally {
-      setRemindersLoading(false);
+      setPreviewLoading(false);
     }
   };
 
-  const resendInvitesToAllUnregistered = async () => {
-    const input = window.prompt(
-      "Über wie viele Stunden sollen die Einladungs-Mails verteilt werden? (1–168, Default 48)",
-      "48",
-    );
-    if (input === null) return;
-    const windowHours = Math.max(1, Math.min(168, parseInt(input, 10) || 48));
-    if (!confirm(
-      `Alle akzeptierten Bewerber ohne Account werden in die Versand-Queue gestellt und gleichmäßig über ${windowHours} Stunden per Tenant-SMTP angeschrieben. Fortfahren?`,
-    )) return;
+  const confirmDripSend = async () => {
     setResendInvitesLoading(true);
     try {
-      const r = await resendInvitesFn({ data: { windowHours } });
+      const r = await resendInvitesFn({ data: { windowHours, dryRun: false } });
       toast({
         title: "Einladungs-Queue erstellt",
-        description: `${r.queued} von ${r.eligible} Bewerbern eingeplant · Verteilung über ${r.windowHours}h. Versand läuft per Cron alle 15 min.`,
+        description: `${r.queued} von ${r.eligible} Bewerbern eingeplant · Verteilung über ${r.windowHours}h. Versand alle 15 min per Cron.`,
       });
+      setDripOpen(false);
+      loadQueueStatus();
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
@@ -330,22 +344,11 @@ function AdminApplicationsPage() {
             variant="outline"
             size="sm"
             className="h-9 text-xs gap-1.5"
-            disabled={remindersLoading}
-            onClick={() => triggerReminders(false)}
-            title="Sendet Erinnerungs-Mails an Bewerber & unvollständige Registrierungen (max. 5 Mails, alle 3 Tage)"
+            disabled={resendInvitesLoading || previewLoading}
+            onClick={openDripDialog}
+            title="Vorschau anzeigen, bevor Einladungs-Mails an alle akzeptierten Bewerber ohne Account verteilt (Drip) versendet werden."
           >
-            {remindersLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            Erinnerungen senden
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs gap-1.5"
-            disabled={resendInvitesLoading}
-            onClick={resendInvitesToAllUnregistered}
-            title="Plant Einladungs-Mails an alle akzeptierten Bewerber ohne Account und verteilt sie gleichmäßig (Drip, Default 48 h) über die Tenant-SMTP. Erinnerungs-Mails laufen parallel weiter."
-          >
-            {resendInvitesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
+            {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus className="h-3.5 w-3.5" />}
             Drip-Einladungen planen
           </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => exportToCsv("bewerbungen.csv", filtered, [
@@ -354,6 +357,23 @@ function AdminApplicationsPage() {
           ])}><Download className="h-3.5 w-3.5" /> CSV</Button>
         </div>
       </div>
+
+      {queueStatus && (queueStatus.counts.queued + queueStatus.counts.sent + queueStatus.counts.failed > 0) && (
+        <div className="flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-xs">
+          <span className="font-medium text-muted-foreground">Drip-Queue:</span>
+          <span><span className="font-semibold text-foreground">{queueStatus.counts.queued}</span> ausstehend</span>
+          <span className="text-status-success"><span className="font-semibold">{queueStatus.counts.sent}</span> gesendet</span>
+          {queueStatus.counts.failed > 0 && <span className="text-destructive"><span className="font-semibold">{queueStatus.counts.failed}</span> fehlgeschlagen</span>}
+          {queueStatus.counts.skipped > 0 && <span className="text-muted-foreground">{queueStatus.counts.skipped} übersprungen</span>}
+          {queueStatus.nextScheduledAt && (
+            <span className="text-muted-foreground ml-auto">
+              Nächster Versand: {new Date(queueStatus.nextScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              {queueStatus.lastScheduledAt && ` · bis ${new Date(queueStatus.lastScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
+            </span>
+          )}
+        </div>
+      )}
+
 
       {selected.size > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
@@ -492,6 +512,93 @@ function AdminApplicationsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={dripOpen} onOpenChange={(o) => { if (!resendInvitesLoading) setDripOpen(o); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Eye className="h-4 w-4" /> Vorschau: Drip-Einladungen</DialogTitle>
+            <DialogDescription>
+              Keine Mail wurde gesendet. Prüfe Empfängerzahl und Verteilung, dann freigeben.
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewLoading || !preview ? (
+            <div className="py-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Lade Vorschau…
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-bold">{preview.eligible}</div>
+                  <div className="text-[11px] text-muted-foreground">Akzeptiert ohne Account</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-primary/5">
+                  <div className="text-2xl font-bold text-primary">{preview.wouldQueue ?? 0}</div>
+                  <div className="text-[11px] text-muted-foreground">Werden eingeplant</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-bold text-muted-foreground">{preview.alreadyQueued}</div>
+                  <div className="text-[11px] text-muted-foreground">Schon in Queue (skip)</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Versand über (Stunden, 1–168)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number" min={1} max={168} value={windowHours}
+                    onChange={(e) => setWindowHours(Math.max(1, Math.min(168, parseInt(e.target.value, 10) || 48)))}
+                    className="h-9 w-32"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    ≈ {preview.wouldQueue && windowHours > 0 ? Math.round((preview.wouldQueue / windowHours) * 10) / 10 : 0} Mails/Stunde im Schnitt
+                  </span>
+                </div>
+              </div>
+
+              {Object.keys(preview.perTenant).length > 0 && (
+                <div className="text-xs space-y-1">
+                  <div className="font-medium text-muted-foreground">Verteilung pro Tenant:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(preview.perTenant).map(([tid, n]) => (
+                      <Badge key={tid} variant="secondary" className="text-[10px]">
+                        {tenantMap[tid]?.name ?? tid.slice(0, 8)}: {n}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {preview.sample.length > 0 && (
+                <div className="text-xs">
+                  <div className="font-medium text-muted-foreground mb-1.5">Erste {preview.sample.length} Empfänger (Stichprobe):</div>
+                  <div className="max-h-48 overflow-auto rounded border divide-y">
+                    {preview.sample.map((s, i) => (
+                      <div key={i} className="px-2 py-1.5 flex justify-between gap-2">
+                        <span className="truncate">{s.full_name ?? "—"} · <span className="text-muted-foreground">{s.email}</span></span>
+                        <span className="text-muted-foreground shrink-0">{tenantMap[s.tenant_id]?.name ?? "?"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDripOpen(false)} disabled={resendInvitesLoading}>Abbrechen</Button>
+            <Button
+              onClick={confirmDripSend}
+              disabled={resendInvitesLoading || previewLoading || !preview || (preview.wouldQueue ?? 0) === 0}
+            >
+              {resendInvitesLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MailPlus className="h-4 w-4 mr-1.5" />}
+              {preview ? `${preview.wouldQueue ?? 0} Einladungen einplanen` : "Einplanen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }

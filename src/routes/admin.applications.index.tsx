@@ -48,9 +48,11 @@ function AdminApplicationsPage() {
   const [windowHours, setWindowHours] = useState(48);
   const [preview, setPreview] = useState<{
     eligible: number; wouldQueue?: number; alreadyQueued: number;
-    sample: Array<{ email: string; full_name: string | null; tenant_id: string; created_at: string }>;
+    items: Array<{ id: string; email: string; full_name: string | null; first_name: string | null; last_name: string | null; phone: string | null; tenant_id: string; status: string; created_at: string }>;
     perTenant: Record<string, number>;
   } | null>(null);
+  const [previewSelected, setPreviewSelected] = useState<Set<string>>(new Set());
+  const [rejectingPreview, setRejectingPreview] = useState(false);
   const [queueStatus, setQueueStatus] = useState<{
     counts: { queued: number; sent: number; failed: number; skipped: number };
     nextScheduledAt: string | null; lastScheduledAt: string | null;
@@ -121,9 +123,7 @@ function AdminApplicationsPage() {
     return { sent, failures };
   };
 
-  const openDripDialog = async () => {
-    setDripOpen(true);
-    setPreview(null);
+  const loadPreview = async () => {
     setPreviewLoading(true);
     try {
       const r = await resendInvitesFn({ data: { windowHours, dryRun: true } });
@@ -131,7 +131,7 @@ function AdminApplicationsPage() {
         eligible: r.eligible,
         wouldQueue: (r as any).wouldQueue ?? 0,
         alreadyQueued: (r as any).alreadyQueued ?? 0,
-        sample: (r as any).sample ?? [],
+        items: (r as any).items ?? [],
         perTenant: (r as any).perTenant ?? {},
       });
     } catch (err: any) {
@@ -141,6 +141,32 @@ function AdminApplicationsPage() {
       setPreviewLoading(false);
     }
   };
+
+  const openDripDialog = async () => {
+    setDripOpen(true);
+    setPreview(null);
+    setPreviewSelected(new Set());
+    await loadPreview();
+  };
+
+  const rejectPreviewSelected = async () => {
+    if (previewSelected.size === 0) return;
+    setRejectingPreview(true);
+    try {
+      const ids = Array.from(previewSelected);
+      const { error } = await supabase.from("applications").update({ status: "abgelehnt" }).in("id", ids);
+      if (error) throw error;
+      toast({ title: "Aus Drip ausgeschlossen", description: `${ids.length} Bewerber auf "abgelehnt" gesetzt.` });
+      setPreviewSelected(new Set());
+      await loadData();
+      await loadPreview();
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+    } finally {
+      setRejectingPreview(false);
+    }
+  };
+
 
   const confirmDripSend = async () => {
     setResendInvitesLoading(true);
@@ -570,16 +596,72 @@ function AdminApplicationsPage() {
                 </div>
               )}
 
-              {preview.sample.length > 0 && (
-                <div className="text-xs">
-                  <div className="font-medium text-muted-foreground mb-1.5">Erste {preview.sample.length} Empfänger (Stichprobe):</div>
-                  <div className="max-h-48 overflow-auto rounded border divide-y">
-                    {preview.sample.map((s, i) => (
-                      <div key={i} className="px-2 py-1.5 flex justify-between gap-2">
-                        <span className="truncate">{s.full_name ?? "—"} · <span className="text-muted-foreground">{s.email}</span></span>
-                        <span className="text-muted-foreground shrink-0">{tenantMap[s.tenant_id]?.name ?? "?"}</span>
-                      </div>
-                    ))}
+              {preview.items.length > 0 && (
+                <div className="text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-muted-foreground">
+                      {preview.items.length} Empfänger ({previewSelected.size} ausgewählt)
+                    </div>
+                    {previewSelected.size > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        disabled={rejectingPreview}
+                        onClick={rejectPreviewSelected}
+                      >
+                        {rejectingPreview ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                        Auswahl auf "abgelehnt" setzen ({previewSelected.size})
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-[55vh] overflow-auto rounded border">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-muted/60 backdrop-blur">
+                        <tr className="border-b">
+                          <th className="px-2 py-2 w-8">
+                            <Checkbox
+                              checked={preview.items.length > 0 && preview.items.every((i) => previewSelected.has(i.id))}
+                              onCheckedChange={(v) => {
+                                if (v) setPreviewSelected(new Set(preview.items.map((i) => i.id)));
+                                else setPreviewSelected(new Set());
+                              }}
+                            />
+                          </th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Name</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">E-Mail</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Telefon</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Tenant</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Datum</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {preview.items.map((it) => {
+                          const sel = previewSelected.has(it.id);
+                          return (
+                            <tr key={it.id} className={sel ? "bg-destructive/5" : "hover:bg-muted/30"}>
+                              <td className="px-2 py-1.5">
+                                <Checkbox
+                                  checked={sel}
+                                  onCheckedChange={() => {
+                                    const next = new Set(previewSelected);
+                                    if (next.has(it.id)) next.delete(it.id); else next.add(it.id);
+                                    setPreviewSelected(next);
+                                  }}
+                                />
+                              </td>
+                              <td className="px-3 py-1.5 font-medium">
+                                {it.first_name && it.last_name ? `${it.first_name} ${it.last_name}` : (it.full_name ?? "—")}
+                              </td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{it.email}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{it.phone || "–"}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{tenantMap[it.tenant_id]?.name ?? "?"}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{new Date(it.created_at).toLocaleDateString("de-DE")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -590,13 +672,14 @@ function AdminApplicationsPage() {
             <Button variant="outline" onClick={() => setDripOpen(false)} disabled={resendInvitesLoading}>Abbrechen</Button>
             <Button
               onClick={confirmDripSend}
-              disabled={resendInvitesLoading || previewLoading || !preview || (preview.wouldQueue ?? 0) === 0}
+              disabled={resendInvitesLoading || previewLoading || rejectingPreview || !preview || (preview.wouldQueue ?? 0) === 0}
             >
               {resendInvitesLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MailPlus className="h-4 w-4 mr-1.5" />}
               {preview ? `${preview.wouldQueue ?? 0} Einladungen einplanen` : "Einplanen"}
             </Button>
           </DialogFooter>
         </DialogContent>
+
       </Dialog>
     </div>
 

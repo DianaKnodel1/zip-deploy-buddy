@@ -291,7 +291,8 @@ function AdminEmailTemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState("");
-  const [testType, setTestType] = useState<"welcome" | "reset">("welcome");
+  type TestTemplateKey = "welcome" | "reset" | "invite" | "confirm" | "completion" | "no_booking" | "recovery_ma" | "recovery_bew" | "appointment";
+  const [testType, setTestType] = useState<TestTemplateKey>("welcome");
   const { toast } = useToast();
 
   // Template state

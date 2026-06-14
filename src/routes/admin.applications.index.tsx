@@ -45,7 +45,7 @@ function AdminApplicationsPage() {
   const [resendInvitesLoading, setResendInvitesLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [dripOpen, setDripOpen] = useState(false);
-  const [windowHours, setWindowHours] = useState(48);
+  const [windowHours, setWindowHours] = useState(24);
   const [preview, setPreview] = useState<{
     eligible: number; wouldQueue?: number; alreadyQueued: number;
     items: Array<{ id: string; email: string; full_name: string | null; first_name: string | null; last_name: string | null; phone: string | null; tenant_id: string; status: string; created_at: string }>;

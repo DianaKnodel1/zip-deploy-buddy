@@ -54,14 +54,21 @@ export function AdminEmailLogsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("email_send_log")
-      .select("*")
-      .neq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    setLogs((data as EmailLogFull[]) ?? []);
-    setLoading(false);
+    try {
+      // Letzte 30 Tage komplett laden (paginiert via fetchAll, kein 1000er-Limit).
+      const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+      const rows = await fetchAll<EmailLogFull>(() =>
+        supabase
+          .from("email_send_log")
+          .select("*")
+          .neq("status", "pending")
+          .gte("created_at", since)
+          .order("created_at", { ascending: false }),
+      );
+      setLogs(rows);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadData(); }, []);

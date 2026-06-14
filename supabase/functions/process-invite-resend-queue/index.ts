@@ -103,9 +103,9 @@ serve(async (req) => {
   const tMap = new Map<string, any>();
   (tenants ?? []).forEach((t: any) => tMap.set(t.id, t));
 
-  let sent = 0, failed = 0, skipped = 0;
+  let sent = 0, failed = 0, skipped = autoSkipped;
 
-  for (const row of due) {
+  for (const row of dueFiltered) {
     const t = tMap.get(row.tenant_id);
     if (!t || t.is_active === false || t.emails_paused) {
       await admin.from("invite_resend_queue").update({

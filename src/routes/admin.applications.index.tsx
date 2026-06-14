@@ -159,6 +159,7 @@ function AdminApplicationsPage() {
         alreadyQueued: (r as any).alreadyQueued ?? 0,
         items: (r as any).items ?? [],
         perTenant: (r as any).perTenant ?? {},
+        stats: (r as any).stats,
       });
     } catch (err: any) {
       toast({ title: "Vorschau fehlgeschlagen", description: err.message, variant: "destructive" });

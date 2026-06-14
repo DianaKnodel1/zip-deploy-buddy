@@ -45,6 +45,56 @@ function AdminApplicationsPage() {
     });
   }, []);
 
+  const buildPortalLink = (tenantId?: string | null) => {
+    const tenant = tenantId ? tenantMap[tenantId] : null;
+    const activeDomain = tenant?.primary_domain ?? tenant?.domain ?? null;
+    return activeDomain
+      ? `https://portal.${activeDomain}/register`
+      : `${window.location.origin}/register`;
+  };
+
+  const sendInvitationEmail = async (app: (typeof applications)[number]) => {
+    if (!app.email) throw new Error("Keine E-Mail-Adresse hinterlegt");
+    if (!app.tenant_id) throw new Error("Kein Tenant hinterlegt");
+
+    const { data, error } = await supabase.functions.invoke("send-invitation-email", {
+      body: {
+        to: app.email,
+        fullName: app.full_name,
+        firstName: app.first_name,
+        lastName: app.last_name,
+        registrationLink: buildPortalLink(app.tenant_id),
+        tenantId: app.tenant_id,
+      },
+    });
+
+    if (error) throw new Error(error.message || "E-Mail-Versand fehlgeschlagen");
+    if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
+  };
+
+  const sendInvitationEmailsInBatches = async (appsToInvite: Array<(typeof applications)[number]>) => {
+    const failures: Array<{ app: (typeof applications)[number]; reason: string }> = [];
+    let sent = 0;
+
+    for (let i = 0; i < appsToInvite.length; i += 5) {
+      const batch = appsToInvite.slice(i, i + 5);
+      const results = await Promise.allSettled(batch.map((app) => sendInvitationEmail(app)));
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          sent += 1;
+          return;
+        }
+        failures.push({
+          app: batch[index],
+          reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      });
+    }
+
+    return { sent, failures };
+  };
+
   const triggerReminders = async (dryRun: boolean) => {
     setRemindersLoading(true);
     try {
@@ -74,17 +124,10 @@ function AdminApplicationsPage() {
       if (updateError) throw updateError;
 
       // Send invitation email
-      const tenant = app.tenant_id ? tenantMap[app.tenant_id] : null;
-      // Primary-Domain hat Vorrang (Admin-Wechsel .de → .com), Fallback ist tenants.domain.
-      const activeDomain = tenant?.primary_domain ?? tenant?.domain ?? null;
-      const portalLink = activeDomain
-        ? `https://portal.${activeDomain}/register`
-        : `${window.location.origin}/register`;
-
       const { error: emailError } = await supabase.functions.invoke("send-invitation-email", {
         body: {
           to: app.email, fullName: app.full_name, firstName: app.first_name,
-          lastName: app.last_name, registrationLink: portalLink, tenantId: app.tenant_id,
+          lastName: app.last_name, registrationLink: buildPortalLink(app.tenant_id), tenantId: app.tenant_id,
         },
       });
 
@@ -175,9 +218,27 @@ function AdminApplicationsPage() {
     setBulkLoading(true);
     try {
       const ids = Array.from(selected);
+      const selectedApplications = applications.filter((app) => selected.has(app.id));
       const { error } = await supabase.from("applications").update({ status: newStatus }).in("id", ids);
       if (error) throw error;
-      toast({ title: `${ids.length} Bewerbungen ${newStatus === "akzeptiert" ? "angenommen" : "abgelehnt"}` });
+
+      if (newStatus === "akzeptiert") {
+        const appsToInvite = selectedApplications.filter((app) => app.status !== "akzeptiert");
+        const { sent, failures } = await sendInvitationEmailsInBatches(appsToInvite);
+
+        toast({
+          title: failures.length > 0
+            ? `${ids.length} Bewerbungen angenommen · ${failures.length} Mail(s) fehlgeschlagen`
+            : `${ids.length} Bewerbungen angenommen`,
+          description: failures.length > 0
+            ? failures.slice(0, 2).map(({ app, reason }) => `${app.full_name}: ${reason}`).join(" · ")
+            : `${sent} Einladungen wurden gesendet und im E-Mail-Center protokolliert.`,
+          variant: failures.length > 0 ? "destructive" : "default",
+        });
+      } else {
+        toast({ title: `${ids.length} Bewerbungen abgelehnt` });
+      }
+
       setSelected(new Set());
       loadData();
     } catch (err: any) {

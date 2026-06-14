@@ -12,7 +12,7 @@ async function assertAdmin(ctx: { supabase: any; userId: string }) {
 /**
  * Drip-Resend: Plant Einladungs-Mails an alle akzeptierten Bewerber OHNE Auth-Account.
  * Statt sofort zu senden, werden Rows in invite_resend_queue eingestellt mit
- * scheduled_at gleichmäßig über `windowHours` (Default 48) verteilt — pro Tenant
+ * scheduled_at gleichmäßig über `windowHours` (Default 24) verteilt — pro Tenant
  * separat, damit jeder Tenant sein eigenes SMTP gleichmäßig auslastet.
  *
  * Worker: Edge Function process-invite-resend-queue (per pg_cron alle 15 min).
@@ -22,7 +22,7 @@ export const resendInvitesToUnregistered = createServerFn({ method: "POST" })
   .inputValidator((input: { windowHours?: number; dryRun?: boolean } | undefined) => input ?? {})
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const windowHours = Math.min(Math.max(data.windowHours ?? 48, 1), 168); // 1h..7d
+    const windowHours = Math.min(Math.max(data.windowHours ?? 24, 1), 168); // 1h..7d
     const dryRun = !!data.dryRun;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const sb = supabaseAdmin as any;

@@ -51,6 +51,7 @@ const EMPTY: Branding = {
   primary_color: "#2563eb",
   secondary_color: "#1e40af",
   whatsapp_number: "",
+  whatsapp_enabled: false,
   email: "",
   telefon: "",
   telefon_2: "",

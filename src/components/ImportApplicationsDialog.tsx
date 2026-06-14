@@ -80,23 +80,42 @@ const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 const PHONE_RE = /(?:\+?\d[\d\s().\-/]{6,}\d)/;
 const POSTAL_RE = /\b\d{4,5}\b/;
 const DATE_RE = /\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/;
+// Label-Präfixe (Name, E-Mail, Telefon, …) am Zeilenanfang
+const NAME_LABEL_RE = /^(vor[\s\-]*(?:und[\s\-]*)?nachname|vor[-\s]*nachname|vorname(?:\s*und\s*nachname)?|nachname|name)\s*[:\-]\s*/i;
+const EMAIL_LABEL_RE = /^(e\s*-?\s*mail(?:\s*[-\s]?adresse)?|email|mail)\s*[:\-]\s*/i;
+const PHONE_LABEL_RE = /^(telefonnummer|telefon|tel\.?|mobil|handy|phone)\s*[:\-]\s*/i;
+// Zeilen, die NIE ein Name sind
+const SKIP_LINE_RE = /^(bewerber\s*information|adresse|anschrift|wohnort|geboren|geburtsort|geburtsdatum|geburtsdatum\s*und[-\s]*ort|geburtstag|geburtdatum|staatsangeh\w*|familienstand|nationalit\w*|führerschein|c\/o)\s*[:\-]?/i;
+// Länder / Bundesländer in eigenen Zeilen ignorieren
+const COUNTRY_RE = /^(deutschland|österreich|schweiz|germany|austria|switzerland)$/i;
 
-function looksLikeAddress(line: string): boolean {
-  if (/\b(str\.|straße|strasse|weg|gasse|platz|allee|ring|chaussee|ufer)\b/i.test(line)) return true;
-  if (POSTAL_RE.test(line) && /[A-Za-zÄÖÜäöüß]/.test(line)) return true;
-  return false;
+function stripCtl(s: string): string {
+  // Unsichtbare Steuerzeichen (LRE/RLE/PDF/LRM/RLM/BOM …) entfernen
+  return s.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "");
 }
 
-function isMeta(line: string): boolean {
-  return /^(mobil|tel\.?|telefon|mail|e-?mail|geb\.?|geburt|geburtstag|geburtdatum|geburtsdatum|adresse|staat|staatsangeh|familien|nationalität)\b/i.test(line.trim());
+function looksLikeAddress(line: string): boolean {
+  if (/\b(str\.|straße|strasse|str\b|weg|gasse|platz|allee|ring|chaussee|ufer|hof)\b/i.test(line)) return true;
+  if (POSTAL_RE.test(line) && /[A-Za-zÄÖÜäöüß]/.test(line)) return true;
+  return false;
 }
 
 function titleCase(s: string): string {
   return s.toLowerCase().split(/\s+/).map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
 }
 
+function isNameCandidate(s: string): boolean {
+  // Nur Buchstaben/Leerzeichen/Bindestrich/Punkt/Apostroph, mind. 2 Zeichen, höchstens 6 Wörter
+  if (s.length < 2 || s.length > 80) return false;
+  if (s.split(/\s+/).length > 6) return false;
+  return /^[A-Za-zÄÖÜäöüßÉéÈèÀàÂâÊêÎîÔôÛûÇçÑñÁáÍíÓóÚúğĞıİşŞçÇöÖüÜ'\-.\s]+$/.test(s);
+}
+
 function parseBlock(block: string): Row | null {
-  const raw = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const raw = block
+    .split(/\r?\n/)
+    .map((l) => stripCtl(l).replace(/^[•·●○*]+\s*/, "").trim())
+    .filter(Boolean);
   if (raw.length === 0) return null;
 
   // E-Mail extrahieren
@@ -104,56 +123,59 @@ function parseBlock(block: string): Row | null {
   for (const l of raw) { const m = l.match(EMAIL_RE); if (m) { email = m[0]; break; } }
   if (!email) return null;
 
-  // Telefon extrahieren (E-Mail-Zeile ausschließen)
+  // Telefon extrahieren — Label-Zeile bevorzugt, sonst irgendwo (außer E-Mail-Zeile)
   let phone: string | null = null;
   for (const l of raw) {
-    if (l.includes(email)) continue;
-    const m = l.match(PHONE_RE);
-    if (m) {
-      const digits = m[0].replace(/\D/g, "");
-      if (digits.length >= 7) { phone = m[0].trim().replace(/\s+/g, " "); break; }
-    }
+    if (!PHONE_LABEL_RE.test(l)) continue;
+    const m = l.replace(PHONE_LABEL_RE, "").match(PHONE_RE);
+    if (m && m[0].replace(/\D/g, "").length >= 7) { phone = m[0].trim().replace(/\s+/g, " "); break; }
   }
-  // Fallback: auch Zeile mit E-Mail nach Telefon prüfen
   if (!phone) {
     for (const l of raw) {
       const without = l.replace(EMAIL_RE, "");
       const m = without.match(PHONE_RE);
-      if (m) {
-        const digits = m[0].replace(/\D/g, "");
-        if (digits.length >= 7) { phone = m[0].trim().replace(/\s+/g, " "); break; }
-      }
+      if (m && m[0].replace(/\D/g, "").length >= 7) { phone = m[0].trim().replace(/\s+/g, " "); break; }
     }
   }
 
-  // Name: erste Zeile finden die KEIN E-Mail, KEIN Telefon, KEINE Adresse, kein Datum, kein Meta
-  // Erlaube Mehrzeilen-Namen (z.B. "BURAK\nTEKKILIC")
-  const nameParts: string[] = [];
+  // Name finden
+  let name = "";
+  // 1) Explizite Name-Label-Zeile
   for (const l of raw) {
-    if (EMAIL_RE.test(l)) continue;
-    if (PHONE_RE.test(l) && l.replace(/\D/g, "").length >= 7) continue;
-    if (looksLikeAddress(l)) continue;
-    if (DATE_RE.test(l)) continue;
-    if (isMeta(l)) continue;
-    // Bullet/Pipe entfernen
-    const cleaned = l.replace(/^[•·\-*]+\s*/, "").trim();
-    if (!cleaned) continue;
-    // Nur Buchstaben/Leerzeichen/Bindestrich/Punkt
-    if (!/^[A-Za-zÄÖÜäöüßÉéÈèÀàÂâÊêÎîÔôÛûÇçÑñÁáÍíÓóÚú'\-.\s]+$/.test(cleaned)) continue;
-    nameParts.push(cleaned);
-    if (nameParts.length >= 2) break; // max 2 Zeilen kombinieren
+    if (NAME_LABEL_RE.test(l)) {
+      const cand = l.replace(NAME_LABEL_RE, "").trim();
+      if (isNameCandidate(cand)) { name = cand; break; }
+    }
   }
-  if (nameParts.length === 0) return null;
+  // 2) Fallback: erste plausible Zeile
+  if (!name) {
+    const nameParts: string[] = [];
+    for (const l of raw) {
+      if (EMAIL_LABEL_RE.test(l) || PHONE_LABEL_RE.test(l)) continue;
+      if (EMAIL_RE.test(l)) continue;
+      if (PHONE_RE.test(l) && l.replace(/\D/g, "").length >= 7) continue;
+      if (SKIP_LINE_RE.test(l)) continue;
+      if (COUNTRY_RE.test(l)) continue;
+      if (looksLikeAddress(l)) continue;
+      if (DATE_RE.test(l)) continue;
+      if (!isNameCandidate(l)) continue;
+      nameParts.push(l);
+      if (nameParts.length >= 2) break;
+    }
+    name = nameParts.join(" ").replace(/\s+/g, " ").trim();
+  }
+  if (!name) return null;
 
-  let full_name = nameParts.join(" ").replace(/\s+/g, " ").trim();
-  // Wenn ALLES uppercase ist → schön formatieren
-  if (full_name === full_name.toUpperCase()) full_name = titleCase(full_name);
+  // Trailing-Kommas/Punkte entfernen
+  name = name.replace(/[,;]+$/, "").trim();
+  // ALL CAPS schön formatieren
+  if (name === name.toUpperCase()) name = titleCase(name);
 
-  const parts = full_name.split(/\s+/);
-  const first_name = parts.length > 1 ? parts.slice(0, -1).join(" ") : full_name;
+  const parts = name.split(/\s+/);
+  const first_name = parts.length > 1 ? parts.slice(0, -1).join(" ") : name;
   const last_name = parts.length > 1 ? parts[parts.length - 1] : undefined;
 
-  return { full_name, email: email.toLowerCase(), phone, status: "neu", created_at: null, first_name, last_name };
+  return { full_name: name, email: email.toLowerCase(), phone, status: "neu", created_at: null, first_name, last_name };
 }
 
 function parseFreeText(text: string): { rows: Row[]; errors: string[] } {

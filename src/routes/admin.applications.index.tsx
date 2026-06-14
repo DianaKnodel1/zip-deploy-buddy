@@ -406,16 +406,29 @@ function AdminApplicationsPage() {
       {queueStatus && (queueStatus.counts.queued + queueStatus.counts.sent + queueStatus.counts.failed > 0) && (
         <div className="flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-xs">
           <span className="font-medium text-muted-foreground">Drip-Queue:</span>
-          <span><span className="font-semibold text-foreground">{queueStatus.counts.queued}</span> ausstehend</span>
-          <span className="text-status-success"><span className="font-semibold">{queueStatus.counts.sent}</span> gesendet</span>
-          {queueStatus.counts.failed > 0 && <span className="text-destructive"><span className="font-semibold">{queueStatus.counts.failed}</span> fehlgeschlagen</span>}
-          {queueStatus.counts.skipped > 0 && <span className="text-muted-foreground">{queueStatus.counts.skipped} übersprungen</span>}
+          <button type="button" className="hover:underline" onClick={() => openQueueDetails("queued")}>
+            <span className="font-semibold text-foreground">{queueStatus.counts.queued}</span> ausstehend
+          </button>
+          <button type="button" className="text-status-success hover:underline" onClick={() => openQueueDetails("sent")}>
+            <span className="font-semibold">{queueStatus.counts.sent}</span> gesendet
+          </button>
+          {queueStatus.counts.failed > 0 && (
+            <button type="button" className="text-destructive hover:underline" onClick={() => openQueueDetails("failed")}>
+              <span className="font-semibold">{queueStatus.counts.failed}</span> fehlgeschlagen
+            </button>
+          )}
+          {queueStatus.counts.skipped > 0 && (
+            <button type="button" className="text-muted-foreground hover:underline" onClick={() => openQueueDetails("skipped")}>
+              {queueStatus.counts.skipped} übersprungen
+            </button>
+          )}
           {queueStatus.nextScheduledAt && (
             <span className="text-muted-foreground ml-auto">
               Nächster Versand: {new Date(queueStatus.nextScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
               {queueStatus.lastScheduledAt && ` · bis ${new Date(queueStatus.lastScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
             </span>
           )}
+          <Button variant="outline" size="sm" className="h-7 text-xs ml-2" onClick={() => openQueueDetails("queued")}>Details</Button>
         </div>
       )}
 

@@ -36,6 +36,13 @@ const TYPE_LABELS: Record<string, string> = {
   no_recent_booking: "Keine Buchung (7+ Tage)",
 };
 
+const REMINDER_TEMPLATE_NAMES: Record<string, string> = {
+  invite: "reminder_invite",
+  confirm_email: "reminder_confirm_email",
+  complete_registration: "reminder_complete_registration",
+  no_recent_booking: "reminder_no_recent_booking",
+};
+
 export function AdminRemindersPage() {
   const { toast } = useToast();
   const healthFn = useServerFn(getReminderHealth);
@@ -55,18 +62,37 @@ export function AdminRemindersPage() {
 
   const openPreview = async (r: ReminderRow) => {
     setPreview({ loading: true, reminder: r, log: null });
-    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + ±5 min Fenster um sent_at.
+    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + Reminder-Typ.
     const t = new Date(r.sent_at).getTime();
-    const from = new Date(t - 5 * 60_000).toISOString();
-    const to = new Date(t + 5 * 60_000).toISOString();
-    const { data } = await supabase
+    const from = new Date(t - 30 * 60_000).toISOString();
+    const to = new Date(t + 30 * 60_000).toISOString();
+    const template = REMINDER_TEMPLATE_NAMES[r.reminder_type] ?? `reminder_${r.reminder_type}`;
+    const templates = r.reminder_type === "invite" ? [template, "invitation"] : [template];
+    let { data } = await supabase
       .from("email_send_log")
       .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
       .eq("recipient_email", r.email)
+      .in("template_name", templates)
       .gte("created_at", from)
       .lte("created_at", to)
       .order("created_at", { ascending: false })
       .limit(1);
+    if (!data?.length) {
+      const start = new Date(r.sent_at);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(r.sent_at);
+      end.setHours(23, 59, 59, 999);
+      const fallback = await supabase
+        .from("email_send_log")
+        .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
+        .eq("recipient_email", r.email)
+        .in("template_name", templates)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1);
+      data = fallback.data;
+    }
     setPreview({ loading: false, reminder: r, log: (data ?? [])[0] ?? null });
   };
 

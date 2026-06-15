@@ -60,6 +60,24 @@ function AdminApplicationsPage() {
   } | null>(null);
   const resendInvitesFn = useServerFn(resendInvitesToUnregistered);
   const skipQueuedFn = useServerFn(skipQueuedInvitesFor);
+  const stopQueueFn = useServerFn(stopInviteResendQueue);
+  const [stopping, setStopping] = useState(false);
+  const handleStopQueue = async () => {
+    const pending = queueStatus?.counts.queued ?? 0;
+    if (pending === 0) return;
+    if (!window.confirm(`Wirklich die komplette Drip-Queue stoppen?\n\n${pending} ausstehende Einladungs-Mails werden auf "übersprungen" gesetzt und NICHT mehr versendet. Bereits gesendete Mails bleiben unverändert.`)) return;
+    setStopping(true);
+    try {
+      const r = await stopQueueFn({ data: { reason: "admin_stop_all" } });
+      toast({ title: "Drip-Queue gestoppt", description: `${r.stopped} ausstehende Mails wurden übersprungen.` });
+      await loadQueueStatus();
+    } catch (e: any) {
+      toast({ title: "Fehler", description: e?.message ?? "Konnte Queue nicht stoppen", variant: "destructive" });
+    } finally {
+      setStopping(false);
+    }
+  };
+
   const queueStatusFn = useServerFn(getInviteResendQueueStatus);
   const queueListFn = useServerFn(listInviteResendQueueItems);
   const [queueDetailsOpen, setQueueDetailsOpen] = useState(false);

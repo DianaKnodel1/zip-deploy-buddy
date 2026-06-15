@@ -156,8 +156,8 @@ serve(async (req) => {
       failed++;
     }
 
-    // kleine Streuung zwischen Sends
-    await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 1200)));
+    // kleine Streuung zwischen Sends (kurz halten — Edge-Runtime-Wall-Limit)
+    await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 300)));
   }
 
   return json({ processed: due.length, sent, failed, skipped }, 200);

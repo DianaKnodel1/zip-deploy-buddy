@@ -34,6 +34,7 @@ const TYPE_LABELS: Record<string, string> = {
   confirm_email: "E-Mail bestätigen",
   complete_registration: "Registrierung abschließen",
   no_recent_booking: "Keine Buchung (7+ Tage)",
+  domain_recovery: "Domain-Recovery",
 };
 
 const REMINDER_TEMPLATE_NAMES: Record<string, string> = {
@@ -41,6 +42,7 @@ const REMINDER_TEMPLATE_NAMES: Record<string, string> = {
   confirm_email: "reminder_confirm_email",
   complete_registration: "reminder_complete_registration",
   no_recent_booking: "reminder_no_recent_booking",
+  domain_recovery: "reminder_domain_recovery",
 };
 
 export function AdminRemindersPage() {

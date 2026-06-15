@@ -19,11 +19,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Ziel: ~60 Mails/Stunde → bei Cron */15 = 15 pro Run (≈60/h).
-// Sendefenster 06–22 Uhr (16h) → max ~960 Mails/Tag.
-// MAX_PER_RUN bewusst klein, damit jeder Run sicher unter dem Edge-Runtime
-// Wall-Clock-/CPU-Limit bleibt (sonst: "early termination").
-const MAX_PER_RUN = 12;
+// Ziel: ~1100 Mails in 24h. Sendefenster 06–22 Uhr (16h) = 64 Runs à 15 min.
+// 1100 / 64 ≈ 18 → wir nehmen 25 für Headroom + Backlog-Catch-up.
+// Auto-Skip nutzt jetzt eine billige profiles-Query (keine listUsers-Schleife
+// mehr), darum ist die Wall-Clock pro Run unkritisch — der Bottleneck war
+// vorher die User-Liste, nicht das Senden.
+const MAX_PER_RUN = 25;
 // Quiet-Hours (Europe/Berlin): aktiv außerhalb 06–22 Uhr
 const QUIET_START = 6;
 const QUIET_END = 22;

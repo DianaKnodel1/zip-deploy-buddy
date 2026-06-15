@@ -368,13 +368,13 @@ export function AdminEmailLogsPage() {
 
       {/* Vorschau-Modal */}
       <Dialog open={!!previewLog} onOpenChange={(open) => !open && setPreviewLog(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[min(100vw-2rem,900px)] max-w-none max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-4 w-4" /> Mail-Vorschau
             </DialogTitle>
             <DialogDescription>
-              Genau das, was der Empfänger gesehen hat (sofern die Mail seit dem Update versendet wurde).
+              „Gesendet“ bedeutet: Der SMTP-Server hat die Mail angenommen; endgültige Zustellung hängt vom Empfänger-Postfach ab.
             </DialogDescription>
           </DialogHeader>
           {previewLog && (

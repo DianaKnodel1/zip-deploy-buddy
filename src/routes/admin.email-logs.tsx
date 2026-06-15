@@ -27,6 +27,7 @@ import {
   EMAIL_STATUS_LABELS,
   EMAIL_TYPE_LABELS,
   computeEmailStats,
+  dedupeEmailLogs,
 } from "@/lib/email-stats";
 import { acknowledgeFailedEmails } from "@/lib/email-log-ack.functions";
 import { BounceSuppressionPanel } from "@/components/BounceSuppressionPanel";
@@ -65,7 +66,7 @@ export function AdminEmailLogsPage() {
           .gte("created_at", since)
           .order("created_at", { ascending: false }),
       );
-      setLogs(rows);
+      setLogs(dedupeEmailLogs(rows));
     } finally {
       setLoading(false);
     }
@@ -195,7 +196,7 @@ export function AdminEmailLogsPage() {
               <p className="text-sm text-muted-foreground mt-0.5">
                 {stats.actionRequired
                   ? `${stats.openFailures24h} neue Fehler in den letzten 24h. Prüfe SMTP-Login oder Bounce-Liste — danach „Bearbeitet"-Button klicken.`
-                  : `${stats.sent} von ${stats.total} E-Mails erfolgreich zugestellt · Erfolgsquote ${stats.successRate}%`}
+                  : `${stats.sent} von ${stats.total} E-Mails vom SMTP-Server angenommen · Annahmequote ${stats.successRate}%`}
               </p>
             </div>
           </div>
@@ -225,7 +226,7 @@ export function AdminEmailLogsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-accent">{stats.sent}</p>
-              <p className="text-xs text-muted-foreground">Erfolgreich gesendet</p>
+              <p className="text-xs text-muted-foreground">SMTP angenommen</p>
             </div>
           </CardContent>
         </Card>
@@ -262,7 +263,7 @@ export function AdminEmailLogsPage() {
             </div>
             <div>
               <p className={`text-2xl font-bold ${stats.successRate >= 95 ? "text-accent" : "text-destructive"}`}>{stats.successRate}%</p>
-              <p className="text-xs text-muted-foreground">Erfolgsquote</p>
+              <p className="text-xs text-muted-foreground">Annahmequote</p>
             </div>
           </CardContent>
         </Card>
@@ -281,7 +282,7 @@ export function AdminEmailLogsPage() {
           </SelectContent>
         </Select>
         <Input placeholder="Empfänger suchen…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-9 text-sm" />
-        <p className="text-xs text-muted-foreground ml-auto">Tipp: Klick auf eine Zeile zeigt die Vorschau der gesendeten Mail.</p>
+        <p className="text-xs text-muted-foreground ml-auto">Einträge sind nach Empfänger/Typ zusammengefasst; sichtbar ist der neueste Status.</p>
       </div>
 
       {/* Log Table */}

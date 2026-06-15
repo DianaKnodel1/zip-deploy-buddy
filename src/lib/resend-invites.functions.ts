@@ -264,4 +264,25 @@ export const skipQueuedInvitesFor = createServerFn({ method: "POST" })
     return { skipped: total };
   });
 
+/**
+ * Stoppt die komplette Drip-Queue: alle offenen (status='queued') Einträge
+ * werden auf 'skipped' gesetzt. "Notbremse" für das Admin-UI.
+ */
+export const stopInviteResendQueue = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { reason?: string } | undefined) => input ?? {})
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+    const reason = data.reason ?? "admin_stop_all";
+    const { count, error } = await sb
+      .from("invite_resend_queue")
+      .update({ status: "skipped", last_error: reason }, { count: "exact" })
+      .eq("status", "queued");
+    if (error) throw new Error(error.message);
+    return { stopped: count ?? 0 };
+  });
+
+
 

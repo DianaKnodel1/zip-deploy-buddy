@@ -19,9 +19,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Ziel: 75 Mails/Stunde → bei Cron */15 = 19 pro Run (≈76/h).
-// Sendefenster 06–22 Uhr (16h) → max ~1.200 Mails/Tag.
-const MAX_PER_RUN = 19;
+// Ziel: ~60 Mails/Stunde → bei Cron */15 = 15 pro Run (≈60/h).
+// Sendefenster 06–22 Uhr (16h) → max ~960 Mails/Tag.
+// MAX_PER_RUN bewusst klein, damit jeder Run sicher unter dem Edge-Runtime
+// Wall-Clock-/CPU-Limit bleibt (sonst: "early termination").
+const MAX_PER_RUN = 12;
 // Quiet-Hours (Europe/Berlin): aktiv außerhalb 06–22 Uhr
 const QUIET_START = 6;
 const QUIET_END = 22;

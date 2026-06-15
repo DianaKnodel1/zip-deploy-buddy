@@ -19,9 +19,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Ziel: 75 Mails/Stunde → bei Cron */15 = 19 pro Run (≈76/h).
-// Sendefenster 06–22 Uhr (16h) → max ~1.200 Mails/Tag.
-const MAX_PER_RUN = 19;
+// Ziel: ~60 Mails/Stunde → bei Cron */15 = 15 pro Run (≈60/h).
+// Sendefenster 06–22 Uhr (16h) → max ~960 Mails/Tag.
+// MAX_PER_RUN bewusst klein, damit jeder Run sicher unter dem Edge-Runtime
+// Wall-Clock-/CPU-Limit bleibt (sonst: "early termination").
+const MAX_PER_RUN = 12;
 // Quiet-Hours (Europe/Berlin): aktiv außerhalb 06–22 Uhr
 const QUIET_START = 6;
 const QUIET_END = 22;
@@ -64,18 +66,23 @@ serve(async (req) => {
   if (dueErr) return json({ error: dueErr.message }, 500);
   if (!due || due.length === 0) return json({ processed: 0, sent: 0, failed: 0 }, 200);
 
-  // 2a) Auto-Skip: Bewerber, die sich inzwischen registriert haben (Auth-Account existiert)
-  //     → markieren als skipped, damit keine unnötige Einladungs-Mail rausgeht.
+  // 2a) Auto-Skip: nur prüfen, ob die KONKRETEN fälligen E-Mails bereits
+  //     einen Auth-Account haben. Kein listUsers-Scan über ALLE User
+  //     (war die Hauptursache für CPU/Wall-Clock-Timeouts).
+  //     Wir nutzen eine billige profiles-Query (1 Roundtrip).
+  const dueEmails = Array.from(new Set(
+    due.map((r: any) => String(r.email ?? "").toLowerCase()).filter(Boolean),
+  ));
   const registeredEmails = new Set<string>();
-  try {
-    for (let page = 1; page < 50; page++) {
-      const { data: usersPage, error: usersErr } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-      if (usersErr) break;
-      const users = usersPage?.users ?? [];
-      for (const u of users) if (u.email) registeredEmails.add(u.email.toLowerCase());
-      if (users.length < 1000) break;
+  if (dueEmails.length > 0) {
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("email")
+      .in("email", dueEmails);
+    for (const p of (profs ?? []) as Array<{ email: string | null }>) {
+      if (p.email) registeredEmails.add(p.email.toLowerCase());
     }
-  } catch (_) { /* best-effort */ }
+  }
 
   const dueFiltered: any[] = [];
   let autoSkipped = 0;
@@ -149,8 +156,8 @@ serve(async (req) => {
       failed++;
     }
 
-    // kleine Streuung zwischen Sends
-    await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 1200)));
+    // kleine Streuung zwischen Sends (kurz halten — Edge-Runtime-Wall-Limit)
+    await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 300)));
   }
 
   return json({ processed: due.length, sent, failed, skipped }, 200);

@@ -19,15 +19,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Ziel: ~1100 Mails in 24h. Sendefenster 06–22 Uhr (16h) = 64 Runs à 15 min.
-// 1100 / 64 ≈ 18 → wir nehmen 25 für Headroom + Backlog-Catch-up.
-// Auto-Skip nutzt jetzt eine billige profiles-Query (keine listUsers-Schleife
-// mehr), darum ist die Wall-Clock pro Run unkritisch — der Bottleneck war
-// vorher die User-Liste, nicht das Senden.
-const MAX_PER_RUN = 25;
-// Quiet-Hours (Europe/Berlin): aktiv außerhalb 06–22 Uhr
-const QUIET_START = 6;
-const QUIET_END = 22;
+// Ziel: gleichmäßig verteilte Sends statt Burst → Spam-Schutz.
+// 40 Mails/Stunde × 18 aktive Stunden (05–23 Berlin) = 720/Tag Kapazität.
+// 4 Runs/h × 10 = 40/h. Sobald Queue leer ist, läuft der Cron leer durch.
+const MAX_PER_RUN = 10;
+// Quiet-Hours (Europe/Berlin): aktiv 05:00–23:00
+const QUIET_START = 5;
+const QUIET_END = 23;
 
 function berlinHour(): number {
   const h = new Intl.DateTimeFormat("de-DE", {

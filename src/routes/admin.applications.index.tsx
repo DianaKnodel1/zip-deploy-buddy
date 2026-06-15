@@ -468,6 +468,19 @@ function AdminApplicationsPage() {
             </span>
           )}
           <Button variant="outline" size="sm" className="h-7 text-xs ml-2" onClick={() => openQueueDetails("queued")}>Details</Button>
+          {queueStatus.counts.queued > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={stopping}
+              onClick={handleStopQueue}
+              title="Setzt alle noch ausstehenden Drip-Mails auf 'übersprungen'. Bereits gesendete Mails bleiben unverändert."
+            >
+              {stopping ? "Stoppe…" : "Queue stoppen"}
+            </Button>
+          )}
+
         </div>
       )}
 

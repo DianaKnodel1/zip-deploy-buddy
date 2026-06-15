@@ -461,10 +461,32 @@ function AdminApplicationsPage() {
               {queueStatus.counts.skipped} übersprungen
             </button>
           )}
-          {queueStatus.nextScheduledAt && (
+          {queueStatus.counts.queued > 0 && (() => {
+            const RATE = 40; // Mails/h (process-invite-resend-queue: 4 Runs × 10)
+            const ACTIVE_START = 5, ACTIVE_END = 23;
+            let remaining = queueStatus.counts.queued;
+            const now = new Date();
+            const cursor = new Date(now);
+            while (remaining > 0) {
+              const h = parseInt(new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", hour12: false }).format(cursor), 10);
+              if (h < ACTIVE_START || h >= ACTIVE_END) {
+                // springe zum nächsten 05:00 Berlin
+                cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
+                continue;
+              }
+              const canThisHour = Math.min(remaining, RATE);
+              remaining -= canThisHour;
+              cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
+            }
+            return (
+              <span className="text-muted-foreground ml-auto">
+                ~{RATE}/Std · fertig ca. {cursor.toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              </span>
+            );
+          })()}
+          {queueStatus.nextScheduledAt && queueStatus.counts.queued === 0 && (
             <span className="text-muted-foreground ml-auto">
               Nächster Versand: {new Date(queueStatus.nextScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-              {queueStatus.lastScheduledAt && ` · bis ${new Date(queueStatus.lastScheduledAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
             </span>
           )}
           <Button variant="outline" size="sm" className="h-7 text-xs ml-2" onClick={() => openQueueDetails("queued")}>Details</Button>

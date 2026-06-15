@@ -59,13 +59,55 @@ export interface EmailStats {
   actionRequired: boolean;
 }
 
+const STATUS_PRIORITY: Record<string, number> = {
+  sent: 6,
+  bounced: 5,
+  complained: 5,
+  suppressed: 4,
+  dlq: 3,
+  failed: 2,
+  pending: 1,
+};
+
+export function emailLogKey(log: EmailLog): string {
+  const tenant = log.metadata?.tenant_id || log.metadata?.tenant_name || "global";
+  const sentDay = new Date(log.created_at).toISOString().slice(0, 10);
+  if (log.template_name === "invitation" || log.template_name.startsWith("reminder_")) {
+    return ["logical", tenant, log.template_name, log.recipient_email.toLowerCase(), sentDay].join("|");
+  }
+
+  const metaMessageId = typeof log.metadata?.message_id === "string" ? log.metadata.message_id : null;
+  const messageId = log.message_id || metaMessageId;
+  if (messageId) return `message:${messageId}`;
+
+  return [tenant, log.template_name, log.recipient_email.toLowerCase(), sentDay].join("|");
+}
+
+export function dedupeEmailLogs<T extends EmailLog>(logs: T[]): T[] {
+  const latest = new Map<string, T>();
+  for (const log of logs) {
+    const key = emailLogKey(log);
+    const current = latest.get(key);
+    if (!current) {
+      latest.set(key, log);
+      continue;
+    }
+    const logTime = new Date(log.created_at).getTime();
+    const currentTime = new Date(current.created_at).getTime();
+    if (logTime > currentTime || (logTime === currentTime && (STATUS_PRIORITY[log.status] ?? 0) > (STATUS_PRIORITY[current.status] ?? 0))) {
+      latest.set(key, log);
+    }
+  }
+  return Array.from(latest.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
 /**
- * Compute email stats from logs. Each log = 1 email (no deduplication needed).
+ * Compute email stats from the latest state per logical email.
  * `actionRequired` zählt nur nicht-acknowledgte Fails der letzten 24h —
  * alte permanente Fehler verschwinden nach Ack aus dem Banner.
  */
 export function computeEmailStats(logs: EmailLog[]): EmailStats {
-  const finalLogs = logs.filter(l => l.status !== "pending");
+  const finalLogs = dedupeEmailLogs(logs).filter(l => l.status !== "pending");
   const total = finalLogs.length;
   const sent = finalLogs.filter(l => l.status === "sent").length;
   const failed = finalLogs.filter(l => ["failed", "dlq"].includes(l.status)).length;

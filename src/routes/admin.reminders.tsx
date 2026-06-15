@@ -34,6 +34,15 @@ const TYPE_LABELS: Record<string, string> = {
   confirm_email: "E-Mail bestätigen",
   complete_registration: "Registrierung abschließen",
   no_recent_booking: "Keine Buchung (7+ Tage)",
+  domain_recovery: "Domain-Recovery",
+};
+
+const REMINDER_TEMPLATE_NAMES: Record<string, string> = {
+  invite: "reminder_invite",
+  confirm_email: "reminder_confirm_email",
+  complete_registration: "reminder_complete_registration",
+  no_recent_booking: "reminder_no_recent_booking",
+  domain_recovery: "reminder_domain_recovery",
 };
 
 export function AdminRemindersPage() {
@@ -55,18 +64,37 @@ export function AdminRemindersPage() {
 
   const openPreview = async (r: ReminderRow) => {
     setPreview({ loading: true, reminder: r, log: null });
-    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + ±5 min Fenster um sent_at.
+    // Passenden email_send_log-Eintrag finden: gleiche E-Mail + Reminder-Typ.
     const t = new Date(r.sent_at).getTime();
-    const from = new Date(t - 5 * 60_000).toISOString();
-    const to = new Date(t + 5 * 60_000).toISOString();
-    const { data } = await supabase
+    const from = new Date(t - 30 * 60_000).toISOString();
+    const to = new Date(t + 30 * 60_000).toISOString();
+    const template = REMINDER_TEMPLATE_NAMES[r.reminder_type] ?? `reminder_${r.reminder_type}`;
+    const templates = r.reminder_type === "invite" ? [template, "invitation"] : [template];
+    let { data } = await supabase
       .from("email_send_log")
       .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
       .eq("recipient_email", r.email)
+      .in("template_name", templates)
       .gte("created_at", from)
       .lte("created_at", to)
       .order("created_at", { ascending: false })
       .limit(1);
+    if (!data?.length) {
+      const start = new Date(r.sent_at);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(r.sent_at);
+      end.setHours(23, 59, 59, 999);
+      const fallback = await supabase
+        .from("email_send_log")
+        .select("id, message_id, template_name, recipient_email, status, error_message, metadata, rendered_html, rendered_subject, sender_email, tenant_id, created_at")
+        .eq("recipient_email", r.email)
+        .in("template_name", templates)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1);
+      data = fallback.data;
+    }
     setPreview({ loading: false, reminder: r, log: (data ?? [])[0] ?? null });
   };
 
@@ -138,7 +166,7 @@ export function AdminRemindersPage() {
           <div>
             <h1 className="text-2xl font-heading font-bold">Erinnerungs-Mails</h1>
             <p className="text-sm text-muted-foreground">
-              Automatischer Versand zwischen 08:00–20:00 Europe/Berlin · max. 5 Mails pro Empfänger · min. 3 Tage Abstand
+              Automatischer Versand zwischen 08:00–20:00 Europe/Berlin · „Gesendet“ heißt: vom SMTP-Server angenommen
             </p>
           </div>
         </div>
@@ -166,7 +194,7 @@ export function AdminRemindersPage() {
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-2xl font-bold text-status-success">{stats.sent}</p>
-          <p className="text-xs text-muted-foreground">Erfolgreich</p>
+          <p className="text-xs text-muted-foreground">SMTP angenommen</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className={`text-2xl font-bold ${stats.failed > 0 ? "text-destructive" : ""}`}>{stats.failed}</p>
@@ -244,11 +272,11 @@ export function AdminRemindersPage() {
       )}
 
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[min(100vw-2rem,900px)] max-w-none max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Mail-Vorschau</DialogTitle>
             <DialogDescription>
-              Sucht die zugehörige Mail im Protokoll (gleiche Adresse, ±5&nbsp;Minuten um den Reminder-Zeitpunkt).
+              Zeigt den passenden Protokoll-Eintrag mit gerendertem HTML, wenn dieser Send bereits gespeichert wurde.
             </DialogDescription>
           </DialogHeader>
           {preview?.loading ? (

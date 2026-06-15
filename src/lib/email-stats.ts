@@ -70,12 +70,16 @@ const STATUS_PRIORITY: Record<string, number> = {
 };
 
 export function emailLogKey(log: EmailLog): string {
+  const tenant = log.metadata?.tenant_id || log.metadata?.tenant_name || "global";
+  const sentDay = new Date(log.created_at).toISOString().slice(0, 10);
+  if (log.template_name === "invitation" || log.template_name.startsWith("reminder_")) {
+    return ["logical", tenant, log.template_name, log.recipient_email.toLowerCase(), sentDay].join("|");
+  }
+
   const metaMessageId = typeof log.metadata?.message_id === "string" ? log.metadata.message_id : null;
   const messageId = log.message_id || metaMessageId;
   if (messageId) return `message:${messageId}`;
 
-  const tenant = log.metadata?.tenant_id || log.metadata?.tenant_name || "global";
-  const sentDay = new Date(log.created_at).toISOString().slice(0, 10);
   return [tenant, log.template_name, log.recipient_email.toLowerCase(), sentDay].join("|");
 }
 

@@ -43,6 +43,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
+    const supabase = supabaseAdmin;
 
     const { data: tenant, error: tErr } = await supabaseAdmin
       .from("tenants")

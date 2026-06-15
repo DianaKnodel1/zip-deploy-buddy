@@ -66,18 +66,23 @@ serve(async (req) => {
   if (dueErr) return json({ error: dueErr.message }, 500);
   if (!due || due.length === 0) return json({ processed: 0, sent: 0, failed: 0 }, 200);
 
-  // 2a) Auto-Skip: Bewerber, die sich inzwischen registriert haben (Auth-Account existiert)
-  //     → markieren als skipped, damit keine unnötige Einladungs-Mail rausgeht.
+  // 2a) Auto-Skip: nur prüfen, ob die KONKRETEN fälligen E-Mails bereits
+  //     einen Auth-Account haben. Kein listUsers-Scan über ALLE User
+  //     (war die Hauptursache für CPU/Wall-Clock-Timeouts).
+  //     Wir nutzen eine billige profiles-Query (1 Roundtrip).
+  const dueEmails = Array.from(new Set(
+    due.map((r: any) => String(r.email ?? "").toLowerCase()).filter(Boolean),
+  ));
   const registeredEmails = new Set<string>();
-  try {
-    for (let page = 1; page < 50; page++) {
-      const { data: usersPage, error: usersErr } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-      if (usersErr) break;
-      const users = usersPage?.users ?? [];
-      for (const u of users) if (u.email) registeredEmails.add(u.email.toLowerCase());
-      if (users.length < 1000) break;
+  if (dueEmails.length > 0) {
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("email")
+      .in("email", dueEmails);
+    for (const p of (profs ?? []) as Array<{ email: string | null }>) {
+      if (p.email) registeredEmails.add(p.email.toLowerCase());
     }
-  } catch (_) { /* best-effort */ }
+  }
 
   const dueFiltered: any[] = [];
   let autoSkipped = 0;

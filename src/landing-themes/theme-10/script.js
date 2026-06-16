@@ -50,11 +50,21 @@ function showApplicationModal(opts){
   if(isFast){
     p.textContent = 'Vielen Dank für Ihre Bewerbung. Im nächsten Schritt werden Sie zum Mitarbeiter-Portal für die Registrierung weitergeleitet.';
     if(opts.redirectUrl){
+      var goNow = document.createElement('button');
+      goNow.type='button'; goNow.textContent='Jetzt zum Portal →';
+      goNow.style.cssText='display:block;width:100%;background:#0f172a;color:#fff;border:0;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;margin-bottom:12px;';
       var redirInfo = document.createElement('p');
-      redirInfo.style.cssText='margin:0 0 16px;font-size:13px;color:#64748b;';
-      redirInfo.textContent='Weiterleitung in 3 Sekunden …';
-      box.appendChild(redirInfo);
-      setTimeout(function(){ window.location.href = opts.redirectUrl; }, 3000);
+      redirInfo.style.cssText='margin:0 0 12px;font-size:13px;color:#64748b;';
+      var __secs = 10;
+      redirInfo.textContent = 'Automatische Weiterleitung in ' + __secs + ' Sekunden …';
+      box.appendChild(goNow); box.appendChild(redirInfo);
+      var __redir = function(){ window.location.href = opts.redirectUrl; };
+      goNow.onclick = __redir;
+      var __tick = setInterval(function(){
+        __secs -= 1;
+        if(__secs <= 0){ clearInterval(__tick); __redir(); return; }
+        redirInfo.textContent = 'Automatische Weiterleitung in ' + __secs + ' Sekunden …';
+      }, 1000);
     }
   } else {
     if(wa){

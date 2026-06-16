@@ -51,7 +51,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Tenant-Fallback: Wenn kein tenant_id mitgeschickt wurde, versuche
         // ihn über Origin/Referer-Header zu ermitteln (Landingpage-Domain).
-        let resolvedTenantId: string | null = resolvedTenantId ?? null;
+        let resolvedTenantId: string | null = d.tenant_id ?? null;
         if (!resolvedTenantId) {
           const originHeader = request.headers.get("origin") || request.headers.get("referer") || "";
           try {

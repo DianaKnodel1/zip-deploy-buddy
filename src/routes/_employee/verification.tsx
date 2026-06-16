@@ -18,6 +18,7 @@ import {
   IdCard, ScanFace, Camera, ShieldCheck,
 } from "lucide-react";
 import { SupportCTA } from "@/components/SupportCTA";
+import { StepSuccessModal } from "@/components/StepSuccessModal";
 
 interface KycData {
   id: string;
@@ -63,6 +64,7 @@ function VerificationPage() {
   const [uploading, setUploading] = useState<FieldKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
+  const [successOpen, setSuccessOpen] = useState(false);
   const [previews, setPreviews] = useState<Record<FieldKey, string | null>>({
     id_front_url: null,
     id_back_url: null,
@@ -196,11 +198,7 @@ function VerificationPage() {
     }
 
     setKyc((prev) => prev ? { ...prev, status: "eingereicht" as KycStatus } : prev);
-    toast({
-      title: "Geschafft! 🚀",
-      description: "Dein Onboarding ist abgeschlossen. Wir prüfen deine Unterlagen.",
-    });
-    setTimeout(() => navigate("/dashboard"), 1200);
+    setSuccessOpen(true);
   };
 
   if (authLoading || loading) {
@@ -481,6 +479,17 @@ function VerificationPage() {
           <SupportCTA topic="Identitätsprüfung" hint="Probleme beim Upload? Wir helfen in 5 Minuten weiter." />
         )}
       </main>
+      <StepSuccessModal
+        open={successOpen}
+        onOpenChange={setSuccessOpen}
+        emoji="🚀"
+        title="Onboarding abgeschlossen!"
+        description="Dein Personalausweis wurde übermittelt. Wir prüfen alles und melden uns bei dir."
+        stepDone={4}
+        stepTotal={4}
+        nextLabel="Zum Dashboard"
+        onNext={() => navigate("/dashboard")}
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, ArrowRight, CheckCircle2, User, MapPin, Calendar, CreditCard, Briefcase, AlertCircle } from "lucide-react";
 import { SupportCTA } from "@/components/SupportCTA";
+import { StepSuccessModal } from "@/components/StepSuccessModal";
 
 // Top-Länder mit Flaggen (Auswahl + Free-Text via "Anderes Land")
 const COUNTRIES = [
@@ -137,6 +138,7 @@ function PersonalDataPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
 
   // Persönlich
   const [fullName, setFullName] = useState("");
@@ -250,7 +252,7 @@ function PersonalDataPage() {
       }).eq("user_id", user.id);
       if (error) throw error;
       setCompleted(true);
-      toast({ title: "✅ Daten gespeichert!", description: "Alle Angaben wurden übernommen." });
+      setSuccessOpen(true);
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
@@ -449,6 +451,17 @@ function PersonalDataPage() {
 
         <SupportCTA topic="Personal- und Bankdaten" hint="Unsicher bei Steuer-ID, Krankenkasse oder Bankverbindung? Frag uns kurz." />
       </div>
+      <StepSuccessModal
+        open={successOpen}
+        onOpenChange={setSuccessOpen}
+        emoji="✅"
+        title="Personaldaten gespeichert"
+        description="Stark! Nur noch Vertrag unterschreiben und Ausweis hochladen."
+        stepDone={2}
+        stepTotal={4}
+        nextLabel="Weiter zum Vertrag"
+        onNext={() => navigate("/contract")}
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle2, Loader2, Download, Briefcase } from "lucide-react";
 import StepContract from "@/components/register/StepContract";
 import { SupportCTA } from "@/components/SupportCTA";
+import { StepSuccessModal } from "@/components/StepSuccessModal";
 import { translateDbError } from "@/lib/db-errors";
 import { useServerFn } from "@tanstack/react-start";
 import { generateContractPdf, getContractSignatureUrls } from "@/lib/contract-pdf.functions";
@@ -136,6 +137,7 @@ function ContractPage() {
   const [tenant, setTenant] = useState<any>(null);
 
   const [signing, setSigning] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [signatureName, setSignatureName] = useState("");
 
@@ -281,15 +283,10 @@ function ContractPage() {
         signature_url: signaturePath || `text:${signatureName.trim()}`,
       }).eq("user_id", user.id);
 
-      toast({
-        title: "Perfekt! 🎉 Vertrag unterschrieben",
-        description: "Nur noch 1 Schritt: Lade jetzt deinen Personalausweis hoch.",
-      });
       // Neu laden
       const { data: contracts } = await supabase.from("contracts").select("*").eq("user_id", user.id).order("signed_at", { ascending: false }).limit(1);
       if (contracts && contracts.length > 0) setContract(contracts[0] as unknown as Contract);
-      // Dopamin-Moment: Direkt weiter zum nächsten Schritt — keine Wartezeit, kein Klick verloren
-      setTimeout(() => navigate("/verification"), 800);
+      setSuccessOpen(true);
     } catch (err: any) {
       toast({ title: "Vertrag konnte nicht gespeichert werden", description: translateDbError(err?.message), variant: "destructive" });
     } finally {
@@ -541,6 +538,17 @@ function ContractPage() {
           </CardContent>
         </Card>
         <SupportCTA topic="Arbeitsvertrag" hint="Etwas am Vertrag unklar? Schreib uns kurz — wir antworten meist innerhalb weniger Minuten." />
+        <StepSuccessModal
+          open={successOpen}
+          onOpenChange={setSuccessOpen}
+          emoji="📝"
+          title="Vertrag unterschrieben!"
+          description="Letzter Schritt: Lade jetzt deinen Personalausweis hoch."
+          stepDone={3}
+          stepTotal={4}
+          nextLabel="Identität bestätigen"
+          onNext={() => navigate("/verification")}
+        />
       </div>
     );
   }

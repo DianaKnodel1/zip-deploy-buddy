@@ -41,6 +41,7 @@ type Branding = {
   supabase_anon_key: string;
   tenant_id: string;
   flow_type: "classic" | "fast";
+  source_slug: string;
   seo_title: string;
   seo_description: string;
   seo_image: string;

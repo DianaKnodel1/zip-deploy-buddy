@@ -169,7 +169,7 @@ Falls der Button nicht funktioniert:<br/>
         rendered_subject: subject,
         rendered_html: html,
         sender_email: senderEmail,
-        metadata: { message_id: info?.messageId ?? null, unread_count: count },
+        metadata: { message_id: info?.messageId ?? null, unread_count: count, user_id: userId, tenant_id: tenant.id },
       });
       return json({ success: true, unread: count }, 200);
     } catch (sendErr: any) {

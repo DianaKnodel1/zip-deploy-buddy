@@ -15,7 +15,7 @@ import type { EmailLog } from "@/lib/email-stats";
 import { EMAIL_TYPE_LABELS } from "@/lib/email-stats";
 
 const searchSchema = z.object({
-  tab: z.enum(["overview", "logs", "reminders", "recovery"]).optional().catch("overview"),
+  tab: z.enum(["overview", "logs", "reminders", "recovery", "cron"]).optional().catch("overview"),
 });
 
 export const Route = createFileRoute("/admin/email-center")({

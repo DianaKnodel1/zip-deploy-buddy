@@ -38,6 +38,7 @@ function AdminApplicationsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [showTest, setShowTest] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());

@@ -300,6 +300,37 @@ function AdminChatPage() {
   };
 
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [reminderHistory, setReminderHistory] = useState<{ count: number; lastAt: string | null }>({ count: 0, lastAt: null });
+
+  // Verlauf laden wenn Konversation geöffnet wird
+  useEffect(() => {
+    if (!selectedUserId) { setReminderHistory({ count: 0, lastAt: null }); return; }
+    (async () => {
+      // E-Mail des ausgewählten Users via profiles -> users RPC ist nicht da; wir filtern über metadata
+      const { data, error } = await supabase
+        .from("email_send_log")
+        .select("created_at, recipient_email, metadata")
+        .eq("template_name", "chat_reminder")
+        .eq("status", "sent")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error || !data) return;
+      // Filter auf diesen User über metadata.user_id falls vorhanden, sonst über recipient_email-Match per profiles
+      const mine = data.filter((r: any) => (r.metadata?.user_id ?? null) === selectedUserId);
+      // Fallback: wenn keine user_id in metadata, fragen wir profile-Email ab
+      if (mine.length === 0) {
+        const { data: prof } = await supabase.from("profiles").select("email").eq("user_id", selectedUserId).maybeSingle();
+        const email = (prof as any)?.email?.toLowerCase();
+        if (email) {
+          const matched = data.filter((r: any) => (r.recipient_email ?? "").toLowerCase() === email);
+          setReminderHistory({ count: matched.length, lastAt: matched[0]?.created_at ?? null });
+          return;
+        }
+      }
+      setReminderHistory({ count: mine.length, lastAt: mine[0]?.created_at ?? null });
+    })();
+  }, [selectedUserId, remindingId]);
+
   const sendReminder = async (userId: string) => {
     setRemindingId(userId);
     const { data, error } = await supabase.functions.invoke("send-chat-reminder", {
@@ -309,15 +340,17 @@ function AdminChatPage() {
     if (error || (data as any)?.error) {
       const msg = (data as any)?.error || error?.message || "Unbekannter Fehler";
       const skipped = (data as any)?.skipped;
+      const suppressed = (data as any)?.suppressed;
       toast({
-        title: skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
+        title: suppressed ? "⚠️ Adresse gesperrt" : skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
         description: msg,
-        variant: skipped ? "default" : "destructive",
+        variant: suppressed || !skipped ? "destructive" : "default",
       });
       return;
     }
     toast({ title: "Erinnerung verschickt", description: `E-Mail an Mitarbeiter wurde gesendet.` });
   };
+
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -713,10 +746,21 @@ function AdminChatPage() {
                   onClick={() => sendReminder(selectedUserId!)}
                   disabled={remindingId === selectedUserId}
                   className="text-xs text-muted-foreground hover:text-primary"
-                  title="E-Mail-Erinnerung an Mitarbeiter senden (nur wenn ungelesene Nachrichten existieren)"
+                  title="E-Mail-Erinnerung an Mitarbeiter senden (max. 1× pro 24h)"
                 >
                   <Mail className="h-3.5 w-3.5 mr-1" /> {remindingId === selectedUserId ? "Sende…" : "Erinnerung senden"}
                 </Button>
+                {reminderHistory.count > 0 && (
+                  <span className="text-[11px] text-muted-foreground self-center px-1.5" title={reminderHistory.lastAt ? `Letzter Reminder: ${new Date(reminderHistory.lastAt).toLocaleString("de-DE")}` : undefined}>
+                    📧 {(() => {
+                      if (!reminderHistory.lastAt) return `${reminderHistory.count}× gesendet`;
+                      const diffH = Math.round((Date.now() - new Date(reminderHistory.lastAt).getTime()) / 3600000);
+                      const when = diffH < 1 ? "<1h" : diffH < 24 ? `${diffH}h` : `${Math.round(diffH / 24)}d`;
+                      return `vor ${when} • ${reminderHistory.count}× gesendet`;
+                    })()}
+                  </span>
+                )}
+
                 {selectedConv?.hiddenAt ? (
                   <Button
                     size="sm"

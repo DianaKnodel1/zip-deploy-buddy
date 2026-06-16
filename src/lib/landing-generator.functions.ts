@@ -47,6 +47,9 @@ const BrandingSchema = z.object({
   tenant_id: z.string().max(120).optional().or(z.literal("")).default(""),
 
   flow_type: z.enum(["classic", "fast"]).default("classic"),
+  // Funnel-Tracking: kurzer Slug pro Landing (z.B. "kw24-fast-de").
+  // Wird mit jeder Bewerbung gespeichert → Konversion pro Landing messbar.
+  source_slug: z.string().max(120).default(""),
   // SEO / Browser-Tab
   seo_title: z.string().max(160).default(""),
   seo_description: z.string().max(320).default(""),

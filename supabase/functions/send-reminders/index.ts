@@ -415,9 +415,25 @@ async function runInvites(ctx: SendCtx) {
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const existing = new Set<string>((usersList?.users ?? []).map(u => (u.email ?? "").toLowerCase()));
 
+  // ── Reminder-Dedup mit Drip-Queue ──
+  // Wenn ein Bewerber im invite_resend_queue (status=queued/sending) steht, übernimmt
+  // der Drip-Worker den Versand. Reminder-Cron MUSS dann skippen, sonst Doppelmail.
+  const { data: dripRows } = await ctx.admin
+    .from("invite_resend_queue")
+    .select("email,status")
+    .in("status", ["queued", "sending"]);
+  const inDripQueue = new Set<string>(
+    (dripRows ?? []).map((r: any) => (r.email ?? "").toLowerCase()).filter(Boolean)
+  );
+
   for (const app of apps ?? []) {
     const email = (app.email ?? "").toLowerCase();
     if (!email || existing.has(email)) continue;
+    if (inDripQueue.has(email)) {
+      ctx.results.push({ type: "invite", email, status: "skipped", error: "in_drip_queue" });
+      await logSkipped(ctx.admin, email, app.tenant_id ?? null, "invite", "in_drip_queue");
+      continue;
+    }
 
     const tenant = app.tenant_id ? ctx.tenants.get(app.tenant_id) : null;
     if (!hasValidSmtp(tenant)) {

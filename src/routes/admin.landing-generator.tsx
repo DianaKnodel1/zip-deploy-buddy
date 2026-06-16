@@ -394,6 +394,8 @@ document.addEventListener('submit', function(e){
         </Button>
       </div>
 
+      <FunnelPanel />
+
       <div className="grid lg:grid-cols-[1fr_640px] gap-6 items-start">
         {/* LEFT: Form */}
         <div className="space-y-6 min-w-0">

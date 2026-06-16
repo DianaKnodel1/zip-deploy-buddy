@@ -428,6 +428,12 @@ function AdminApplicationsPage() {
         </div>
         <div className="flex gap-2 items-center">
           <Input placeholder="Suchen…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-9 text-sm" />
+          {testCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer whitespace-nowrap" title="Test-Bewerbungen aus der Landing-Page-Vorschau">
+              <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} className="h-3.5 w-3.5" />
+              Test ({testCount})
+            </label>
+          )}
           <ImportApplicationsDialog onImported={loadData} />
           <Button
             variant="outline"

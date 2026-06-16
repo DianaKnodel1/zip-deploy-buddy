@@ -111,6 +111,7 @@ function showApplicationModal(opts){
       data.flow_type = window.FLOW_TYPE || "classic";
       if (window.TENANT_ID) data.tenant_id = window.TENANT_ID;
       if (window.PORTAL_URL) data.portal_url = window.PORTAL_URL;
+      if (window.SOURCE_SLUG) data.source_slug = window.SOURCE_SLUG;
       fetch(window.PORTAL_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -707,6 +707,16 @@ function AdminChatPage() {
                 >
                   <MailOpen className="h-3.5 w-3.5 mr-1" /> Ungelesen
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => sendReminder(selectedUserId!)}
+                  disabled={remindingId === selectedUserId}
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  title="E-Mail-Erinnerung an Mitarbeiter senden (nur wenn ungelesene Nachrichten existieren)"
+                >
+                  <Mail className="h-3.5 w-3.5 mr-1" /> {remindingId === selectedUserId ? "Sende…" : "Erinnerung senden"}
+                </Button>
                 {selectedConv?.hiddenAt ? (
                   <Button
                     size="sm"

@@ -589,7 +589,15 @@ function AdminApplicationsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">{app.email}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{app.phone || "–"}</td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{app.tenant_id ? tenantMap[app.tenant_id]?.name || "–" : "–"}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">
+                      {!app.tenant_id ? (
+                        <span className="text-orange-600 dark:text-orange-400" title="Bewerbung wurde ohne Tenant-Zuordnung eingereicht (z.B. von einer nicht zugeordneten Domain). Bitte im Detail manuell zuweisen.">⚠️ Kein Tenant</span>
+                      ) : tenantMap[app.tenant_id]?.name ? (
+                        tenantMap[app.tenant_id].name
+                      ) : (
+                        <span className="text-red-600 dark:text-red-400" title={`Tenant-ID ${app.tenant_id} existiert nicht mehr (gelöscht?) oder ist für dich nicht sichtbar.`}>⚠️ Unbekannt</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5">
                       <Badge variant="secondary" className={`text-[10px] ${statusColor(app.status)}`}>{statusLabel(app.status)}</Badge>
                     </td>

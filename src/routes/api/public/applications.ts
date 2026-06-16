@@ -48,6 +48,28 @@ export const Route = createFileRoute("/api/public/applications")({
         const d = parsed.data;
         const isFast = d.flow_type === "fast";
         const displayName = d.is_test ? `[TEST] ${d.full_name}` : d.full_name;
+
+        // Tenant-Fallback: Wenn kein tenant_id mitgeschickt wurde, versuche
+        // ihn über Origin/Referer-Header zu ermitteln (Landingpage-Domain).
+        let resolvedTenantId: string | null = d.tenant_id ?? null;
+        if (!resolvedTenantId) {
+          const originHeader = request.headers.get("origin") || request.headers.get("referer") || "";
+          try {
+            const host = new URL(originHeader).hostname.toLowerCase().replace(/^portal\./, "").replace(/^www\./, "");
+            if (host && host !== "localhost") {
+              const { data: tByPrimary } = await supabaseAdmin
+                .from("tenants").select("id").eq("primary_domain", host).maybeSingle();
+              if (tByPrimary?.id) {
+                resolvedTenantId = tByPrimary.id;
+              } else {
+                const { data: tByDomain } = await supabaseAdmin
+                  .from("tenants").select("id").eq("domain", host).maybeSingle();
+                if (tByDomain?.id) resolvedTenantId = tByDomain.id;
+              }
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
         const { error } = await supabaseAdmin.from("applications").insert({
           full_name: displayName,
           email: d.email,
@@ -55,7 +77,7 @@ export const Route = createFileRoute("/api/public/applications")({
           postal_code: d.postal_code ?? null,
           city: d.city ?? null,
           message: d.message ?? null,
-          tenant_id: d.tenant_id ?? null,
+          tenant_id: resolvedTenantId,
           status: isFast ? "akzeptiert" : "neu",
           flow_type: d.flow_type ?? "classic",
           source_slug: d.source_slug ?? null,
@@ -73,7 +95,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
         // Register-Tab schließt. Fehler nicht hart durchreichen.
-        if (isFast && d.tenant_id && redirect_url && !d.is_test) {
+        if (isFast && resolvedTenantId && redirect_url && !d.is_test) {
           // Drip-Doppelmail verhindern: bestehende queued/sending Rows für
           // diese E-Mail im Tenant als skipped markieren (Backup-Mail unten
           // übernimmt die Einladung).
@@ -81,7 +103,7 @@ export const Route = createFileRoute("/api/public/applications")({
             await supabaseAdmin
               .from("invite_resend_queue")
               .update({ status: "skipped", last_error: "fast_track_accept" } as any)
-              .eq("tenant_id", d.tenant_id)
+              .eq("tenant_id", resolvedTenantId)
               .eq("email", d.email.toLowerCase())
               .in("status", ["queued", "sending"]);
           } catch (e) {
@@ -100,7 +122,7 @@ export const Route = createFileRoute("/api/public/applications")({
                   firstName,
                   lastName,
                   registrationLink: redirect_url,
-                  tenantId: d.tenant_id,
+                  tenantId: resolvedTenantId,
                 },
               },
             );

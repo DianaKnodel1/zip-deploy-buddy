@@ -329,6 +329,14 @@ export default function EmployeeLayout() {
 
   if (!user) return null;
 
+  const items = buildNavItems({ kycPending, kycRejected, contractPending, smsVisible });
+  const isActive = hasFullAccess(employeeStatus);
+  // Bottom-Nav: Top-5 wichtigste Punkte, Rest landet im Sidebar-Sheet via Trigger
+  const bottomNavOrder = ["/dashboard", "/tasks", "/appointments", "/notifications", "/documents"];
+  const bottomItems = bottomNavOrder
+    .map((url) => items.find((i) => i.url === url))
+    .filter((i): i is NavItem => !!i);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -340,7 +348,7 @@ export default function EmployeeLayout() {
           smsVisible={smsVisible}
         />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b border-border bg-card px-5 shrink-0">
+          <header className="h-14 flex items-center justify-between border-b border-border bg-card px-3 sm:px-5 shrink-0">
             <SidebarTrigger className="md:hidden" />
             <div className="flex-1" />
             <div className="flex items-center gap-1">
@@ -350,11 +358,49 @@ export default function EmployeeLayout() {
             </div>
           </header>
           <MissingPayrollDataBanner />
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto pb-20 md:pb-0">
             <GuidedOnboarding />
             <Outlet />
           </main>
           <FloatingChat />
+          {/* Mobile Bottom-Navigation */}
+          <nav
+            className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.1)]"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="grid grid-cols-5">
+              {bottomItems.map((item) => {
+                const locked = item.requiresActive && !isActive;
+                const isCurrent = location.pathname.startsWith(item.url);
+                return (
+                  <NavLink
+                    key={item.url}
+                    to={locked ? "#" : item.url}
+                    end
+                    onClick={(e: React.MouseEvent) => { if (locked) e.preventDefault(); }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium min-h-[56px] relative transition-colors",
+                      locked
+                        ? "text-muted-foreground/40"
+                        : isCurrent
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {locked ? <Lock className="h-5 w-5" /> : <item.icon className="h-5 w-5" strokeWidth={2} />}
+                    <span className="leading-none truncate max-w-full px-1">{item.title}</span>
+                    {item.dot && !locked && (
+                      <span className={cn(
+                        "absolute top-1.5 right-[calc(50%-14px)] h-2 w-2 rounded-full",
+                        item.dot === "orange" && "bg-orange-500",
+                        item.dot === "blue" && "bg-blue-500"
+                      )} />
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </nav>
         </div>
       </div>
     </SidebarProvider>

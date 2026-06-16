@@ -50,6 +50,40 @@ serve(async (req) => {
     if (authErr || !authUser?.user?.email) return json({ error: "E-Mail nicht gefunden" }, 404);
     const to = authUser.user.email;
 
+    // 🚫 Suppression-Check: Adresse durch Bounces gesperrt?
+    const { data: suppressed } = await admin
+      .from("suppressed_emails")
+      .select("email, reason")
+      .ilike("email", to)
+      .maybeSingle();
+    if (suppressed) {
+      return json({
+        error: `Diese Adresse ist gesperrt (Bounce: ${suppressed.reason}). Bitte direkt anrufen.`,
+        suppressed: true,
+      }, 409);
+    }
+
+    // ⏱️ Rate-Limit: max. 1 Reminder / 24h pro Empfänger
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await admin
+      .from("email_send_log")
+      .select("created_at")
+      .eq("template_name", "chat_reminder")
+      .eq("status", "sent")
+      .ilike("recipient_email", to)
+      .gte("created_at", cutoff)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recent) {
+      const hoursAgo = Math.round((Date.now() - new Date(recent.created_at).getTime()) / 3600000);
+      return json({
+        error: `Bereits vor ${hoursAgo}h ein Reminder gesendet. Bitte warte 24h zwischen Erinnerungen.`,
+        skipped: true,
+        lastSentAt: recent.created_at,
+      }, 409);
+    }
+
     // Ungelesene Nachrichten zählen (vom Admin/Teamleiter an diesen Mitarbeiter)
     const { count } = await admin
       .from("chat_messages")
@@ -59,6 +93,7 @@ serve(async (req) => {
     if (!count || count === 0) {
       return json({ error: "Keine ungelesenen Nachrichten – Erinnerung nicht nötig.", skipped: true }, 409);
     }
+
 
     const { data: tenant } = await admin
       .from("tenants")

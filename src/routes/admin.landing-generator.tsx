@@ -743,3 +743,80 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+type FunnelRow = { key: string; label: string; bewerbungen: number; registriert: number; abgeschlossen: number; conv_reg: number; conv_done: number };
+
+function FunnelPanel() {
+  const fn = useServerFn(getLandingFunnel);
+  const [scope, setScope] = useState<"per_slug" | "global_flow">("per_slug");
+  const [days, setDays] = useState(90);
+  const [rows, setRows] = useState<FunnelRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setErr(null);
+    fn({ data: { scope, days } as any })
+      .then((r: any) => { setRows(r.rows ?? []); if (r.error) setErr(r.error); })
+      .catch((e: any) => setErr(e?.message ?? "Fehler"))
+      .finally(() => setLoading(false));
+  }, [scope, days]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" /> Funnel: Bewerbung → Registrierung → Onboarding
+        </CardTitle>
+        <CardDescription>
+          Test-Bewerbungen sind ausgeschlossen. „Registriert" = E-Mail-Match mit Profil, „Abgeschlossen" = Onboarding-Status = abgeschlossen.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Button size="sm" variant={scope === "per_slug" ? "default" : "outline"} className="h-8 text-xs" onClick={() => setScope("per_slug")}>Pro Landing-Page</Button>
+          <Button size="sm" variant={scope === "global_flow" ? "default" : "outline"} className="h-8 text-xs" onClick={() => setScope("global_flow")}>Global: Fast vs. Klassisch</Button>
+          <span className="ml-auto text-muted-foreground">Zeitraum:</span>
+          {[30, 90, 180, 365].map((d) => (
+            <Button key={d} size="sm" variant={days === d ? "default" : "outline"} className="h-8 px-2 text-xs" onClick={() => setDays(d)}>{d}d</Button>
+          ))}
+        </div>
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Lade …</p>
+        ) : err ? (
+          <p className="text-xs text-destructive">Fehler: {err}</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Noch keine Bewerbungen im Zeitraum (oder kein <code>source_slug</code> gesetzt).</p>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs">
+              <thead className="text-muted-foreground border-b">
+                <tr>
+                  <th className="text-left py-1.5 px-2 font-medium">{scope === "global_flow" ? "Flow" : "Landing / Slug"}</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Bewerbungen</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Registriert</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Abgeschlossen</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Reg-%</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Done-%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.key} className="border-b last:border-0">
+                    <td className="py-1.5 px-2 font-mono truncate max-w-[280px]" title={r.label}>{r.label}</td>
+                    <td className="text-right py-1.5 px-2 font-semibold">{r.bewerbungen}</td>
+                    <td className="text-right py-1.5 px-2">{r.registriert}</td>
+                    <td className="text-right py-1.5 px-2">{r.abgeschlossen}</td>
+                    <td className="text-right py-1.5 px-2 text-emerald-700 dark:text-emerald-300">{r.conv_reg}%</td>
+                    <td className="text-right py-1.5 px-2 text-primary">{r.conv_done}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

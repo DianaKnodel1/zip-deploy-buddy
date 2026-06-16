@@ -280,9 +280,40 @@ document.addEventListener('submit', function(e){
   if(!f) return;
   e.preventDefault();
   var status = document.getElementById('form-status');
-  if(status){ status.className = 'status success'; status.textContent = 'Bewerbung erfolgreich gesendet. [Vorschau-Modus]'; }
-  try { f.reset(); } catch(_){}
-  showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA, redirectUrl: __FLOW === 'fast' ? '#preview-redirect' : '' });
+  var raw = Object.fromEntries(new FormData(f).entries());
+  var first = (raw.first_name||'').toString().trim();
+  var last = (raw.last_name||'').toString().trim();
+  var street = (raw.street||'').toString().trim();
+  var msg = (raw.message||'').toString().trim();
+  var payload = {
+    full_name: ((first + ' ' + last).trim()) || (raw.full_name||'').toString() || 'Vorschau-Test',
+    email: (raw.email||'').toString().trim() || 'preview-test@example.com',
+    phone: raw.phone || null,
+    postal_code: raw.postal_code || null,
+    city: raw.city || null,
+    message: [street ? 'Adresse: ' + street : '', msg].filter(Boolean).join('\\n\\n') || null,
+    tenant_id: __TENANT || null,
+    portal_url: __PORTAL || null,
+    flow_type: __FLOW,
+    source_slug: __SLUG,
+    is_test: true,
+  };
+  if(!__API){
+    if(status){ status.className='status error'; status.textContent='⚠️ Kein API-Endpoint konfiguriert (Feld "API-Endpoint" leer).'; }
+    return;
+  }
+  if(status){ status.className='status'; status.textContent='Test-Bewerbung wird gesendet …'; }
+  fetch(__API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(res){
+      try { f.reset(); } catch(_){}
+      if(status){ status.className='status success'; status.textContent='✅ Test-Bewerbung gespeichert (mit [TEST]-Markierung).'; }
+      var redir = (res && res.redirect_url) ? res.redirect_url : '';
+      showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA, redirectUrl: redir });
+    })
+    .catch(function(err){
+      if(status){ status.className='status error'; status.textContent='❌ Fehler: '+(err && err.message ? err.message : 'Senden fehlgeschlagen'); }
+    });
 }, true);
 <\/script>`;
 

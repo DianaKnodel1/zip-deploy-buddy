@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
         // Register-Tab schließt. Fehler nicht hart durchreichen.
-        if (isFast && d.tenant_id && redirect_url) {
+        if (isFast && d.tenant_id && redirect_url && !d.is_test) {
           // Drip-Doppelmail verhindern: bestehende queued/sending Rows für
           // diese E-Mail im Tenant als skipped markieren (Backup-Mail unten
           // übernimmt die Einladung).

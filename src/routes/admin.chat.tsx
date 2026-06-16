@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useChatNotifications } from "@/hooks/use-chat-notifications";
-import { Send, Bot, UserCheck, Search, MessageCircle, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle, Lock, Pencil, Trash2, Check, X } from "lucide-react";
+import { Send, Bot, UserCheck, Search, MessageCircle, Building2, EyeOff, ChevronRight, MailOpen, StickyNote, AlertCircle, Lock, Pencil, Trash2, Check, X, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLastSignIns } from "@/lib/last-sign-ins.functions";
 import { useOnlineUsers } from "@/hooks/use-presence";
@@ -297,6 +297,26 @@ function AdminChatPage() {
     }
     setConversations((prev) => prev.map((c) => c.user_id === userId ? { ...c, hiddenAt: null } : c));
     toast({ title: "Chat wieder eingeblendet" });
+  };
+
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const sendReminder = async (userId: string) => {
+    setRemindingId(userId);
+    const { data, error } = await supabase.functions.invoke("send-chat-reminder", {
+      body: { userId, leaderName: user?.user_metadata?.full_name || user?.email || undefined },
+    });
+    setRemindingId(null);
+    if (error || (data as any)?.error) {
+      const msg = (data as any)?.error || error?.message || "Unbekannter Fehler";
+      const skipped = (data as any)?.skipped;
+      toast({
+        title: skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
+        description: msg,
+        variant: skipped ? "default" : "destructive",
+      });
+      return;
+    }
+    toast({ title: "Erinnerung verschickt", description: `E-Mail an Mitarbeiter wurde gesendet.` });
   };
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
@@ -686,6 +706,16 @@ function AdminChatPage() {
                   title="Als ungelesen markieren – Chat erscheint wieder mit Badge"
                 >
                   <MailOpen className="h-3.5 w-3.5 mr-1" /> Ungelesen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => sendReminder(selectedUserId!)}
+                  disabled={remindingId === selectedUserId}
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  title="E-Mail-Erinnerung an Mitarbeiter senden (nur wenn ungelesene Nachrichten existieren)"
+                >
+                  <Mail className="h-3.5 w-3.5 mr-1" /> {remindingId === selectedUserId ? "Sende…" : "Erinnerung senden"}
                 </Button>
                 {selectedConv?.hiddenAt ? (
                   <Button

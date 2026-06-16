@@ -70,6 +70,18 @@ function RegisterPage() {
     if (savedEmail) setEmail(savedEmail);
     if (savedUser && savedStep) setStep(parseInt(savedStep, 10) || 0);
   }, []);
+
+  // Fast-Track: E-Mail aus ?email=… in der URL vorausfüllen (kommt von der
+  // Landing Page Weiterleitung). Nicht überschreiben, falls Bewerber schon
+  // mit einer anderen Adresse begonnen hat.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const qsEmail = searchParams.get("email");
+    if (qsEmail && !email && !ss.getItem(STORAGE_USER)) {
+      setEmail(qsEmail.trim().toLowerCase());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [password, setPassword] = useState("");
 
   // Step 2 — Personal data

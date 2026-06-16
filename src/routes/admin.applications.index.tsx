@@ -392,10 +392,14 @@ function AdminApplicationsPage() {
     }
   };
 
-  const filtered = applications.filter((a) =>
-    (a.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (a.email ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = applications.filter((a: any) => {
+    if (!showTest && a.is_test === true) return false;
+    return (
+      (a.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (a.email ?? "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
+  const testCount = applications.filter((a: any) => a.is_test === true).length;
 
   const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 25);
 

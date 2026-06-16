@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateLandingZip } from "@/lib/landing-generator.functions";
+import { getLandingFunnel } from "@/lib/landing-funnel.functions";
 import { THEME_LIST, THEMES } from "@/lib/landing-themes";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Globe, Loader2, CheckCircle2, Eye, ExternalLink } from "lucide-react";
+import { Download, Globe, Loader2, CheckCircle2, Eye, ExternalLink, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/landing-generator")({
@@ -41,6 +42,7 @@ type Branding = {
   supabase_anon_key: string;
   tenant_id: string;
   flow_type: "classic" | "fast";
+  source_slug: string;
   seo_title: string;
   seo_description: string;
   seo_image: string;
@@ -71,6 +73,7 @@ const EMPTY: Branding = {
   supabase_anon_key: "",
   tenant_id: "",
   flow_type: "classic",
+  source_slug: "",
   seo_title: "",
   seo_description: "",
   seo_image: "",
@@ -217,6 +220,10 @@ document.addEventListener('click', function(e){
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
 var __WA = ${JSON.stringify(branding.whatsapp_enabled ? (branding.whatsapp_number || "").replace(/[^0-9]/g, "") : "")};
+var __API = ${JSON.stringify(branding.api_endpoint || "")};
+var __TENANT = ${JSON.stringify(branding.tenant_id || "")};
+var __PORTAL = ${JSON.stringify(branding.portal_url || "")};
+var __SLUG = ${JSON.stringify(branding.source_slug || branding.landing_domain || branding.firmenname || "preview")};
 function __waFormatNumber(num){ var d=String(num||'').replace(/[^0-9]/g,''); if(!d) return ''; if(d.length>4) return '+'+d.slice(0,2)+' '+d.slice(2,5)+' '+d.slice(5); return '+'+d; }
 function showApplicationModal(opts){
   opts = opts || {}; var isFast = !!opts.fast; var wa = String(opts.whatsapp||'').replace(/[^0-9]/g,'');
@@ -240,9 +247,12 @@ function showApplicationModal(opts){
     var goNowPrev = document.createElement('button');
     goNowPrev.type='button'; goNowPrev.textContent='Jetzt zum Portal →';
     goNowPrev.style.cssText='display:block;width:100%;background:#0f172a;color:#fff;border:0;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;margin-bottom:12px;';
+    var hasRealRedir = opts.redirectUrl && /^https?:\\/\\//i.test(opts.redirectUrl);
+    if(hasRealRedir){ goNowPrev.onclick = function(){ window.top ? window.top.location.href = opts.redirectUrl : window.location.href = opts.redirectUrl; }; }
+    else { goNowPrev.onclick = function(){ alert('[Vorschau] Weiterleitung deaktiviert — kein Portal-URL gesetzt.'); }; }
     var redirInfo = document.createElement('p');
     redirInfo.style.cssText='margin:0 0 12px;font-size:13px;color:#64748b;';
-    redirInfo.textContent='[Vorschau] Automatische Weiterleitung in 10 Sekunden (in Preview deaktiviert).';
+    redirInfo.textContent = hasRealRedir ? 'Klick "Jetzt zum Portal", um Weiterleitung in neuem Tab zu testen.' : '[Vorschau] Keine echte Weiterleitung (kein Portal-URL gesetzt).';
     box.appendChild(goNowPrev); box.appendChild(redirInfo);
   } else if(wa){
     p.textContent='Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';
@@ -274,9 +284,40 @@ document.addEventListener('submit', function(e){
   if(!f) return;
   e.preventDefault();
   var status = document.getElementById('form-status');
-  if(status){ status.className = 'status success'; status.textContent = 'Bewerbung erfolgreich gesendet. [Vorschau-Modus]'; }
-  try { f.reset(); } catch(_){}
-  showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA, redirectUrl: __FLOW === 'fast' ? '#preview-redirect' : '' });
+  var raw = Object.fromEntries(new FormData(f).entries());
+  var first = (raw.first_name||'').toString().trim();
+  var last = (raw.last_name||'').toString().trim();
+  var street = (raw.street||'').toString().trim();
+  var msg = (raw.message||'').toString().trim();
+  var payload = {
+    full_name: ((first + ' ' + last).trim()) || (raw.full_name||'').toString() || 'Vorschau-Test',
+    email: (raw.email||'').toString().trim() || 'preview-test@example.com',
+    phone: raw.phone || null,
+    postal_code: raw.postal_code || null,
+    city: raw.city || null,
+    message: [street ? 'Adresse: ' + street : '', msg].filter(Boolean).join('\\n\\n') || null,
+    tenant_id: __TENANT || null,
+    portal_url: __PORTAL || null,
+    flow_type: __FLOW,
+    source_slug: __SLUG,
+    is_test: true,
+  };
+  if(!__API){
+    if(status){ status.className='status error'; status.textContent='⚠️ Kein API-Endpoint konfiguriert (Feld "API-Endpoint" leer).'; }
+    return;
+  }
+  if(status){ status.className='status'; status.textContent='Test-Bewerbung wird gesendet …'; }
+  fetch(__API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(res){
+      try { f.reset(); } catch(_){}
+      if(status){ status.className='status success'; status.textContent='✅ Test-Bewerbung gespeichert (mit [TEST]-Markierung).'; }
+      var redir = (res && res.redirect_url) ? res.redirect_url : '';
+      showApplicationModal({ fast: __FLOW === 'fast', whatsapp: __WA, redirectUrl: redir });
+    })
+    .catch(function(err){
+      if(status){ status.className='status error'; status.textContent='❌ Fehler: '+(err && err.message ? err.message : 'Senden fehlgeschlagen'); }
+    });
 }, true);
 <\/script>`;
 
@@ -352,6 +393,8 @@ document.addEventListener('submit', function(e){
           {showPreview ? "Vorschau aus" : "Vorschau ein"}
         </Button>
       </div>
+
+      <FunnelPanel />
 
       <div className="grid lg:grid-cols-[1fr_640px] gap-6 items-start">
         {/* LEFT: Form */}
@@ -486,6 +529,16 @@ document.addEventListener('submit', function(e){
                 <Field label="Geschäftsführer"><Input value={branding.geschaeftsfuehrer} onChange={set("geschaeftsfuehrer")} /></Field>
                 <Field label="Telefon 2 (optional)"><Input value={branding.telefon_2} onChange={set("telefon_2")} /></Field>
                 <Field label="Landing-Domain * (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="easy-gmbh.de" /></Field>
+                <Field label="Tracking-Slug (Funnel-Statistik)">
+                  <Input
+                    value={branding.source_slug}
+                    onChange={set("source_slug")}
+                    placeholder={branding.landing_domain || "z.B. kw24-fast-de"}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Wird mit jeder Bewerbung gespeichert (<code>source_slug</code>). So siehst du im Funnel-Panel: <em>1000 Bewerbungen → 650 registriert → 210 abgeschlossen</em>. Leer = Domain wird automatisch genutzt.
+                  </p>
+                </Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
                   <p className="text-[10px] text-muted-foreground mt-1">Immer das zentrale Portal-Backend: <code>https://portal.mb-portal.com/api/public/applications</code></p>
@@ -690,5 +743,82 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs">{label}</Label>
       {children}
     </div>
+  );
+}
+
+type FunnelRow = { key: string; label: string; bewerbungen: number; registriert: number; abgeschlossen: number; conv_reg: number; conv_done: number };
+
+function FunnelPanel() {
+  const fn = useServerFn(getLandingFunnel);
+  const [scope, setScope] = useState<"per_slug" | "global_flow">("per_slug");
+  const [days, setDays] = useState(90);
+  const [rows, setRows] = useState<FunnelRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setErr(null);
+    fn({ data: { scope, days } as any })
+      .then((r: any) => { setRows(r.rows ?? []); if (r.error) setErr(r.error); })
+      .catch((e: any) => setErr(e?.message ?? "Fehler"))
+      .finally(() => setLoading(false));
+  }, [scope, days]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" /> Funnel: Bewerbung → Registrierung → Onboarding
+        </CardTitle>
+        <CardDescription>
+          Test-Bewerbungen sind ausgeschlossen. „Registriert" = E-Mail-Match mit Profil, „Abgeschlossen" = Onboarding-Status = abgeschlossen.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Button size="sm" variant={scope === "per_slug" ? "default" : "outline"} className="h-8 text-xs" onClick={() => setScope("per_slug")}>Pro Landing-Page</Button>
+          <Button size="sm" variant={scope === "global_flow" ? "default" : "outline"} className="h-8 text-xs" onClick={() => setScope("global_flow")}>Global: Fast vs. Klassisch</Button>
+          <span className="ml-auto text-muted-foreground">Zeitraum:</span>
+          {[30, 90, 180, 365].map((d) => (
+            <Button key={d} size="sm" variant={days === d ? "default" : "outline"} className="h-8 px-2 text-xs" onClick={() => setDays(d)}>{d}d</Button>
+          ))}
+        </div>
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Lade …</p>
+        ) : err ? (
+          <p className="text-xs text-destructive">Fehler: {err}</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Noch keine Bewerbungen im Zeitraum (oder kein <code>source_slug</code> gesetzt).</p>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs">
+              <thead className="text-muted-foreground border-b">
+                <tr>
+                  <th className="text-left py-1.5 px-2 font-medium">{scope === "global_flow" ? "Flow" : "Landing / Slug"}</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Bewerbungen</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Registriert</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Abgeschlossen</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Reg-%</th>
+                  <th className="text-right py-1.5 px-2 font-medium">Done-%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.key} className="border-b last:border-0">
+                    <td className="py-1.5 px-2 font-mono truncate max-w-[280px]" title={r.label}>{r.label}</td>
+                    <td className="text-right py-1.5 px-2 font-semibold">{r.bewerbungen}</td>
+                    <td className="text-right py-1.5 px-2">{r.registriert}</td>
+                    <td className="text-right py-1.5 px-2">{r.abgeschlossen}</td>
+                    <td className="text-right py-1.5 px-2 text-emerald-700 dark:text-emerald-300">{r.conv_reg}%</td>
+                    <td className="text-right py-1.5 px-2 text-primary">{r.conv_done}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

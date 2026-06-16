@@ -38,6 +38,7 @@ function AdminApplicationsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [showTest, setShowTest] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -391,10 +392,14 @@ function AdminApplicationsPage() {
     }
   };
 
-  const filtered = applications.filter((a) =>
-    (a.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (a.email ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = applications.filter((a: any) => {
+    if (!showTest && a.is_test === true) return false;
+    return (
+      (a.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (a.email ?? "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
+  const testCount = applications.filter((a: any) => a.is_test === true).length;
 
   const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 25);
 
@@ -423,6 +428,12 @@ function AdminApplicationsPage() {
         </div>
         <div className="flex gap-2 items-center">
           <Input placeholder="Suchen…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-9 text-sm" />
+          {testCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer whitespace-nowrap" title="Test-Bewerbungen aus der Landing-Page-Vorschau">
+              <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} className="h-3.5 w-3.5" />
+              Test ({testCount})
+            </label>
+          )}
           <ImportApplicationsDialog onImported={loadData} />
           <Button
             variant="outline"

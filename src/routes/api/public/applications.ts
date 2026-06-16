@@ -19,6 +19,8 @@ const Schema = z.object({
   tenant_id: z.string().uuid().optional().nullable(),
   flow_type: z.enum(["classic", "fast"]).optional().default("classic"),
   portal_url: z.string().url().max(500).optional().nullable(),
+  source_slug: z.string().trim().max(120).optional().nullable(),
+  is_test: z.coerce.boolean().optional().default(false),
 });
 
 function json(body: unknown, status = 200) {
@@ -45,8 +47,9 @@ export const Route = createFileRoute("/api/public/applications")({
         }
         const d = parsed.data;
         const isFast = d.flow_type === "fast";
+        const displayName = d.is_test ? `[TEST] ${d.full_name}` : d.full_name;
         const { error } = await supabaseAdmin.from("applications").insert({
-          full_name: d.full_name,
+          full_name: displayName,
           email: d.email,
           phone: d.phone ?? null,
           postal_code: d.postal_code ?? null,
@@ -55,6 +58,8 @@ export const Route = createFileRoute("/api/public/applications")({
           tenant_id: d.tenant_id ?? null,
           status: isFast ? "akzeptiert" : "neu",
           flow_type: d.flow_type ?? "classic",
+          source_slug: d.source_slug ?? null,
+          is_test: !!d.is_test,
         } as any);
         if (error) {
           console.error("[applications] insert error:", error);
@@ -68,7 +73,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
         // Register-Tab schließt. Fehler nicht hart durchreichen.
-        if (isFast && d.tenant_id && redirect_url) {
+        if (isFast && d.tenant_id && redirect_url && !d.is_test) {
           // Drip-Doppelmail verhindern: bestehende queued/sending Rows für
           // diese E-Mail im Tenant als skipped markieren (Backup-Mail unten
           // übernimmt die Einladung).

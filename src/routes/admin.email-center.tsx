@@ -11,6 +11,7 @@ import { useNavigate } from "@/lib/router-compat";
 import { AdminEmailLogsPage } from "./admin.email-logs";
 import { AdminRemindersPage } from "./admin.reminders";
 import { AdminRecoveryPage } from "./admin.recovery";
+import { CronHealthPanel } from "@/components/CronHealthPanel";
 import type { EmailLog } from "@/lib/email-stats";
 import { EMAIL_TYPE_LABELS } from "@/lib/email-stats";
 

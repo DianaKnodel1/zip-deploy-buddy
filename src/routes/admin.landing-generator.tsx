@@ -246,9 +246,12 @@ function showApplicationModal(opts){
     var goNowPrev = document.createElement('button');
     goNowPrev.type='button'; goNowPrev.textContent='Jetzt zum Portal →';
     goNowPrev.style.cssText='display:block;width:100%;background:#0f172a;color:#fff;border:0;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;margin-bottom:12px;';
+    var hasRealRedir = opts.redirectUrl && /^https?:\\/\\//i.test(opts.redirectUrl);
+    if(hasRealRedir){ goNowPrev.onclick = function(){ window.top ? window.top.location.href = opts.redirectUrl : window.location.href = opts.redirectUrl; }; }
+    else { goNowPrev.onclick = function(){ alert('[Vorschau] Weiterleitung deaktiviert — kein Portal-URL gesetzt.'); }; }
     var redirInfo = document.createElement('p');
     redirInfo.style.cssText='margin:0 0 12px;font-size:13px;color:#64748b;';
-    redirInfo.textContent='[Vorschau] Automatische Weiterleitung in 10 Sekunden (in Preview deaktiviert).';
+    redirInfo.textContent = hasRealRedir ? 'Klick "Jetzt zum Portal", um Weiterleitung in neuem Tab zu testen.' : '[Vorschau] Keine echte Weiterleitung (kein Portal-URL gesetzt).';
     box.appendChild(goNowPrev); box.appendChild(redirInfo);
   } else if(wa){
     p.textContent='Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';

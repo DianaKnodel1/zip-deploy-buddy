@@ -526,6 +526,16 @@ document.addEventListener('submit', function(e){
                 <Field label="Geschäftsführer"><Input value={branding.geschaeftsfuehrer} onChange={set("geschaeftsfuehrer")} /></Field>
                 <Field label="Telefon 2 (optional)"><Input value={branding.telefon_2} onChange={set("telefon_2")} /></Field>
                 <Field label="Landing-Domain * (für SEO/Canonical & OG-URL)"><Input value={branding.landing_domain} onChange={set("landing_domain")} placeholder="easy-gmbh.de" /></Field>
+                <Field label="Tracking-Slug (Funnel-Statistik)">
+                  <Input
+                    value={branding.source_slug}
+                    onChange={set("source_slug")}
+                    placeholder={branding.landing_domain || "z.B. kw24-fast-de"}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Wird mit jeder Bewerbung gespeichert (<code>source_slug</code>). So siehst du im Funnel-Panel: <em>1000 Bewerbungen → 650 registriert → 210 abgeschlossen</em>. Leer = Domain wird automatisch genutzt.
+                  </p>
+                </Field>
                 <Field label="API-Endpoint für Bewerbungen *">
                   <Input value={branding.api_endpoint} onChange={set("api_endpoint")} placeholder={apiPlaceholder} />
                   <p className="text-[10px] text-muted-foreground mt-1">Immer das zentrale Portal-Backend: <code>https://portal.mb-portal.com/api/public/applications</code></p>

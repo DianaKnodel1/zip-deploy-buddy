@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, ArrowRight, CheckCircle2, User, MapPin, Calendar, CreditCard, Briefcase, AlertCircle } from "lucide-react";
+import { SupportCTA } from "@/components/SupportCTA";
 
 // Top-Länder mit Flaggen (Auswahl + Free-Text via "Anderes Land")
 const COUNTRIES = [
@@ -445,6 +446,8 @@ function PersonalDataPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <SupportCTA topic="Personal- und Bankdaten" hint="Unsicher bei Steuer-ID, Krankenkasse oder Bankverbindung? Frag uns kurz." />
       </div>
     </div>
   );

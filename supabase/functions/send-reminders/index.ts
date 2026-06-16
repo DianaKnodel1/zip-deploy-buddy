@@ -25,8 +25,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MAX_ATTEMPTS = 5;
-const MIN_DAYS_BETWEEN = 3;
+// Welle 1 tuning (Juni 2026): weniger Druck auf Empfänger.
+//   - 3 statt 5 Versuche pro Empfänger+Typ
+//   - 4 statt 3 Tage Mindestabstand
+const MAX_ATTEMPTS = 3;
+const MIN_DAYS_BETWEEN = 4;
 const NO_BOOKING_DAYS = 7;
 
 // ─── Quiet Hours (Europe/Berlin) ───
@@ -50,10 +53,11 @@ function isQuietHours(): boolean {
 // Max. echte Sends pro Tenant + Typ und Ausführung (verhindert Burst-Send / Domain-Flagging).
 // Quiet-Hours 08–20 Uhr = 12 aktive Läufe/Tag → 50 * 12 = 600 Mails/12h/Tenant/Typ.
 const MAX_SENDS_PER_RUN_PER_TENANT = 50;
-// Harte Obergrenze: max. Mails pro Tenant in den letzten 12h (über alle Typen
-// zusammen). Schützt Sender-Reputation. Wird zu Beginn aus reminder_log geladen
-// und pro erfolgreichem Send live hochgezählt.
-const MAX_SENDS_PER_TENANT_PER_12H = 240;
+// Harte Obergrenze: max. Mails pro Tenant in den letzten 24h (über alle Typen
+// zusammen). Welle-1-Update: User-Vorgabe 140/Tag/Tenant. Schützt Sender-
+// Reputation. Wird zu Beginn aus reminder_log geladen und pro erfolgreichem
+// Send live hochgezählt.
+const MAX_SENDS_PER_TENANT_PER_24H = 140;
 // Eigenes Kontingent für Domain-Recovery: 20/Lauf × 12 aktive Läufe = 240/12h (real ≤200 durch Idempotenz).
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.
@@ -194,14 +198,14 @@ serve(async (req) => {
 
     const ctx: SendCtx = { admin, tenants, dryRun, results: [], sentCountByTenantType: new Map(), sentCountByTenant12h: new Map(), recoveryStats: new Map() };
 
-    // 12h-Cap pro Tenant vorladen (alle bisherigen sent in den letzten 12h).
+    // 24h-Cap pro Tenant vorladen (alle bisherigen sent in den letzten 24h).
     {
-      const cutoff12h = new Date(Date.now() - 12 * 3600_000).toISOString();
+      const cutoff24h = new Date(Date.now() - 24 * 3600_000).toISOString();
       const { data: recent } = await admin
         .from("reminder_log")
         .select("tenant_id")
         .eq("status", "sent")
-        .gte("sent_at", cutoff12h);
+        .gte("sent_at", cutoff24h);
       for (const r of (recent ?? []) as Array<{ tenant_id: string | null }>) {
         if (!r.tenant_id) continue;
         ctx.sentCountByTenant12h.set(r.tenant_id, (ctx.sentCountByTenant12h.get(r.tenant_id) ?? 0) + 1);
@@ -341,9 +345,9 @@ function capReached(ctx: SendCtx, tenantId: string, type: ReminderType): boolean
   const key = `${tenantId}:${type}`;
   return (ctx.sentCountByTenantType.get(key) ?? 0) >= MAX_SENDS_PER_RUN_PER_TENANT;
 }
-// 12h-Obergrenze pro Tenant über alle Reminder-Typen.
+// 24h-Obergrenze pro Tenant über alle Reminder-Typen (Welle-1-Cap: 140/Tag).
 function tenant12hCapReached(ctx: SendCtx, tenantId: string): boolean {
-  return (ctx.sentCountByTenant12h.get(tenantId) ?? 0) >= MAX_SENDS_PER_TENANT_PER_12H;
+  return (ctx.sentCountByTenant12h.get(tenantId) ?? 0) >= MAX_SENDS_PER_TENANT_PER_24H;
 }
 function bumpSent(ctx: SendCtx, tenantId: string, type: ReminderType) {
   const key = `${tenantId}:${type}`;

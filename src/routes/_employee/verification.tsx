@@ -17,6 +17,7 @@ import {
   Upload, CheckCircle2, XCircle, ArrowLeft, ArrowRight, Loader2,
   IdCard, ScanFace, Camera, ShieldCheck,
 } from "lucide-react";
+import { SupportCTA } from "@/components/SupportCTA";
 
 interface KycData {
   id: string;
@@ -475,6 +476,10 @@ function VerificationPage() {
         <p className="text-xs text-muted-foreground text-center">
           Deine Dokumente werden verschlüsselt übertragen und nur zur Identitätsprüfung verwendet.
         </p>
+
+        {!isVerified && (
+          <SupportCTA topic="Identitätsprüfung" hint="Probleme beim Upload? Wir helfen in 5 Minuten weiter." />
+        )}
       </main>
     </div>
   );

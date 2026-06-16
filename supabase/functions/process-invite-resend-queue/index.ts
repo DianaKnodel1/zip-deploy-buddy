@@ -109,6 +109,19 @@ serve(async (req) => {
   const tMap = new Map<string, any>();
   (tenants ?? []).forEach((t: any) => tMap.set(t.id, t));
 
+  // Welle-1: 140 Mails/Tag/Tenant (über reminder_log + email_send_log gemessen).
+  // Pre-fetch der letzten 24h, damit Drip nicht das Cap reißt.
+  const TENANT_DAILY_CAP = 140;
+  const cutoff24h = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const tenantCount24h = new Map<string, number>();
+  for (const tid of tenantIds) {
+    const [{ count: cReminder }, { count: cSend }] = await Promise.all([
+      admin.from("reminder_log").select("id", { count: "exact", head: true }).eq("tenant_id", tid).eq("status", "sent").gte("sent_at", cutoff24h),
+      admin.from("email_send_log").select("id", { count: "exact", head: true }).eq("tenant_id", tid).eq("status", "sent").gte("created_at", cutoff24h),
+    ]);
+    tenantCount24h.set(tid, (cReminder ?? 0) + (cSend ?? 0));
+  }
+
   let sent = 0, failed = 0, skipped = autoSkipped;
 
   for (const row of dueFiltered) {
@@ -117,6 +130,18 @@ serve(async (req) => {
       await admin.from("invite_resend_queue").update({
         status: "skipped",
         last_error: !t ? "tenant not found" : t.is_active === false ? "tenant inactive" : "tenant emails paused",
+      }).eq("id", row.id);
+      skipped++;
+      continue;
+    }
+
+    // 140/Tag/Tenant Cap (Welle 1). Bei Erreichen: zurück in queued, später nochmal.
+    const current = tenantCount24h.get(row.tenant_id) ?? 0;
+    if (current >= TENANT_DAILY_CAP) {
+      await admin.from("invite_resend_queue").update({
+        status: "queued",
+        last_error: "tenant_daily_cap_reached",
+        scheduled_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       }).eq("id", row.id);
       skipped++;
       continue;
@@ -143,6 +168,7 @@ serve(async (req) => {
         sent_at: new Date().toISOString(),
         attempts: (row.attempts ?? 0) + 1,
       }).eq("id", row.id);
+      tenantCount24h.set(row.tenant_id, (tenantCount24h.get(row.tenant_id) ?? 0) + 1);
       sent++;
     } catch (e: any) {
       const attempts = (row.attempts ?? 0) + 1;

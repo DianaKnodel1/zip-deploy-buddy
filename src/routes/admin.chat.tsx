@@ -299,6 +299,26 @@ function AdminChatPage() {
     toast({ title: "Chat wieder eingeblendet" });
   };
 
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const sendReminder = async (userId: string) => {
+    setRemindingId(userId);
+    const { data, error } = await supabase.functions.invoke("send-chat-reminder", {
+      body: { userId, leaderName: user?.user_metadata?.full_name || user?.email || undefined },
+    });
+    setRemindingId(null);
+    if (error || (data as any)?.error) {
+      const msg = (data as any)?.error || error?.message || "Unbekannter Fehler";
+      const skipped = (data as any)?.skipped;
+      toast({
+        title: skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
+        description: msg,
+        variant: skipped ? "default" : "destructive",
+      });
+      return;
+    }
+    toast({ title: "Erinnerung verschickt", description: `E-Mail an Mitarbeiter wurde gesendet.` });
+  };
+
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");

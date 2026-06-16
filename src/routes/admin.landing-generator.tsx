@@ -72,6 +72,7 @@ const EMPTY: Branding = {
   supabase_anon_key: "",
   tenant_id: "",
   flow_type: "classic",
+  source_slug: "",
   seo_title: "",
   seo_description: "",
   seo_image: "",

@@ -51,7 +51,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Tenant-Fallback: Wenn kein tenant_id mitgeschickt wurde, versuche
         // ihn über Origin/Referer-Header zu ermitteln (Landingpage-Domain).
-        let resolvedTenantId: string | null = d.tenant_id ?? null;
+        let resolvedTenantId: string | null = resolvedTenantId ?? null;
         if (!resolvedTenantId) {
           const originHeader = request.headers.get("origin") || request.headers.get("referer") || "";
           try {
@@ -95,7 +95,7 @@ export const Route = createFileRoute("/api/public/applications")({
 
         // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
         // Register-Tab schließt. Fehler nicht hart durchreichen.
-        if (isFast && d.tenant_id && redirect_url && !d.is_test) {
+        if (isFast && resolvedTenantId && redirect_url && !d.is_test) {
           // Drip-Doppelmail verhindern: bestehende queued/sending Rows für
           // diese E-Mail im Tenant als skipped markieren (Backup-Mail unten
           // übernimmt die Einladung).
@@ -103,7 +103,7 @@ export const Route = createFileRoute("/api/public/applications")({
             await supabaseAdmin
               .from("invite_resend_queue")
               .update({ status: "skipped", last_error: "fast_track_accept" } as any)
-              .eq("tenant_id", d.tenant_id)
+              .eq("tenant_id", resolvedTenantId)
               .eq("email", d.email.toLowerCase())
               .in("status", ["queued", "sending"]);
           } catch (e) {
@@ -122,7 +122,7 @@ export const Route = createFileRoute("/api/public/applications")({
                   firstName,
                   lastName,
                   registrationLink: redirect_url,
-                  tenantId: d.tenant_id,
+                  tenantId: resolvedTenantId,
                 },
               },
             );

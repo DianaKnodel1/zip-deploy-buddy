@@ -192,22 +192,36 @@ function AdminEmployeesPage() {
   // Quellen: erster offener Onboarding-Schritt (since = profile.created_at),
   // älteste offene Aufgabe (since = assignment.created_at).
   const computeLastAction = (p: any): { label: string; days: number } | null => {
-    const candidates: { label: string; since: string }[] = [];
-    const steps = computeSteps(p);
-    const firstOpen = steps.find((s) => !s.done);
-    if (firstOpen) candidates.push({ label: `${firstOpen.label} fehlt`, since: p.created_at });
     const openAssignments = assignments.filter(
       (a) => a.user_id === p.user_id && !["abgeschlossen", "genehmigt", "entwurf"].includes(a.status)
     );
-    const oldest = openAssignments.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
-    if (oldest) candidates.push({ label: "Aufgabe offen", since: oldest.created_at });
+    const oldestAssignment = openAssignments.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
+    const assignmentDays = oldestAssignment
+      ? Math.max(0, Math.floor((Date.now() - new Date(oldestAssignment.created_at).getTime()) / 86_400_000))
+      : null;
+
+    // Voll aktive Mitarbeiter: nur noch laufende Aufträge sind relevant – keine veralteten Onboarding-Hinweise.
+    if (isFullyActive(p)) {
+      return oldestAssignment ? { label: "Aufgabe offen", days: assignmentDays! } : null;
+    }
+
+    // Wer bereits aktive Aufträge bearbeitet, hat den Vertrag de-facto erledigt – diesen Schritt überspringen.
+    const hasActiveAssignment = assignments.some(
+      (a) => a.user_id === p.user_id && a.status && a.status !== "entwurf"
+    );
+    const steps = computeSteps(p);
+    const firstOpen = steps.find((s) => !s.done && !(hasActiveAssignment && s.key === "contract"));
+
+    const candidates: { label: string; days: number }[] = [];
+    if (firstOpen) {
+      candidates.push({
+        label: `${firstOpen.label} fehlt`,
+        days: Math.max(0, Math.floor((Date.now() - new Date(p.created_at).getTime()) / 86_400_000)),
+      });
+    }
+    if (oldestAssignment) candidates.push({ label: "Aufgabe offen", days: assignmentDays! });
     if (candidates.length === 0) return null;
-    // Wähle das älteste = größte Anzahl Tage
-    const withDays = candidates.map((c) => ({
-      label: c.label,
-      days: Math.max(0, Math.floor((Date.now() - new Date(c.since).getTime()) / 86_400_000)),
-    }));
-    return withDays.sort((a, b) => b.days - a.days)[0];
+    return candidates.sort((a, b) => b.days - a.days)[0];
   };
 
   const filtered = profiles.filter((p) => {

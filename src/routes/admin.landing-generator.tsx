@@ -244,7 +244,7 @@ function showApplicationModal(opts){
     redirInfo.style.cssText='margin:0 0 12px;font-size:13px;color:#64748b;';
     redirInfo.textContent='[Vorschau] Automatische Weiterleitung in 10 Sekunden (in Preview deaktiviert).';
     box.appendChild(goNowPrev); box.appendChild(redirInfo);
-  }
+  } else if(wa){
     p.textContent='Vielen Dank für Ihre Bewerbung. Wir haben Ihre Bewerbung erhalten und melden uns binnen 10 Tagen zurück.';
     var card = document.createElement('div');
     card.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;';

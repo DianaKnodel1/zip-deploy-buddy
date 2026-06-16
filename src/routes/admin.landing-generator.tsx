@@ -219,6 +219,10 @@ document.addEventListener('click', function(e){
 }, true);
 var __FLOW = ${JSON.stringify(branding.flow_type || "classic")};
 var __WA = ${JSON.stringify(branding.whatsapp_enabled ? (branding.whatsapp_number || "").replace(/[^0-9]/g, "") : "")};
+var __API = ${JSON.stringify(branding.api_endpoint || "")};
+var __TENANT = ${JSON.stringify(branding.tenant_id || "")};
+var __PORTAL = ${JSON.stringify(branding.portal_url || "")};
+var __SLUG = ${JSON.stringify(branding.source_slug || branding.landing_domain || branding.firmenname || "preview")};
 function __waFormatNumber(num){ var d=String(num||'').replace(/[^0-9]/g,''); if(!d) return ''; if(d.length>4) return '+'+d.slice(0,2)+' '+d.slice(2,5)+' '+d.slice(5); return '+'+d; }
 function showApplicationModal(opts){
   opts = opts || {}; var isFast = !!opts.fast; var wa = String(opts.whatsapp||'').replace(/[^0-9]/g,'');

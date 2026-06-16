@@ -25,8 +25,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MAX_ATTEMPTS = 5;
-const MIN_DAYS_BETWEEN = 3;
+// Welle 1 tuning (Juni 2026): weniger Druck auf Empfänger.
+//   - 3 statt 5 Versuche pro Empfänger+Typ
+//   - 4 statt 3 Tage Mindestabstand
+const MAX_ATTEMPTS = 3;
+const MIN_DAYS_BETWEEN = 4;
 const NO_BOOKING_DAYS = 7;
 
 // ─── Quiet Hours (Europe/Berlin) ───
@@ -50,10 +53,11 @@ function isQuietHours(): boolean {
 // Max. echte Sends pro Tenant + Typ und Ausführung (verhindert Burst-Send / Domain-Flagging).
 // Quiet-Hours 08–20 Uhr = 12 aktive Läufe/Tag → 50 * 12 = 600 Mails/12h/Tenant/Typ.
 const MAX_SENDS_PER_RUN_PER_TENANT = 50;
-// Harte Obergrenze: max. Mails pro Tenant in den letzten 12h (über alle Typen
-// zusammen). Schützt Sender-Reputation. Wird zu Beginn aus reminder_log geladen
-// und pro erfolgreichem Send live hochgezählt.
-const MAX_SENDS_PER_TENANT_PER_12H = 240;
+// Harte Obergrenze: max. Mails pro Tenant in den letzten 24h (über alle Typen
+// zusammen). Welle-1-Update: User-Vorgabe 140/Tag/Tenant. Schützt Sender-
+// Reputation. Wird zu Beginn aus reminder_log geladen und pro erfolgreichem
+// Send live hochgezählt.
+const MAX_SENDS_PER_TENANT_PER_24H = 140;
 // Eigenes Kontingent für Domain-Recovery: 20/Lauf × 12 aktive Läufe = 240/12h (real ≤200 durch Idempotenz).
 const DOMAIN_RECOVERY_CAP_PER_RUN = 20;
 // Auto-Trigger-Fenster: Recovery läuft automatisch X Tage nach Primary-Domain-Wechsel mit.

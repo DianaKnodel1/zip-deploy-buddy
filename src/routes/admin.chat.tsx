@@ -300,6 +300,37 @@ function AdminChatPage() {
   };
 
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [reminderHistory, setReminderHistory] = useState<{ count: number; lastAt: string | null }>({ count: 0, lastAt: null });
+
+  // Verlauf laden wenn Konversation geöffnet wird
+  useEffect(() => {
+    if (!selectedUserId) { setReminderHistory({ count: 0, lastAt: null }); return; }
+    (async () => {
+      // E-Mail des ausgewählten Users via profiles -> users RPC ist nicht da; wir filtern über metadata
+      const { data, error } = await supabase
+        .from("email_send_log")
+        .select("created_at, recipient_email, metadata")
+        .eq("template_name", "chat_reminder")
+        .eq("status", "sent")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error || !data) return;
+      // Filter auf diesen User über metadata.user_id falls vorhanden, sonst über recipient_email-Match per profiles
+      const mine = data.filter((r: any) => (r.metadata?.user_id ?? null) === selectedUserId);
+      // Fallback: wenn keine user_id in metadata, fragen wir profile-Email ab
+      if (mine.length === 0) {
+        const { data: prof } = await supabase.from("profiles").select("email").eq("user_id", selectedUserId).maybeSingle();
+        const email = (prof as any)?.email?.toLowerCase();
+        if (email) {
+          const matched = data.filter((r: any) => (r.recipient_email ?? "").toLowerCase() === email);
+          setReminderHistory({ count: matched.length, lastAt: matched[0]?.created_at ?? null });
+          return;
+        }
+      }
+      setReminderHistory({ count: mine.length, lastAt: mine[0]?.created_at ?? null });
+    })();
+  }, [selectedUserId, remindingId]);
+
   const sendReminder = async (userId: string) => {
     setRemindingId(userId);
     const { data, error } = await supabase.functions.invoke("send-chat-reminder", {
@@ -309,15 +340,17 @@ function AdminChatPage() {
     if (error || (data as any)?.error) {
       const msg = (data as any)?.error || error?.message || "Unbekannter Fehler";
       const skipped = (data as any)?.skipped;
+      const suppressed = (data as any)?.suppressed;
       toast({
-        title: skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
+        title: suppressed ? "⚠️ Adresse gesperrt" : skipped ? "Nicht gesendet" : "Erinnerung fehlgeschlagen",
         description: msg,
-        variant: skipped ? "default" : "destructive",
+        variant: suppressed || !skipped ? "destructive" : "default",
       });
       return;
     }
     toast({ title: "Erinnerung verschickt", description: `E-Mail an Mitarbeiter wurde gesendet.` });
   };
+
 
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);

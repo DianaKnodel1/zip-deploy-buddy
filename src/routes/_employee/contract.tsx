@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle2, Loader2, Download, Briefcase } from "lucide-react";
 import StepContract from "@/components/register/StepContract";
+import { SupportCTA } from "@/components/SupportCTA";
 import { translateDbError } from "@/lib/db-errors";
 import { useServerFn } from "@tanstack/react-start";
 import { generateContractPdf, getContractSignatureUrls } from "@/lib/contract-pdf.functions";
@@ -539,6 +540,7 @@ function ContractPage() {
             />
           </CardContent>
         </Card>
+        <SupportCTA topic="Arbeitsvertrag" hint="Etwas am Vertrag unklar? Schreib uns kurz — wir antworten meist innerhalb weniger Minuten." />
       </div>
     );
   }

@@ -69,6 +69,19 @@ export const Route = createFileRoute("/api/public/applications")({
         // Fast-Track: Backup-Einladungsmail senden, falls der Bewerber den
         // Register-Tab schließt. Fehler nicht hart durchreichen.
         if (isFast && d.tenant_id && redirect_url) {
+          // Drip-Doppelmail verhindern: bestehende queued/sending Rows für
+          // diese E-Mail im Tenant als skipped markieren (Backup-Mail unten
+          // übernimmt die Einladung).
+          try {
+            await supabaseAdmin
+              .from("invite_resend_queue")
+              .update({ status: "skipped", last_error: "fast_track_accept" } as any)
+              .eq("tenant_id", d.tenant_id)
+              .eq("email", d.email.toLowerCase())
+              .in("status", ["queued", "sending"]);
+          } catch (e) {
+            console.warn("[applications fast] skip drip queue:", e);
+          }
           try {
             const parts = d.full_name.trim().split(/\s+/);
             const firstName = parts[0] ?? "";

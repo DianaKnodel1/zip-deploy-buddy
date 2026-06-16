@@ -219,6 +219,7 @@ function AdminEmailCenterPage() {
           <TabsTrigger value="logs" className="text-xs">Protokoll</TabsTrigger>
           <TabsTrigger value="reminders" className="text-xs">Erinnerungen</TabsTrigger>
           <TabsTrigger value="recovery" className="text-xs">Recovery</TabsTrigger>
+          <TabsTrigger value="cron" className="text-xs">Cron-Health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-5">
@@ -238,6 +239,9 @@ function AdminEmailCenterPage() {
           <div className="-mx-6 lg:-mx-8 -mb-6 lg:-mb-8">
             <AdminRecoveryPage />
           </div>
+        </TabsContent>
+        <TabsContent value="cron" className="mt-5">
+          <CronHealthPanel />
         </TabsContent>
       </Tabs>
     </div>

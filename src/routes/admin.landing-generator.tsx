@@ -345,6 +345,14 @@ document.addEventListener('submit', function(e){
       toast({ title: "Landing-Domain fehlt", description: "Trage die öffentliche Domain ein (z.B. easy-gmbh.de) — wird für Canonical/SEO benötigt.", variant: "destructive" });
       return;
     }
+    if (branding.flow_type === "fast" && !branding.portal_url.trim()) {
+      toast({ title: "Portal-URL fehlt", description: "Fast-Track braucht eine Portal-URL für die Weiterleitung. Trage z.B. https://portal.deine-firma.de ein.", variant: "destructive" });
+      return;
+    }
+    if (!branding.tenant_id.trim()) {
+      toast({ title: "Tenant-ID fehlt", description: "Ohne Tenant-ID landet die Bewerbung beim falschen Mandanten. Hol sie aus Admin → Tenants.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
       const res = await generate({ data: { themeId, branding: withSeoDefaults(branding), logoDataUrl, faviconDataUrl, slots: slotValues } });
